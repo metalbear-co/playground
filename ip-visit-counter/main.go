@@ -58,19 +58,13 @@ func getCount(c *gin.Context) {
 	ip := c.ClientIP()
 	key := RedisKey + ip
 
-	_, err := RedisClient.Incr(ctx, key).Result()
+	count, err := RedisClient.Incr(ctx, key).Result()
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	RedisClient.Expire(ctx, key, RedisKeyTtl)
-
-	count, err := RedisClient.Get(ctx, key).Int64()
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Internal server error"})
-		return
-	}
 
 	c.JSON(200, gin.H{"count": count, "text": ResponseString})
 }
