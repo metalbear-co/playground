@@ -71,7 +71,7 @@ spec:
     spec:
       containers:
       - name: main
-        image: gofun:lala2
+        image: ghcr.io/metalbear-co/playground-ip-visit-counter:latest
         resources:
           requests:
             cpu: 100m
@@ -88,22 +88,3 @@ spec:
           value: "redis-main:6379"
         - name: RESPONSEFILE
           value: "/app/response.txt"
-
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: minimal-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-spec:
-  rules:
-  - http:
-      paths:
-      - path: /count
-        pathType: Prefix
-        backend:
-          service:
-            name: ip-visit-counter
-            port:
-              number: 80
