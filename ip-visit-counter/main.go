@@ -72,7 +72,7 @@ func getCount(c *gin.Context) {
 func main() {
 	config := loadConfig()
 
-	fileContent, err := ioutil.ReadFile(config.ResponseFile)
+	fileContent, err := os.ReadFile(config.ResponseFile)
 	if err != nil {
 		log.Fatal(err)
 	}
