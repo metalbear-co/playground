@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -87,6 +88,7 @@ func main() {
 
 	router := gin.Default()
 	router.GET("/count", getCount)
+	router.GET("/health", func(ctx *gin.Context) { ctx.Status(http.StatusNoContent) })
 
 	router.Run("0.0.0.0:" + fmt.Sprint(config.Port))
 }
