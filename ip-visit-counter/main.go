@@ -118,18 +118,24 @@ func getCount(c *gin.Context) {
 		return
 	}
 	ip_req_url = ip_req_url.JoinPath("ip", ip)
-	req, err := http.NewRequestWithContext(c, "GET", ip_req_url)
+	req, err := http.NewRequestWithContext(c, "GET", ip_req_url.String(), nil)
 
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	req.Header.Add("x-pg-tenant", c.Get("x-pg-tenant"))
+	tenant, exists := c.Get("x-pg-tenant")
+	if exists {
+		if tenantStr, ok := tenant.(string); ok {
+			req.Header.Add("x-pg-tenant", tenantStr)
+		}
+	}
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
 	}
 	defer res.Body.Close()
 
@@ -137,7 +143,8 @@ func getCount(c *gin.Context) {
 
 	err = json.NewDecoder(res.Body).Decode(&ipInfo)
 	if err != nil {
-		return err
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
 	}
 
 	c.JSON(200, gin.H{"count": count, "text": ResponseString, "info": ipInfo})
