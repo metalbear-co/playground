@@ -9,10 +9,9 @@
     "feature": {
         "network": {
             "incoming": {
-                "on_concurrent_steal": "continue",
                 "mode": "steal",
                 "http_filter": {
-                    "header_filter": "PG-Tenant: Aviram"
+                    "header_filter": "X-PG-Tenant: Aviram"
                 }
             },
             "outgoing": true

@@ -94,7 +94,7 @@ func getCount(c *gin.Context) {
 	ip := c.ClientIP()
 	key := RedisKey + ip
 	// header propagation
-	c.Set("PG-Tenant", c.GetHeader("x-pg-tenant"))
+	c.Set("x-pg-tenant", c.GetHeader("x-pg-tenant"))
 
 	count, err := RedisClient.Incr(c, key).Result()
 	if err != nil {
@@ -128,7 +128,7 @@ func getCount(c *gin.Context) {
 	tenant, exists := c.Get("x-pg-tenant")
 	if exists {
 		if tenantStr, ok := tenant.(string); ok {
-			req.Header.Add("x-pg-tenant", tenantStr)
+			req.Header.Set("x-pg-tenant", tenantStr)
 		}
 	}
 
