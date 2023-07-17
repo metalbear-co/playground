@@ -6,3 +6,4 @@ resources:
   - kafka.yaml
   - redis.yaml
   - ip-visit-counter/app.yaml
+  - ip-visit-consumer/app.yaml

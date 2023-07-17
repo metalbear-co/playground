@@ -1,0 +1,25 @@
+
+{
+    "accept_invalid_certificates": false,
+    "target": {
+        "path": {
+            "deployment": "ip-visit-counter"
+        }
+    },
+    "feature": {
+        "network": {
+            "incoming": {
+                "on_concurrent_steal": "continue",
+                "mode": "steal",
+                "http_filter": {
+                    "header_filter": "PG-Tenant: Aviram"
+                }
+            },
+            "outgoing": true
+        },
+        "fs": {
+            "mode": "read"
+        }
+    }
+}
+    

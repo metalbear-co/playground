@@ -57,6 +57,6 @@ spec:
         - name: RESPONSEFILE
           value: "/app/response.txt"
         - name: KAFKAADDRESS
-          value: "kafka:9092"
+          value: "kafka-service:9092"
         - name: KAFKATOPIC
           value: "ip-visit"
