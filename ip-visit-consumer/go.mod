@@ -1,11 +1,10 @@
-module example/ip-visit-counter
+module example/ip-visit-consumer
 
 go 1.20
 
 require (
 	github.com/gin-gonic/gin v1.9.0
 	github.com/redis/go-redis/v9 v9.0.2
-	github.com/segmentio/kafka-go v0.4.42
 	github.com/spf13/viper v1.15.0
 )
 
@@ -32,6 +31,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
+	github.com/segmentio/kafka-go v0.4.42 // indirect
 	github.com/spf13/afero v1.9.3 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
