@@ -7,3 +7,4 @@ resources:
   - redis.yaml
   - ip-visit-counter/app.yaml
   - ip-visit-consumer/app.yaml
+  - ip-info/app.yaml
