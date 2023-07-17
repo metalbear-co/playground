@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -21,6 +22,7 @@ var RedisClient *redis.Client
 var KafkaWriter *kafka.Writer
 var RedisKey = "ip-visit-counter-"
 var ResponseString = ""
+var IpInfoAddress = ""
 
 const RedisKeyTtl = 120 * time.Second
 
@@ -64,12 +66,18 @@ type IpMessage struct {
 	Ip string `json:"ip"`
 }
 
+type IpInfo struct {
+	Ip   string `json:"ip"`
+	Info string `json:"name"`
+}
+
 func loadConfig() Config {
 	viper.BindEnv("port")
 	viper.BindEnv("redisaddress")
 	viper.BindEnv("responsefile")
 	viper.BindEnv("kafkaaddress")
 	viper.BindEnv("kafkatopic")
+	viper.BindEnv("ipinfoaddress")
 
 	config := Config{}
 	config.Port = int16(viper.GetInt("port"))
@@ -77,6 +85,7 @@ func loadConfig() Config {
 	config.ResponseFile = viper.GetString("responsefile")
 	config.KafkaAddress = viper.GetString("kafkaaddress")
 	config.KafkaTopic = viper.GetString("kafkatopic")
+	IpInfoAddress = viper.GetString("ipinfoaddress")
 
 	return config
 }
@@ -102,7 +111,36 @@ func getCount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"count": count, "text": ResponseString})
+	ip_req_url, err := url.Parse(IpInfoAddress)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+	ip_req_url = ip_req_url.JoinPath("ip", ip)
+	req, err := http.NewRequestWithContext(c, "GET", ip_req_url)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	req.Header.Add("x-pg-tenant", c.Get("x-pg-tenant"))
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	ipInfo := &IpInfo{}
+
+	err = json.NewDecoder(res.Body).Decode(&ipInfo)
+	if err != nil {
+		return err
+	}
+
+	c.JSON(200, gin.H{"count": count, "text": ResponseString, "info": ipInfo})
 }
 
 func main() {
