@@ -49,7 +49,7 @@ metadata:
   name: ip-visit-frontend
 spec:
   ports:
-  - port: 80
+  - port: 3000
     targetPort: 3000
   selector:
     app: ip-visit-frontend
