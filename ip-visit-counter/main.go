@@ -12,6 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
+	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
@@ -169,6 +170,7 @@ func main() {
 	SetupKafka(config.KafkaAddress, config.KafkaTopic)
 
 	router := gin.Default()
+	router.Use(cors.Default())
 	router.GET("/health", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
 	router.GET("/count", getCount)
 	fmt.Print("loaded")
