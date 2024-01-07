@@ -19,5 +19,12 @@ spec:
         backend:
           service:
             name: ip-visit-counter
+            port:
+              number: 80
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: ip-visit-counter
             port: 
               number: 80
