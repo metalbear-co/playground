@@ -1,4 +1,4 @@
-module example/ip-visit-consumer
+module example/ip-info
 
 go 1.20
 
