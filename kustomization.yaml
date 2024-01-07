@@ -8,3 +8,4 @@ resources:
   - ip-visit-counter/app.yaml
   - ip-visit-consumer/app.yaml
   - ip-info/app.yaml
+  - frontend/app.yaml

@@ -6,6 +6,11 @@ metadata:
     networking.gke.io/managed-certificates: playground-metalbear-dev-cert
     kubernetes.io/ingress.class: "gce"
 spec:
+  defaultBackend:
+    service:
+      name: ip-visit-frontend
+      port:
+        number: 80
   rules:
   - http:
       paths:
@@ -14,7 +19,7 @@ spec:
         backend:
           service:
             name: ip-visit-counter
-            port: 
+            port:
               number: 80
       - path: /health
         pathType: Prefix
