@@ -3,27 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+	"time"
 
-	"github.com/segmentio/kafka-go"
-
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
 
 var ctx = context.Background()
-var KafkaWriter *kafka.Writer
-
-// SetupKafka
-// Initialize the Kafka Writer
-func SetupKafka(address, topic string) {
-	KafkaWriter = &kafka.Writer{
-		Addr:     kafka.TCP(address),
-		Topic:    topic,
-		Balancer: &kafka.LeastBytes{},
-	}
-}
 
 // Config
 // Struct that holds local service port, remote redis host and port
@@ -54,31 +42,44 @@ func loadConfig() Config {
 }
 
 func StartKafkaReader(address, topic, group string) {
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{address},
-		GroupID:  group,
-		Topic:    topic,
-		MaxBytes: 10e6, // 10MB
+
+	c, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers": address,
+		"group.id":          group,
+		"auto.offset.reset": "earliest",
 	})
 
-	for {
-		m, err := r.ReadMessage(context.Background())
-		if err != nil {
-			break
-		}
-		fmt.Printf("message at topic/partition/offset %v/%v/%v: %s = %s\n", m.Topic, m.Partition, m.Offset, string(m.Key), string(m.Value))
+	if err != nil {
+		panic(err)
 	}
 
-	if err := r.Close(); err != nil {
-		log.Fatal("failed to close reader:", err)
+	c.SubscribeTopics([]string{topic}, nil)
+
+	// A signal handler or similar could be used to set this to false to break the loop.
+	run := true
+
+	for run {
+		msg, err := c.ReadMessage(time.Second)
+		if err == nil {
+			if msg != nil {
+				fmt.Printf("Message on %s: %s\n", msg.TopicPartition, string(msg.Value))
+			}
+		} else if !err.(kafka.Error).IsTimeout() {
+			// The client will automatically try to recover from all errors.
+			// Timeout is not considered an error because it is raised by
+			// ReadMessage in absence of messages.
+			fmt.Printf("Consumer error: %v (%v)\n", err, msg)
+		}
 	}
+
+	c.Close()
+
 }
 
 func main() {
 	config := loadConfig()
 
 	go StartKafkaReader(config.KafkaAddress, config.KafkaTopic, config.KafkaConsumerGroup)
-
 	router := gin.Default()
 	router.GET("/health", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
 	fmt.Print("loaded")

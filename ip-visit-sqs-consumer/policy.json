@@ -1,0 +1,30 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:GetQueueAttributes",
+                "sqs:ListQueueTags",
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "arn:aws:sqs:eu-north-1:ACCOUNT_ID:IpCount"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:CreateQueue",
+                "sqs:TagQueue",
+                "sqs:SendMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:DeleteQueue"
+            ],
+            "Resource": "arn:aws:sqs:eu-north-1:ACCOUNT_ID:mirrord-*"
+        }
+    ]
+}
