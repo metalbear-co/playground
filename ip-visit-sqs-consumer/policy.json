@@ -12,19 +12,22 @@
                 "sqs:SendMessage"
             ],
             "Resource": [
-                "arn:aws:sqs:eu-north-1:ACCOUNT_ID:IpCount"
+                "arn:aws:sqs:eu-north-1:ACCOUNTID:IpCount"
             ]
         },
         {
             "Effect": "Allow",
             "Action": [
+                "sqs:GetQueueUrl",
                 "sqs:CreateQueue",
                 "sqs:TagQueue",
                 "sqs:SendMessage",
                 "sqs:GetQueueAttributes",
-                "sqs:DeleteQueue"
+                "sqs:DeleteQueue",
+                "sqs:DeleteMessage",
+                "sqs:ReceiveMessage"
             ],
-            "Resource": "arn:aws:sqs:eu-north-1:ACCOUNT_ID:mirrord-*"
+            "Resource": "arn:aws:sqs:eu-north-1:ACCOUNTID:mirrord-*"
         }
     ]
 }

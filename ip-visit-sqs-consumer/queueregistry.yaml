@@ -1,0 +1,15 @@
+apiVersion: "queues.mirrord.metalbear.co/v1alpha"
+kind: MirrordWorkloadQueueRegistry
+metadata:
+  name: ip-count-queue-registry
+spec:
+  queues:
+    ip-count:
+      queueType: SQS
+      nameSource:
+        envVar: SQSQUEUENAME
+      tags:
+        tool: mirrord
+  consumer:
+    name: ip-visit-sqs-consumer
+    workloadType: Deployment

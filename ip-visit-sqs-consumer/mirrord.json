@@ -1,0 +1,13 @@
+{
+    "target": "deployment/ip-visit-sqs-consumer",
+    "feature": {
+        "split_queues": {
+            "ip-count": {
+                "queue_type": "SQS",
+                "message_filter": {
+                    "x-pg-tenant": "Avi.+"
+                }
+            }
+        }
+    }
+}
