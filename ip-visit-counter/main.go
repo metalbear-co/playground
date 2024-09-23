@@ -206,7 +206,7 @@ func getCount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"count": count, "text": ResponseString + "hi from", "info": ipInfo})
+	c.JSON(200, gin.H{"count": count, "text": ResponseString, "info": ipInfo})
 }
 
 func main() {
