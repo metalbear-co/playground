@@ -5,7 +5,7 @@
             "ip-count": {
                 "queue_type": "SQS",
                 "message_filter": {
-                    "x-pg-tenant": "Avi.+"
+                    "x-pg-tenant": "Avi."
                 }
             }
         }
