@@ -10,10 +10,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
-	"github.com/gin-contrib/cors"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
@@ -24,6 +28,8 @@ var KafkaWriter *kafka.Writer
 var RedisKey = "ip-visit-counter-"
 var ResponseString = ""
 var IpInfoAddress = ""
+var SqsQueueUrl = ""
+var sqsClient *sqs.Client
 
 const RedisKeyTtl = 120 * time.Second
 
@@ -53,6 +59,26 @@ func SetupKafka(address, topic string) {
 	}
 }
 
+// SetupSqs
+// Initialize SQS client
+func SetupSqs(queue_name string) error {
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Fatalf("unable to load SDK config, %v", err)
+	}
+
+	sqsClient = sqs.NewFromConfig(cfg)
+	res, err := sqsClient.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
+		QueueName: aws.String(queue_name),
+	})
+	if err != nil {
+		log.Fatalf("unable to get queue URL, %v", err)
+		return err
+	}
+	SqsQueueUrl = *res.QueueUrl
+	return nil
+}
+
 // Config
 // Struct that holds local service port, remote redis host and port
 type Config struct {
@@ -61,6 +87,7 @@ type Config struct {
 	ResponseFile string
 	KafkaAddress string
 	KafkaTopic   string
+	SqsQueueName string
 }
 
 type IpMessage struct {
@@ -79,6 +106,7 @@ func loadConfig() Config {
 	viper.BindEnv("kafkaaddress")
 	viper.BindEnv("kafkatopic")
 	viper.BindEnv("ipinfoaddress")
+	viper.BindEnv("sqsqueuename")
 
 	config := Config{}
 	config.Port = int16(viper.GetInt("port"))
@@ -87,15 +115,48 @@ func loadConfig() Config {
 	config.KafkaAddress = viper.GetString("kafkaaddress")
 	config.KafkaTopic = viper.GetString("kafkatopic")
 	IpInfoAddress = viper.GetString("ipinfoaddress")
+	config.SqsQueueName = viper.GetString("sqsqueuename")
 
 	return config
+}
+
+func SendSqsMessage(c *gin.Context, message []byte) {
+	var messageAttributes map[string]types.MessageAttributeValue
+
+	tenant, exists := c.Get("x-pg-tenant")
+	if exists {
+		if tenantStr, ok := tenant.(string); ok {
+			messageAttributes = map[string]types.MessageAttributeValue{
+				"x-pg-tenant": {
+					DataType:    aws.String("String"),
+					StringValue: aws.String(tenantStr),
+				},
+			}
+		}
+	}
+
+	sendMessageInput := &sqs.SendMessageInput{
+		QueueUrl:          aws.String(SqsQueueUrl),
+		MessageBody:       aws.String(string(message)),
+		MessageAttributes: messageAttributes,
+	}
+
+	result, err := sqsClient.SendMessage(c, sendMessageInput)
+	if err != nil {
+		log.Fatalf("failed to send message, %v", err)
+	}
+	// Print the message ID of the sent message
+	fmt.Printf("Message sent, ID: %s\n", *result.MessageId)
 }
 
 func getCount(c *gin.Context) {
 	ip := c.ClientIP()
 	key := RedisKey + ip
 	// header propagation
-	c.Set("x-pg-tenant", c.GetHeader("x-pg-tenant"))
+	tenant := c.GetHeader("x-pg-tenant")
+	if tenant != "" {
+		c.Set("x-pg-tenant", tenant)
+	}
 
 	count, err := RedisClient.Incr(c, key).Result()
 	if err != nil {
@@ -105,6 +166,8 @@ func getCount(c *gin.Context) {
 
 	RedisClient.Expire(c, key, RedisKeyTtl)
 	message, _ := json.Marshal(IpMessage{Ip: ip})
+
+	SendSqsMessage(c, message)
 
 	err = KafkaWriter.WriteMessages(c, kafka.Message{Value: []byte(message)})
 	if err != nil {
@@ -126,12 +189,7 @@ func getCount(c *gin.Context) {
 		return
 	}
 
-	tenant, exists := c.Get("x-pg-tenant")
-	if exists {
-		if tenantStr, ok := tenant.(string); ok {
-			req.Header.Set("x-pg-tenant", tenantStr)
-		}
-	}
+	req.Header.Set("x-pg-tenant", tenant)
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -152,6 +210,7 @@ func getCount(c *gin.Context) {
 }
 
 func main() {
+
 	config := loadConfig()
 
 	fileContent, err := os.ReadFile(config.ResponseFile)
@@ -168,6 +227,11 @@ func main() {
 	}
 
 	SetupKafka(config.KafkaAddress, config.KafkaTopic)
+	err = SetupSqs(config.SqsQueueName)
+
+	if err != nil {
+		panic(err)
+	}
 
 	router := gin.Default()
 	router.Use(cors.Default())

@@ -5,7 +5,10 @@ resources:
   - certificate.yaml
   - kafka.yaml
   - redis.yaml
+  - secret.yaml
   - ip-visit-counter/app.yaml
   - ip-visit-consumer/app.yaml
   - ip-info/app.yaml
   - ip-visit-frontend/app.yaml
+  - ip-visit-sqs-consumer/app.yaml
+  - ip-visit-sqs-consumer/queueregistry.yaml
