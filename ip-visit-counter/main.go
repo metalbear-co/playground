@@ -167,7 +167,9 @@ func getCount(c *gin.Context) {
 	RedisClient.Expire(c, key, RedisKeyTtl)
 	message, _ := json.Marshal(IpMessage{Ip: ip})
 
-	SendSqsMessage(c, message)
+	if sqsClient != nil {
+		SendSqsMessage(c, message)
+	}
 
 	err = KafkaWriter.WriteMessages(c, kafka.Message{Value: []byte(message)})
 	if err != nil {
@@ -227,10 +229,12 @@ func main() {
 	}
 
 	SetupKafka(config.KafkaAddress, config.KafkaTopic)
-	err = SetupSqs(config.SqsQueueName)
+	if config.SqsQueueName != "" {
+		err = SetupSqs(config.SqsQueueName)
 
-	if err != nil {
-		panic(err)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	router := gin.Default()

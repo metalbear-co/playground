@@ -71,8 +71,10 @@ spec:
             secretKeyRef:
               name: aws-credentials
               key: AWS_ACCESS_KEY_ID
+              optional: true
         - name: AWS_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
               name: aws-credentials
               key: AWS_SECRET_ACCESS_KEY
+              optional: true

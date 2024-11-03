@@ -16,3 +16,10 @@ To enable SQS:
 6. `aws iam create-policy --policy-name SQSPlaygroundPolicy --policy-document file://ip-visit-sqs-consumer/policy.json`
 7. `aws iam attach-user-policy --policy-arn arn:aws:iam::526936346962:policy/SQSPlaygroundPolicy --user-name SQSPlayground`
 8. Set Region in app.yaml in `ip-visit-counter` and `ip-visit-sqs-consumer`
+
+
+## Minikube/Local
+
+```
+kubectl apply -k ./base/local
+```
