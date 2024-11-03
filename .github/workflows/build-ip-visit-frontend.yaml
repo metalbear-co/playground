@@ -33,3 +33,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/metalbear-co/playground-ip-visit-frontend:latest
+            ghcr.io/metalbear-co/playground-ip-visit-frontend:${{ github.sha }}

@@ -33,3 +33,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/metalbear-co/playground-ip-info:latest
+            ghcr.io/metalbear-co/playground-ip-info:${{ github.sha }}
