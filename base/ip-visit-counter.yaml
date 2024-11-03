@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: main
-        image: ghcr.io/metalbear-co/playground-ip-visit-counter:latest
+        image: ghcr.io/metalbear-co/playground-ip-visit-counter:e2432eb319787b91f9a324da9145af3230015606
         resources:
           requests:
             cpu: 100m
@@ -62,10 +62,6 @@ spec:
           value: "ip-visit"
         - name: IPINFOADDRESS
           value: "http://ip-info"
-        - name: SQSQUEUENAME
-          value: "IpCount"
-        - name: AWS_DEFAULT_REGION
-          value: "eu-north-1"
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:

@@ -8,3 +8,19 @@ resources:
   - ip-visit-frontend.yaml
   - ip-visit-sqs-consumer.yaml
   - sqs-queueregistry.yaml
+
+patches:
+- patch: |-
+    - op: add
+      path: "/spec/template/spec/containers/0/env/-"
+      value:
+        name: SQSQUEUENAME
+        value: "IpCount"
+    - op: add
+      path: "/spec/template/spec/containers/0/env/-"
+      value:
+        name: AWS_DEFAULT_REGION
+        value: "eu-north-1"
+  target:
+    kind: Deployment
+    name: ip-visit-counter
