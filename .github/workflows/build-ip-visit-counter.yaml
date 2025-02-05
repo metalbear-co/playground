@@ -29,7 +29,7 @@ jobs:
         with:
           file: ip-visit-counter/Dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          context: ip-visit-counter/
+          context: ./
           push: true
           tags: |
             ghcr.io/metalbear-co/playground-ip-visit-counter:latest
