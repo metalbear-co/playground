@@ -158,10 +158,11 @@ func SendSqsMessage(c *gin.Context, message []byte) {
 func getIpInfoGrpc(ip string, c *gin.Context) (*IpInfo, error) {
 	md := metadata.New(map[string]string{})
 	tenant, exists := c.Get("x-pg-tenant")
+
 	if exists {
 		md.Append("x-pg-tenant", tenant.(string))
-
 	}
+
 	ctx := metadata.NewOutgoingContext(c, md)
 	conn, err := grpc.NewClient(IpInfoGrpcAddress, grpc.WithInsecure())
 	if err != nil {
