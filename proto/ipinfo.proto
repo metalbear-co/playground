@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package ipinfo;
+option go_package = "github.com/metalbear-co/playground/protogen";
+
+service IpInfoService {
+  rpc GetIpInfo(IpRequest) returns (IpResponse);
+}
+
+message IpRequest {
+  string ip = 1;
+}
+
+message IpResponse {
+  string ip = 1;
+  string info = 2;
+}
