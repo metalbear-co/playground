@@ -19,7 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gin-gonic/gin"
+	pb "github.com/metalbear-co/playground/protogen"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 var ctx = context.Background()
@@ -28,6 +31,7 @@ var KafkaWriter *kafka.Writer
 var RedisKey = "ip-visit-counter-"
 var ResponseString = ""
 var IpInfoAddress = ""
+var IpInfoGrpcAddress = ""
 var SqsQueueUrl = ""
 var sqsClient *sqs.Client
 
@@ -107,6 +111,7 @@ func loadConfig() Config {
 	viper.BindEnv("kafkatopic")
 	viper.BindEnv("ipinfoaddress")
 	viper.BindEnv("sqsqueuename")
+	viper.BindEnv("ipinfogrpcaddress")
 
 	config := Config{}
 	config.Port = int16(viper.GetInt("port"))
@@ -115,6 +120,7 @@ func loadConfig() Config {
 	config.KafkaAddress = viper.GetString("kafkaaddress")
 	config.KafkaTopic = viper.GetString("kafkatopic")
 	IpInfoAddress = viper.GetString("ipinfoaddress")
+	IpInfoGrpcAddress = viper.GetString("ipinfogrpcaddress")
 	config.SqsQueueName = viper.GetString("sqsqueuename")
 
 	return config
@@ -149,6 +155,33 @@ func SendSqsMessage(c *gin.Context, message []byte) {
 	fmt.Printf("Message sent, ID: %s\n", *result.MessageId)
 }
 
+func getIpInfoGrpc(ip string, c *gin.Context) (*IpInfo, error) {
+	md := metadata.New(map[string]string{})
+	tenant, exists := c.Get("x-pg-tenant")
+
+	if exists {
+		md.Append("x-pg-tenant", tenant.(string))
+	}
+
+	ctx := metadata.NewOutgoingContext(c, md)
+	conn, err := grpc.NewClient(IpInfoGrpcAddress, grpc.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	client := pb.NewIpInfoServiceClient(conn)
+
+	res, err := client.GetIpInfo(ctx, &pb.IpRequest{Ip: ip})
+	if err != nil {
+		return nil, err
+
+	}
+	return &IpInfo{
+		Ip:   res.Ip,
+		Info: res.Info,
+	}, nil
+
+}
+
 func getCount(c *gin.Context) {
 	ip := c.ClientIP()
 	key := RedisKey + ip
@@ -172,6 +205,12 @@ func getCount(c *gin.Context) {
 	}
 
 	err = KafkaWriter.WriteMessages(c, kafka.Message{Value: []byte(message)})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	ipInfo2, err := getIpInfoGrpc(ip, c)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
@@ -208,7 +247,7 @@ func getCount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"count": count, "text": ResponseString, "info": ipInfo})
+	c.JSON(200, gin.H{"count": count, "text": ResponseString + "hi", "info": ipInfo, "info2": ipInfo2})
 }
 
 func main() {

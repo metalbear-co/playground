@@ -6,3 +6,4 @@ resources:
 - ip-visit-counter.yaml
 - ip-visit-consumer.yaml
 - ip-info.yaml
+- ip-info-grpc.yaml

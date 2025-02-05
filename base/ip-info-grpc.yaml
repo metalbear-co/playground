@@ -1,0 +1,43 @@
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: ip-info-grpc
+spec:
+  selector:
+    matchLabels:
+      app: "ip-info-grpc"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ip-info-grpc
+    spec:
+      containers:
+      - name: main
+        image: ghcr.io/metalbear-co/playground-ip-info-grpc:latest
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+        ports:
+        - containerPort: 5001
+        env:
+        - name: PORT
+          value: "5001"
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ip-info-grpc
+spec:
+  ports:
+  - port: 5001
+    targetPort: 5001
+  selector:
+    app: ip-info-grpc
