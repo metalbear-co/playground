@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: main
-        image: ghcr.io/metalbear-co/playground-ip-visit-counter:e2432eb319787b91f9a324da9145af3230015606
+        image: ghcr.io/metalbear-co/playground-ip-visit-counter:latest
         resources:
           requests:
             cpu: 100m
