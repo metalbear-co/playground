@@ -66,6 +66,8 @@ spec:
           value: "ip-info-grpc:5001"
         - name: SQSQUEUENAME
           value: "IpCount"
+        - name: AWS_DEFAULT_REGION
+          value: "eu-north-1"
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
