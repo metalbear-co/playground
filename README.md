@@ -31,5 +31,5 @@ protoc --go_out=../protogen --go_opt=paths=source_relative \
 ## Minikube/Local
 
 ```
-kubectl apply -k ./base/local
+kubectl apply -k overlays/local
 ```
