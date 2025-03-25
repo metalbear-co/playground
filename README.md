@@ -35,6 +35,13 @@ protoc --go_out=../protogen --go_opt=paths=source_relative \
 
 ## Minikube/Local
 
+For a local setup without SQS, run:
 ```
 kubectl apply -k overlays/local
 ```
+
+For a local setup with SQS (localstack) run:
+```
+kubectl kustomize --enable-helm overlays/localstack | kubectl apply -f -
+```
+This requires having helm installed.
