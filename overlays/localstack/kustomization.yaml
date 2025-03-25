@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../local
+- ../reusables/sqs-specific
+
+helmCharts:
+  - name: localstack
+    repo: https://localstack.github.io/helm-charts
+    valuesFile: localstack-values.yaml
+    releaseName: localstack
+
+
+patches:
+  - path: localstack-env-vars-patch.yaml
+    target:
+      kind: Deployment
+      name: mirrord-operator
+      namespace: mirrord
+  - path: localstack-env-vars-patch.yaml
+    target:
+      kind: Deployment
+      name: ip-visit-counter
+  - path: localstack-env-vars-patch.yaml
+    target:
+      kind: Deployment
+      name: ip-visit-sqs-consumer
+

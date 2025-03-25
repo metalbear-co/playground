@@ -1,2 +1,5 @@
 ip-visit-sqs-consumer/ip-visit-sqs-consumer
 **/.DS_Store
+
+# The localstack helm charts get cloned when creating the localstack setup.
+overlays/localstack/charts
