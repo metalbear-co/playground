@@ -3,6 +3,11 @@
 This repository contains different microservices and Kubernetes manifests to deploy them.
 Each microservice has it's own `app.yaml` that should contain all of it's dependencies (besides other microservices).
 
+To deploy on GKE, run:
+```
+kubectl apply -k overlays/gke
+```
+
 
 ## SQS
 
@@ -31,5 +36,5 @@ protoc --go_out=../protogen --go_opt=paths=source_relative \
 ## Minikube/Local
 
 ```
-kubectl apply -k ./base/local
+kubectl apply -k overlays/local
 ```
