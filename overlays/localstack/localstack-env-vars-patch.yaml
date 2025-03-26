@@ -13,3 +13,8 @@
   value:
     "name": AWS_ACCESS_KEY_ID
     "value": "test"
+- op: add
+  path: "/spec/template/spec/containers/0/env/-"
+  value:
+    "name": AWS_DEFAULT_REGION
+    "value": "eu-north-1"

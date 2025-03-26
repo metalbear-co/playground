@@ -41,5 +41,3 @@ spec:
           value: "80"
         - name: SQSQUEUENAME
           value: "IpCount"
-        - name: AWS_DEFAULT_REGION
-          value: "eu-north-1"

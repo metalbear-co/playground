@@ -14,3 +14,8 @@
       secretKeyRef:
         name: aws-credentials
         key: AWS_SECRET_ACCESS_KEY
+- op: add
+  path: "/spec/template/spec/containers/0/env/-"
+  value:
+    name: AWS_DEFAULT_REGION
+    value: "eu-north-1"
