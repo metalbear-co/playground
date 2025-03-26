@@ -2,7 +2,7 @@
   path: "/spec/template/spec/containers/0/env/-"
   value:
     "name": AWS_ENDPOINT_URL
-    "value": "http://localstack:4566"
+    "value": "http://localstack.localstack.svc.cluster.local:4566"
 - op: add
   path: "/spec/template/spec/containers/0/env/-"
   value:

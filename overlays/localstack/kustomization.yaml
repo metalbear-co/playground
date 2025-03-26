@@ -1,6 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+- namespace.yaml
 - ../local
 - ../reusables/sqs-specific
 
@@ -9,7 +10,7 @@ helmCharts:
     repo: https://localstack.github.io/helm-charts
     valuesFile: localstack-values.yaml
     releaseName: localstack
-
+    namespace: localstack
 
 patches:
   - path: localstack-env-vars-patch.yaml
@@ -20,4 +21,13 @@ patches:
     target:
       kind: Deployment
       name: ip-visit-sqs-consumer
+  - patch: |-
+      - op: add
+        path: "/spec/template/spec/containers/0/env/-"
+        value:
+          name: SQSQUEUENAME
+          value: "IpCount"
+    target:
+      kind: Deployment
+      name: ip-visit-counter
 
