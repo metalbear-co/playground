@@ -45,3 +45,8 @@ For a local setup with SQS (localstack) run:
 kubectl kustomize --enable-helm overlays/localstack | kubectl apply -f -
 ```
 This requires having helm installed.
+
+Then patch the mirrord operator to use localstack for SQS:
+```bash
+kubectl patch deployment mirrord-operator -n mirrord --patch-file overlays/localstack/localstack-env-vars-patch.yaml --type json
+```

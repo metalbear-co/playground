@@ -15,11 +15,6 @@ patches:
   - path: localstack-env-vars-patch.yaml
     target:
       kind: Deployment
-      name: mirrord-operator
-      namespace: mirrord
-  - path: localstack-env-vars-patch.yaml
-    target:
-      kind: Deployment
       name: ip-visit-counter
   - path: localstack-env-vars-patch.yaml
     target:
