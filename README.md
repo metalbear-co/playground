@@ -46,6 +46,13 @@ kubectl kustomize --enable-helm overlays/localstack | kubectl apply -f -
 ```
 This requires having helm installed.
 
+To use SQS splitting, it should be enabled on operator installation.
+When enabling SQS splitting in the installation, you are required to
+specify an ARN of an AWS role. When working with localstack, that flag
+is still required, but it doesn't really matter what ARN you provide,
+so you can use e.g.
+`--aws-role-arn=arn:aws:iam::526936346960:role/mirrord-operator-dummy-role`.
+
 Then patch the mirrord operator to use localstack for SQS:
 ```bash
 kubectl patch deployment mirrord-operator -n mirrord --patch-file overlays/localstack/localstack-env-vars-patch.yaml --type json
