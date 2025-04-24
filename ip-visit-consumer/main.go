@@ -47,6 +47,7 @@ func StartKafkaReader(address, topic, group string) {
 		"bootstrap.servers": address,
 		"group.id":          group,
 		"auto.offset.reset": "earliest",
+		"debug":             "all",
 	})
 
 	if err != nil {
