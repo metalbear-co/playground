@@ -39,7 +39,7 @@ def start_kafka_reader(address, topic, group):
             print("Consumer error: {}".format(msg.error()), file=sys.stderr)
             continue
 
-        print('Received message: {}', msg.value(), flush=True)
+        print('Received message: {} with headers {}', msg.value(), msg.headers(), flush=True)
 
     consumer.close()
 
