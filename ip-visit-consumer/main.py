@@ -22,7 +22,8 @@ def start_kafka_reader(address, topic, group):
         'group.id': group,
         'max.poll.records': 1,
         'fetch.min.bytes': 1,
-        'fetch.max.wait.ms': 10
+        'fetch.max.wait.ms': 10,
+        "debug": os.getenv("KAFKA_DEBUG")
     })
 
     consumer.subscribe([topic])
