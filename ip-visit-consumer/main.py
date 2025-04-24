@@ -20,8 +20,6 @@ def start_kafka_reader(address, topic, group):
     consumer = Consumer({
         'bootstrap.servers': address,
         'group.id': group,
-        'auto.offset.reset': 'earliest',
-        "debug": "all"
     })
 
     consumer.subscribe([topic])
