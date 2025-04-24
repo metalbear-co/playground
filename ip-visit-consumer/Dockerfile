@@ -7,7 +7,7 @@ RUN go mod download
 COPY *.go ./
 
 ARG TARGETARCH
-RUN GOARCH=$TARGETARCH go build -o /main
+RUN GOARCH=$TARGETARCH go build -ldflags="-w -s" -o /main
 
 FROM gcr.io/distroless/static-debian11
 
