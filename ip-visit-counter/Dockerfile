@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS build-env
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS build-env
 
 WORKDIR /app
 COPY go.mod ./
