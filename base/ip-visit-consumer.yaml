@@ -40,7 +40,7 @@ spec:
         - name: PORT
           value: "80"
         - name: KAFKAADDRESS
-          value: "kafka-service:9092"
+          value: "kafka.default.svc.cluster.local:9092"
         - name: KAFKATOPIC
           value: "ip-visit"
         - name: KAFKACONSUMERGROUP

@@ -5,7 +5,7 @@ Each microservice has it's own `app.yaml` that should contain all of it's depend
 
 To deploy on GKE, run:
 ```
-kubectl apply -k overlays/gke
+kustomize build --enable-helm overlays/gke | kubectl apply -f -
 ```
 
 

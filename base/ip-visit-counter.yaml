@@ -57,7 +57,7 @@ spec:
         - name: RESPONSEFILE
           value: "/app/response.txt"
         - name: KAFKAADDRESS
-          value: "kafka-service:9092"
+          value: "kafka.default.svc.cluster.local:9092"
         - name: KAFKATOPIC
           value: "ip-visit"
         - name: IPINFOADDRESS
