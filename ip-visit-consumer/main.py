@@ -20,29 +20,25 @@ def start_kafka_reader(address, topic, group):
     consumer = Consumer({
         'bootstrap.servers': address,
         'group.id': group,
+        'max.poll.records': 1,
+        'fetch.min.bytes': 1,
+        'fetch.max.wait.ms': 10
     })
 
     consumer.subscribe([topic])
 
     global run
     while run:
-        try:
-            msg = consumer.poll(1.0)  # Poll for messages with a timeout of 1 second
-            if msg is None:
-                continue
-            if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    # End of partition event
-                    print(f"Reached end of partition: {msg.topic()} [{msg.partition()}]")
-                elif msg.error():
-                    run = False
-                    raise KafkaException(msg.error())
-            else:
-                # Proper message
-                print(f"Message on {msg.topic()} [{msg.partition()}]: {msg.value().decode('utf-8')}")
-        except Exception as e:
-            print(f"Consumer error: {e}")
-            run = False
+        msg = consumer.poll(1.0)
+
+        if msg is None:
+            print("No message received")
+            continue
+        if msg.error():
+            print("Consumer error: {}".format(msg.error()))
+            continue
+
+        print('Received message: {msg}')
 
     consumer.close()
 
