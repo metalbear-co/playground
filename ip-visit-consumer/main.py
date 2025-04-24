@@ -18,11 +18,14 @@ class Config:
 
 # Kafka consumer function
 def start_kafka_reader(address, topic, group):
-    consumer = Consumer({
+    options = {
         'bootstrap.servers': address,
         'group.id': group,
-        "debug": os.getenv("KAFKA_DEBUG")
-    })
+    }
+    if os.getenv("KAFKA_DEBUG"):
+        options['debug'] = os.getenv("KAFKA_DEBUG")
+
+    consumer = Consumer(options)
 
     consumer.subscribe([topic])
 
