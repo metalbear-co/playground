@@ -1,0 +1,10 @@
+[project]
+name = "ip-visit-consumer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "confluent-kafka>=2.10.0",
+    "flask>=3.1.0",
+]

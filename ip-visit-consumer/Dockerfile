@@ -1,17 +1,8 @@
-FROM --platform=$BUILDPLATFORM golang:1.23 as build-env
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm
 
+ADD . /app
 WORKDIR /app
-COPY go.mod ./
-COPY go.sum ./
-RUN go mod download
-COPY *.go ./
 
-ARG TARGETARCH
-RUN GOARCH=$TARGETARCH go build -o /main
+RUN uv sync --locked
 
-FROM confluentinc/cp-kafka:latest
-
-
-COPY --from=build-env /main /main
-
-CMD [ "/main" ]
+CMD ["uv", "run", "/app/main.py"]
