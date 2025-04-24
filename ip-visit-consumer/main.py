@@ -1,7 +1,8 @@
 import os
 import time
 from flask import Flask, jsonify
-from confluent_kafka import Consumer, KafkaException, KafkaError
+import sys
+from confluent_kafka import Consumer
 import threading
 
 run = True
@@ -28,15 +29,14 @@ def start_kafka_reader(address, topic, group):
     global run
     while run:
         msg = consumer.poll(1.0)
-
         if msg is None:
-            print("No message received")
+            print("No message received", file=sys.stderr)
             continue
         if msg.error():
-            print("Consumer error: {}".format(msg.error()))
+            print("Consumer error: {}".format(msg.error()), file=sys.stderr)
             continue
 
-        print('Received message: {msg}', flush=True)
+        print('Received message: {msg}', flush=True, file=sys.stderr)
 
     consumer.close()
 
