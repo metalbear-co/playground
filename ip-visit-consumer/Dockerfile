@@ -7,9 +7,11 @@ RUN go mod download
 COPY *.go ./
 
 ARG TARGETARCH
-RUN GOARCH=$TARGETARCH go build -ldflags="-w -s" -o /main
+RUN GOARCH=$TARGETARCH go build -o /main
 
-FROM gcr.io/distroless/static-debian11
+FROM debian:trixie
+
+RUN apt install -y librdkafka
 
 COPY --from=build-env /main /main
 
