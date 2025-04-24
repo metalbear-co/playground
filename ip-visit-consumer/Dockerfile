@@ -9,9 +9,8 @@ COPY *.go ./
 ARG TARGETARCH
 RUN GOARCH=$TARGETARCH go build -o /main
 
-FROM debian:trixie
+FROM confluentinc/cp-kafka:latest
 
-RUN apt install -y librdkafka
 
 COPY --from=build-env /main /main
 
