@@ -204,7 +204,19 @@ func getCount(c *gin.Context) {
 		SendSqsMessage(c, message)
 	}
 
-	err = KafkaWriter.WriteMessages(c, kafka.Message{Value: []byte(message)})
+	headers := []kafka.Header{}
+	tenantInterface, exists := c.Get("x-pg-tenant")
+	if exists {
+		if tenantStr, ok := tenantInterface.(string); ok {
+			headers = append(headers, kafka.Header{Key: "x-pg-tenant", Value: []byte(tenantStr)})
+		}
+	}
+
+	err = KafkaWriter.WriteMessages(c, kafka.Message{
+		Value:   []byte(message),
+		Headers: headers,
+	})
+
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
