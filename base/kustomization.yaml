@@ -7,3 +7,19 @@ resources:
 - ip-visit-consumer.yaml
 - ip-info.yaml
 - ip-info-grpc.yaml
+
+helmCharts:
+- name: kafka
+  valuesInline:
+    controller:
+      replicaCount: 1
+      persistence:
+        enabled: false
+    listeners:
+      client:
+        protocol: 'PLAINTEXT'
+      controller:
+        protocol: 'PLAINTEXT'
+  releaseName: kafka
+  version: 32.2.0
+  repo: oci://registry-1.docker.io/bitnamicharts
