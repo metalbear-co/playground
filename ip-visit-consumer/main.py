@@ -31,15 +31,15 @@ def start_kafka_reader(address, topic, group):
 
     global run
     while run:
-        msg = consumer.poll(1.0)
+        msg = consumer.poll(10.0)
         if msg is None:
-            print("No message received", file=sys.stderr)
+            print("No message received", flush=True)
             continue
         if msg.error():
             print("Consumer error: {}".format(msg.error()), file=sys.stderr)
             continue
 
-        print('Received message: {msg}', flush=True, file=sys.stderr)
+        print('Received message: {}', msg.value(), flush=True)
 
     consumer.close()
 
