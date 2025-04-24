@@ -4,6 +4,9 @@ from flask import Flask, jsonify
 from confluent_kafka import Consumer, KafkaException, KafkaError
 import threading
 
+run = True
+
+
 # Load configuration
 class Config:
     def __init__(self):
@@ -22,7 +25,7 @@ def start_kafka_reader(address, topic, group):
 
     consumer.subscribe([topic])
 
-    run = True
+    global run
     while run:
         try:
             msg = consumer.poll(1.0)  # Poll for messages with a timeout of 1 second
@@ -33,6 +36,7 @@ def start_kafka_reader(address, topic, group):
                     # End of partition event
                     print(f"Reached end of partition: {msg.topic()} [{msg.partition()}]")
                 elif msg.error():
+                    run = False
                     raise KafkaException(msg.error())
             else:
                 # Proper message
@@ -48,7 +52,10 @@ app = Flask(__name__)
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok"}), 200
+    if not run:
+        return jsonify({"status": "error", "message": "Consumer is not running"}), 500
+    else:
+        return jsonify({"status": "ok"}), 200
 
 if __name__ == "__main__":
     config = Config()
