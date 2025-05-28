@@ -17,7 +17,10 @@ spec:
         - name: PORT
           value: "80"
         - name: SQSQUEUENAME
-          value: IpCount
+          valueFrom:
+            configMapKeyRef:
+              name: ip-visit-sqs-consumer
+              key: ip_count_queue
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
@@ -30,6 +33,9 @@ spec:
               name: aws-credentials
         - name: AWS_DEFAULT_REGION
           value: eu-north-1
+        envFrom:
+        - configMapRef:
+            name: ip-visit-sqs-consumer
         image: ghcr.io/metalbear-co/playground-ip-visit-sqs-consumer:latest
         imagePullPolicy: IfNotPresent
         livenessProbe:

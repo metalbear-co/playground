@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ip-visit-sqs-consumer
+data:
+  ip_count_queue: IpCount
