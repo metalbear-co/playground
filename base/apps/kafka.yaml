@@ -1,0 +1,29 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kafka
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: default
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    chart: kafka
+    repoURL: https://charts.bitnami.com/bitnami
+    targetRevision: 32.2.9
+    helm:
+      valuesObject:
+        listeners:
+          client:
+            protocol: 'PLAINTEXT'
+          controller:
+            protocol: 'PLAINTEXT'
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false

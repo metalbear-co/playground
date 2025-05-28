@@ -1,11 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- redis.yaml
-- ip-visit-counter.yaml
-- ip-visit-consumer.yaml
-- ip-info.yaml
-- ip-info-grpc.yaml
+- ip-info
+- ip-info-grpc
+- ip-visit-consumer
+- ip-visit-counter
+- redis
 
 helmCharts:
 - name: kafka

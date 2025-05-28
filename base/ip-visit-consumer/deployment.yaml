@@ -1,0 +1,47 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ip-visit-consumer
+spec:
+  selector:
+    matchLabels:
+      app: ip-visit-consumer
+  template:
+    metadata:
+      labels:
+        app: ip-visit-consumer
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "80"
+        - name: KAFKAADDRESS
+          value: kafka.default.svc.cluster.local:9092
+        - name: KAFKATOPIC
+          value: ip-visit
+        - name: KAFKACONSUMERGROUP
+          value: ip-visit-consumer
+        image: ghcr.io/metalbear-co/playground-ip-visit-consumer:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            scheme: HTTP
+        name: main
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            scheme: HTTP
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi

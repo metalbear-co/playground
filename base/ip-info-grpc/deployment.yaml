@@ -1,0 +1,31 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ip-info-grpc
+spec:
+  selector:
+    matchLabels:
+      app: ip-info-grpc
+  template:
+    metadata:
+      labels:
+        app: ip-info-grpc
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "5001"
+        image: ghcr.io/metalbear-co/playground-ip-info-grpc:latest
+        imagePullPolicy: Always
+        name: main
+        ports:
+        - containerPort: 5001
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
