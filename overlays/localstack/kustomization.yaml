@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
 - namespace.yaml
 - ../local
-- ../reusables/sqs-specific
+- ../../base/ip-visit-sqs-consumer
 
 helmCharts:
   - name: localstack

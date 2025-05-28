@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ip-visit-counter
+spec:
+  selector:
+    matchLabels:
+      app: ip-visit-counter
+  template:
+    metadata:
+      labels:
+        app: ip-visit-counter
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "80"
+        - name: REDISADDRESS
+          value: redis-main:6379
+        - name: RESPONSEFILE
+          value: /app/response.txt
+        - name: KAFKAADDRESS
+          value: kafka.default.svc.cluster.local:9092
+        - name: KAFKATOPIC
+          value: ip-visit
+        - name: IPINFOADDRESS
+          value: http://ip-info
+        - name: IPINFOGRPCADDRESS
+          value: ip-info-grpc:5001
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCESS_KEY_ID
+              name: aws-credentials
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: aws-credentials
+        - name: AWS_DEFAULT_REGION
+          value: eu-north-1
+        image: ghcr.io/metalbear-co/playground-ip-visit-counter:latest
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            scheme: HTTP
+        name: main
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            scheme: HTTP
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi

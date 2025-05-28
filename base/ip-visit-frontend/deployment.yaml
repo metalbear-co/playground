@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ip-visit-frontend
+spec:
+  selector:
+    matchLabels:
+      app: ip-visit-frontend
+  template:
+    metadata:
+      labels:
+        app: ip-visit-frontend
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "3000"
+        image: ghcr.io/metalbear-co/playground-ip-visit-frontend:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+        name: main
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
