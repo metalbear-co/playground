@@ -21,18 +21,6 @@ spec:
             configMapKeyRef:
               name: ip-visit-sqs-consumer
               key: ip_count_queue
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              key: AWS_ACCESS_KEY_ID
-              name: aws-credentials
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              key: AWS_SECRET_ACCESS_KEY
-              name: aws-credentials
-        - name: AWS_DEFAULT_REGION
-          value: eu-north-1
         envFrom:
         - configMapRef:
             name: ip-visit-sqs-consumer

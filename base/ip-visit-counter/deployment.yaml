@@ -28,18 +28,6 @@ spec:
           value: http://ip-info
         - name: IPINFOGRPCADDRESS
           value: ip-info-grpc:5001
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              key: AWS_ACCESS_KEY_ID
-              name: aws-credentials
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              key: AWS_SECRET_ACCESS_KEY
-              name: aws-credentials
-        - name: AWS_DEFAULT_REGION
-          value: eu-north-1
         image: ghcr.io/metalbear-co/playground-ip-visit-counter:latest
         imagePullPolicy: IfNotPresent
         livenessProbe:

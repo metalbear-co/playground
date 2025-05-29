@@ -33,3 +33,11 @@ spec:
               value:
                 name: AWS_DEFAULT_REGION
                 value: "eu-north-1"
+            - op: add
+              path: "/spec/template/spec/containers/0/env/-"
+              value:
+                name: SQSQUEUENAME
+                valueFrom:
+                  configMapKeyRef:
+                    name: ip-visit-sqs-consumer
+                    key: ip_count_queue
