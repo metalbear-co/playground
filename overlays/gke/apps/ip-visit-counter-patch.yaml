@@ -10,7 +10,7 @@ spec:
       patches:
         - target:
             kind: Deployment
-            name: ip-visit-sqs-consumer
+            name: ip-visit-counter
           patch: |-
             - op: add
               path: "/spec/template/spec/containers/0/env/-"
