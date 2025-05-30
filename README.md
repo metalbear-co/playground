@@ -8,6 +8,11 @@ To deploy on GKE, run:
 kustomize build --enable-helm overlays/gke | kubectl apply -f -
 ```
 
+To deploy on **EKS**, run:
+```
+kustomize build --enable-helm overlays/eks | kubectl apply -f -
+```
+
 
 ## SQS
 
