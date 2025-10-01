@@ -7,20 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/segmentio/kafka-go"
 	"github.com/spf13/viper"
-)
-
-var (
-	kafkaReader     *kafka.Reader
-	consumerRunning bool
-	mu              sync.RWMutex
-	ctx             = context.Background()
 )
 
 // Config struct for application configuration
@@ -63,72 +54,43 @@ func LoadConfig() Config {
 }
 
 // StartKafkaReader starts the Kafka consumer in a goroutine
-func StartKafkaReader(config Config) {
-	kafkaReader = kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{config.KafkaAddress},
-		Topic:    config.KafkaTopic,
-		GroupID:  config.KafkaConsumerGroup,
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
-	})
+func StartKafkaReader(config Config, ctx context.Context) {
+	log.Printf(
+		"Starting Kafka reader with topic=(%v), group=(%v), broker=(%v)",
+		config.KafkaTopic,
+		config.KafkaConsumerGroup,
+		config.KafkaAddress,
+	)
 
-	// Set consumer as running
-	mu.Lock()
-	consumerRunning = true
-	mu.Unlock()
+	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers: []string{config.KafkaAddress},
+		Topic:   config.KafkaTopic,
+		GroupID: config.KafkaConsumerGroup,
+	})
 
 	log.Println("Starting Kafka consumer...")
 
 	go func() {
 		defer func() {
-			mu.Lock()
-			consumerRunning = false
-			mu.Unlock()
 			if kafkaReader != nil {
 				kafkaReader.Close()
 			}
+			os.Exit(0)
 		}()
 
 		for {
-			mu.RLock()
-			running := consumerRunning
-			mu.RUnlock()
-
-			if !running {
-				break
-			}
-
-			message, err := kafkaReader.FetchMessage(ctx)
+			message, err := kafkaReader.ReadMessage(ctx)
 			if err != nil {
 				log.Printf("Consumer error: %v", err)
-				time.Sleep(time.Second)
-				continue
+				break
 			}
-
 			log.Printf("Received message: %s with headers: %v", string(message.Value), message.Headers)
-
-			// Commit the message
-			if err := kafkaReader.CommitMessages(ctx, message); err != nil {
-				log.Printf("Failed to commit message: %v", err)
-			}
 		}
 	}()
 }
 
 // HealthHandler handles the health check endpoint
 func HealthHandler(c *gin.Context) {
-	mu.RLock()
-	running := consumerRunning
-	mu.RUnlock()
-
-	if !running {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "Consumer is not running",
-		})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
 	})
@@ -138,7 +100,8 @@ func main() {
 	config := LoadConfig()
 
 	// Start Kafka reader in a separate goroutine
-	StartKafkaReader(config)
+	ctx, cancel := context.WithCancel(context.Background())
+	StartKafkaReader(config, ctx)
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -147,15 +110,7 @@ func main() {
 	go func() {
 		<-sigChan
 		log.Println("Shutting down...")
-
-		// Stop the consumer
-		mu.Lock()
-		consumerRunning = false
-		mu.Unlock()
-
-		// Give some time for graceful shutdown
-		time.Sleep(2 * time.Second)
-		os.Exit(0)
+		cancel()
 	}()
 
 	// Setup HTTP server

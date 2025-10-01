@@ -7,17 +7,19 @@
     },
     "feature": {
         "network": {
-            "incoming": "steal",
+            "incoming": {
+                "mode": "steal",
+                "http_filter": {
+                    "header_filter": "x-pg-tenant: Avi"
+                }
+            },
             "outgoing": true
-        },
-        "fs": {
-            "mode": "read"
         },
         "split_queues": {
             "ip-visits": {
                 "queue_type": "Kafka",
                 "message_filter": {
-                    "x-pg-tenant": "Avi."
+                    "x-pg-tenant": "Avi"
                 }
             }
         }

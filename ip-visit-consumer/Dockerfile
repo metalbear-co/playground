@@ -1,8 +1,13 @@
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine as build-env
 
-ADD . /app
 WORKDIR /app
+COPY main.go ./
 
-RUN uv sync --locked
+ARG TARGETARCH
+RUN GOARCH=$TARGETARCH go build -o /main
 
-CMD ["uv", "run", "/app/main.py"]
+FROM gcr.io/distroless/static-debian11
+
+COPY --from=build-env /main /main
+
+CMD [ "/main" ]
