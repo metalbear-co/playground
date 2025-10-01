@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/segmentio/kafka-go"
@@ -53,40 +54,54 @@ func LoadConfig() Config {
 	return config
 }
 
-// StartKafkaReader starts the Kafka consumer in a goroutine
-func StartKafkaReader(config Config, ctx context.Context) {
+func RunKafkaReader(config Config, ctx context.Context) {
+	checkTopicCtx, cancel := context.WithTimeout(ctx, time.Second*30)
+	conn, err := kafka.DialContext(checkTopicCtx, "tcp", config.KafkaAddress)
+	cancel()
+	if err != nil {
+		log.Printf("Failed to connect to the Kafka broker at %v: %v", config.KafkaAddress, err)
+		os.Exit(-1)
+	}
+
+	for {
+		partitions, err := conn.ReadPartitions(config.KafkaTopic)
+		if err != nil {
+			log.Printf("Failed to read partitions of topic %v: %v", config.KafkaTopic, err)
+			time.Sleep(time.Second * 3)
+		} else {
+			log.Printf("Fetched partitions of topic %v: %v", config.KafkaTopic, len(partitions))
+			break
+		}
+	}
+
 	log.Printf(
 		"Starting Kafka reader with topic=(%v), group=(%v), broker=(%v)",
 		config.KafkaTopic,
 		config.KafkaConsumerGroup,
 		config.KafkaAddress,
 	)
-
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{config.KafkaAddress},
-		Topic:   config.KafkaTopic,
-		GroupID: config.KafkaConsumerGroup,
+		Brokers:               []string{config.KafkaAddress},
+		Topic:                 config.KafkaTopic,
+		GroupID:               config.KafkaConsumerGroup,
+		Logger:                kafka.LoggerFunc(log.Printf),
+		ErrorLogger:           kafka.LoggerFunc(log.Printf),
+		WatchPartitionChanges: true,
 	})
 
-	log.Println("Starting Kafka consumer...")
-
-	go func() {
-		defer func() {
-			if kafkaReader != nil {
-				kafkaReader.Close()
-			}
-			os.Exit(0)
-		}()
-
-		for {
-			message, err := kafkaReader.ReadMessage(ctx)
-			if err != nil {
-				log.Printf("Consumer error: %v", err)
-				break
-			}
-			log.Printf("Received message: %s with headers: %v", string(message.Value), message.Headers)
-		}
+	defer func() {
+		kafkaReader.Close()
+		os.Exit(0)
 	}()
+
+	for {
+		message, err := kafkaReader.ReadMessage(ctx)
+		if err != nil {
+			log.Printf("Consumer error: %v", err)
+			break
+		}
+		log.Printf("Received message: %s with headers: %v", string(message.Value), message.Headers)
+	}
 }
 
 // HealthHandler handles the health check endpoint
@@ -101,7 +116,7 @@ func main() {
 
 	// Start Kafka reader in a separate goroutine
 	ctx, cancel := context.WithCancel(context.Background())
-	StartKafkaReader(config, ctx)
+	go RunKafkaReader(config, ctx)
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)

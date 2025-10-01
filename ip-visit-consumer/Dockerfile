@@ -2,6 +2,8 @@ FROM --platform=$BUILDPLATFORM golang:1.23-alpine as build-env
 
 WORKDIR /app
 COPY main.go ./
+COPY go.mod ./
+COPY go.sum ./
 
 ARG TARGETARCH
 RUN GOARCH=$TARGETARCH go build -o /main
