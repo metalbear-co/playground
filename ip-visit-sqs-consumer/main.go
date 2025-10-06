@@ -48,9 +48,6 @@ func SetupSqs(queue_name string) error {
 
 func loadConfig() Config {
 	viper.BindEnv("port")
-	viper.BindEnv("kafkaaddress")
-	viper.BindEnv("kafkatopic")
-	viper.BindEnv("kafkaconsumergroup")
 	viper.BindEnv("sqsqueuename")
 
 	config := Config{}
