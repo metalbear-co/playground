@@ -256,3 +256,5 @@ export const groupPalette: Record<
   queue: { background: "#FFF8E8", border: "#F5B42A", text: "#7C2D12" },
   mirrord: { background: "#E3E8FF", border: "#4F46E5", text: "#111827" },
 };
+
+export const architectureZones = [];

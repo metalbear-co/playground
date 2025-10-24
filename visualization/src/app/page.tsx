@@ -14,7 +14,7 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import {
   architectureEdges,
@@ -76,6 +76,7 @@ const buildFlowNodes = (): Node<NodeData>[] =>
         color: palette.text,
         boxShadow: "0px 20px 45px rgba(15, 23, 42, 0.15)",
         width: nodeWidth,
+        zIndex: 10,
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -122,7 +123,7 @@ const buildFlowEdges = (): Edge[] =>
 const getLayoutedElements = (nodes: Node<NodeData>[], edges: Edge[]) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: "LR", nodesep: 80, ranksep: 150 });
+  dagreGraph.setGraph({ rankdir: "LR", nodesep: 140, ranksep: 260 });
 
   nodes.forEach((node) =>
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }),
@@ -151,6 +152,8 @@ const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   buildFlowEdges(),
 );
 
+const initialFlowNodes: Node[] = [...layoutedNodes];
+
 const legendItems = [
   { label: "Entry / Client", color: groupPalette.entry.border },
   { label: "Frontend", color: groupPalette.frontend.border },
@@ -161,6 +164,8 @@ const legendItems = [
 ];
 
 export default function Home() {
+  const nodeTypes = useMemo(() => ({}), []);
+
   return (
     <div className="min-h-screen w-full bg-[#F5F5F5] px-6 py-12 text-[#111827] md:px-10">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-10">
@@ -184,7 +189,7 @@ export default function Home() {
 
         <div className="h-[760px] w-full overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_25px_80px_rgba(15,23,42,0.12)]">
           <ReactFlow
-            nodes={layoutedNodes}
+            nodes={initialFlowNodes}
             edges={layoutedEdges}
             fitView
             minZoom={0.3}
@@ -193,19 +198,20 @@ export default function Home() {
             panOnScroll
             className="!bg-white"
             proOptions={{ hideAttribution: true }}
+            nodeTypes={nodeTypes}
           >
             <Background color="#E9E4FF" gap={24} size={2} />
             <MiniMap
               pannable
               zoomable
               nodeStrokeColor={(n) => {
-                const group = (n?.data as NodeData | undefined)?.group;
-                return group ? groupPalette[group].border : "#94A3B8";
+                const data = n?.data as NodeData | undefined;
+                return data ? groupPalette[data.group].border : "#D1D5DB";
               }}
               maskColor="rgba(255,255,255,0.8)"
               nodeColor={(n) => {
-                const group = (n?.data as NodeData | undefined)?.group;
-                return group ? groupPalette[group].background : "#E9E4FF";
+                const data = n?.data as NodeData | undefined;
+                return data ? groupPalette[data.group].background : "#E9E4FF";
               }}
             />
             <Controls
