@@ -98,7 +98,7 @@ const buildFlowEdges = (): Edge[] =>
       source: edge.source,
       target: edge.target,
       label: edge.label,
-      type: "smoothstep",
+      type: "bezier",
       animated: Boolean(style.animated),
       markerEnd: {
         type: MarkerType.ArrowClosed,
