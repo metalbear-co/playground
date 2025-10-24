@@ -11,10 +11,12 @@ import {
   Panel,
   Position,
   ReactFlow,
+  applyNodeChanges,
   type Edge,
   type Node,
+  type NodeChange,
 } from "@xyflow/react";
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import {
   architectureEdges,
@@ -81,8 +83,8 @@ const buildFlowNodes = (): Node<NodeData>[] =>
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       connectable: false,
-      draggable: false,
-      selectable: false,
+      draggable: true,
+      selectable: true,
       position: { x: 0, y: 0 },
     };
   });
@@ -164,7 +166,13 @@ const legendItems = [
 ];
 
 export default function Home() {
-  const nodeTypes = useMemo(() => ({}), []);
+  const [flowNodes, setFlowNodes] = useState<Node[]>(() => initialFlowNodes);
+  const [flowEdges] = useState<Edge[]>(() => layoutedEdges);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => setFlowNodes((nds) => applyNodeChanges(changes, nds)),
+    [],
+  );
 
   return (
     <div className="min-h-screen w-full bg-[#F5F5F5] px-6 py-12 text-[#111827] md:px-10">
@@ -189,8 +197,8 @@ export default function Home() {
 
         <div className="h-[760px] w-full overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_25px_80px_rgba(15,23,42,0.12)]">
           <ReactFlow
-            nodes={initialFlowNodes}
-            edges={layoutedEdges}
+            nodes={flowNodes}
+            edges={flowEdges}
             fitView
             minZoom={0.3}
             maxZoom={1.5}
@@ -198,7 +206,7 @@ export default function Home() {
             panOnScroll
             className="!bg-white"
             proOptions={{ hideAttribution: true }}
-            nodeTypes={nodeTypes}
+            onNodesChange={handleNodesChange}
           >
             <Background color="#E9E4FF" gap={24} size={2} />
             <MiniMap
