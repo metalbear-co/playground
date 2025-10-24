@@ -248,11 +248,11 @@ export const groupPalette: Record<
   ArchitectureNode["group"],
   { background: string; border: string; text: string }
 > = {
-  entry: { background: "#E0F2FE", border: "#0369A1", text: "#0F172A" },
-  frontend: { background: "#FCE7F3", border: "#BE185D", text: "#831843" },
-  infra: { background: "#F3F4F6", border: "#4B5563", text: "#111827" },
-  service: { background: "#ECFDF5", border: "#059669", text: "#064E3B" },
-  data: { background: "#FEF3C7", border: "#D97706", text: "#7C2D12" },
-  queue: { background: "#E0E7FF", border: "#4C1D95", text: "#312E81" },
-  mirrord: { background: "#DBEAFE", border: "#2563EB", text: "#1E3A8A" },
+  entry: { background: "#F5F5F5", border: "#0F172A", text: "#111827" },
+  frontend: { background: "#E9E4FF", border: "#4F46E5", text: "#1E1B4B" },
+  infra: { background: "#FFFFFF", border: "#D1D5DB", text: "#111827" },
+  service: { background: "#FFF6E6", border: "#F5B42A", text: "#7C2D12" },
+  data: { background: "#FDF0F2", border: "#E66479", text: "#7F1D1D" },
+  queue: { background: "#FFF8E8", border: "#F5B42A", text: "#7C2D12" },
+  mirrord: { background: "#E3E8FF", border: "#4F46E5", text: "#111827" },
 };
