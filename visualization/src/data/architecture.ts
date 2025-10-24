@@ -89,13 +89,6 @@ export const architectureNodes: ArchitectureNode[] = [
     group: "queue",
   },
   {
-    id: "sqs",
-    label: "SQS queue",
-    stack: "IpCount",
-    description: "Optional queue splitting target managed via mirrord.",
-    group: "queue",
-  },
-  {
     id: "ip-info-http",
     label: "ip-info",
     stack: "Go / REST",
@@ -104,28 +97,12 @@ export const architectureNodes: ArchitectureNode[] = [
     repoPath: "ip-info/",
   },
   {
-    id: "ip-info-grpc",
-    label: "ip-info-grpc",
-    stack: "Go / gRPC",
-    description: "gRPC variant for IP info lookup.",
-    group: "service",
-    repoPath: "ip-info-grpc/",
-  },
-  {
     id: "ip-visit-consumer",
     label: "ip-visit-consumer",
     stack: "Python / Kafka",
     description: "Reads Kafka events and logs multi-tenant visits.",
     group: "service",
     repoPath: "ip-visit-consumer/",
-  },
-  {
-    id: "ip-visit-sqs-consumer",
-    label: "ip-visit-sqs-consumer",
-    stack: "Go / SQS",
-    description: "Consumes the mirrored SQS queue for queue splitting demos.",
-    group: "service",
-    repoPath: "ip-visit-sqs-consumer/",
   },
 ];
 
@@ -208,13 +185,6 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "data",
   },
   {
-    id: "counter-to-sqs",
-    source: "ip-visit-counter",
-    target: "sqs",
-    label: "Queue split",
-    intent: "data",
-  },
-  {
     id: "counter-to-ipinfo-http",
     source: "ip-visit-counter",
     target: "ip-info-http",
@@ -222,24 +192,10 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "request",
   },
   {
-    id: "counter-to-ipinfo-grpc",
-    source: "ip-visit-counter",
-    target: "ip-info-grpc",
-    label: "gRPC lookup",
-    intent: "request",
-  },
-  {
     id: "kafka-to-consumer",
     source: "kafka",
     target: "ip-visit-consumer",
     label: "Process events",
-    intent: "data",
-  },
-  {
-    id: "sqs-to-consumer",
-    source: "sqs",
-    target: "ip-visit-sqs-consumer",
-    label: "Process queue",
     intent: "data",
   },
 ];
