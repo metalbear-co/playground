@@ -12,6 +12,7 @@ export type ArchitectureNode = {
     | "queue"
     | "mirrord";
   repoPath?: string;
+  zone?: "cluster" | "external";
 };
 
 export type ArchitectureEdge = {
@@ -22,6 +23,36 @@ export type ArchitectureEdge = {
   intent?: "request" | "data" | "mirrored" | "control";
 };
 
+export type ArchitectureZone = {
+  id: string;
+  label: string;
+  description: string;
+  nodes: string[];
+  border: string;
+  background: string;
+  accent: string;
+};
+
+export const architectureZones: ArchitectureZone[] = [
+  {
+    id: "cluster",
+    label: "GKE Cluster",
+    description: "Ingress, services, data stores, and mirrord operator running in-cluster.",
+    nodes: [
+      "ingress",
+      "ip-visit-counter",
+      "redis",
+      "kafka",
+      "ip-info-http",
+      "ip-visit-consumer",
+      "mirrord-operator",
+    ],
+    border: "#4F46E5",
+    background: "rgba(233, 228, 255, 0.4)",
+    accent: "#4F46E5",
+  },
+];
+
 export const architectureNodes: ArchitectureNode[] = [
   {
     id: "user",
@@ -29,6 +60,7 @@ export const architectureNodes: ArchitectureNode[] = [
     stack: "Browser / curl",
     description: "Initiates traffic through the UI or direct HTTP calls.",
     group: "entry",
+    zone: "external",
   },
   {
     id: "frontend",
@@ -37,6 +69,7 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Serves the demo UI and fetches the visit counter API.",
     group: "frontend",
     repoPath: "ip-visit-frontend/",
+    zone: "external",
   },
   {
     id: "ingress",
@@ -44,6 +77,7 @@ export const architectureNodes: ArchitectureNode[] = [
     stack: "GKE",
     description: "Public entrypoint routing traffic to ip-visit-counter pods.",
     group: "infra",
+    zone: "cluster",
   },
   {
     id: "mirrord-operator",
@@ -51,6 +85,7 @@ export const architectureNodes: ArchitectureNode[] = [
     stack: "Kubernetes controller",
     description: "Injects the mirrord agent when a developer session is attached.",
     group: "mirrord",
+    zone: "cluster",
   },
   {
     id: "ip-visit-counter",
@@ -59,6 +94,7 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Counts visits, enriches IP data, and fans out events.",
     group: "service",
     repoPath: "ip-visit-counter/",
+    zone: "cluster",
   },
   {
     id: "redis",
@@ -66,6 +102,7 @@ export const architectureNodes: ArchitectureNode[] = [
     stack: "Cache",
     description: "Per-IP visit counters with TTL.",
     group: "data",
+    zone: "cluster",
   },
   {
     id: "kafka",
@@ -73,6 +110,7 @@ export const architectureNodes: ArchitectureNode[] = [
     stack: "ip-visits",
     description: "Receives visit events from the counter service.",
     group: "queue",
+    zone: "cluster",
   },
   {
     id: "ip-info-http",
@@ -81,6 +119,7 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "HTTP service returning friendly text for IPs.",
     group: "service",
     repoPath: "ip-info/",
+    zone: "cluster",
   },
   {
     id: "ip-visit-consumer",
@@ -89,6 +128,7 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Reads Kafka events and logs multi-tenant visits.",
     group: "service",
     repoPath: "ip-visit-consumer/",
+    zone: "cluster",
   },
 ];
 
@@ -170,5 +210,3 @@ export const groupPalette: Record<
   queue: { background: "#FFF8E8", border: "#F5B42A", text: "#7C2D12" },
   mirrord: { background: "#E3E8FF", border: "#4F46E5", text: "#111827" },
 };
-
-export const architectureZones = [];

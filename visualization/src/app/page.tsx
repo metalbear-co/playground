@@ -15,12 +15,14 @@ import {
   type Edge,
   type Node,
   type NodeChange,
+  type NodeProps,
 } from "@xyflow/react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import {
   architectureEdges,
   architectureNodes,
+  architectureZones,
   groupPalette,
   type ArchitectureEdge,
   type ArchitectureNode,
@@ -154,7 +156,84 @@ const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   buildFlowEdges(),
 );
 
-const initialFlowNodes: Node[] = [...layoutedNodes];
+type ZoneNodeData = {
+  label: string;
+  description: string;
+  background: string;
+  border: string;
+  accent: string;
+};
+
+type ClusterZoneNode = Node<ZoneNodeData, "zone">;
+
+const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
+  const padding = 80;
+  const zoneNodes: ClusterZoneNode[] = [];
+
+  architectureZones.forEach((zone) => {
+    const memberNodes = nodes.filter((node) => zone.nodes.includes(node.id));
+    if (!memberNodes.length) {
+      return;
+    }
+
+    const xs = memberNodes.map((node) => node.position.x);
+    const ys = memberNodes.map((node) => node.position.y);
+    const maxX = memberNodes.map((node) => node.position.x + nodeWidth);
+    const maxY = memberNodes.map((node) => node.position.y + nodeHeight);
+
+    zoneNodes.push({
+      id: `zone-${zone.id}`,
+      type: "zone",
+      position: {
+        x: Math.min(...xs) - padding,
+        y: Math.min(...ys) - padding,
+      },
+      data: {
+        label: zone.label,
+        description: zone.description,
+        background: zone.background,
+        border: zone.border,
+        accent: zone.accent,
+      },
+      style: {
+        width: Math.max(...maxX) - Math.min(...xs) + padding * 2,
+        height: Math.max(...maxY) - Math.min(...ys) + padding * 2,
+        zIndex: 1,
+        pointerEvents: "none",
+      },
+      draggable: false,
+      selectable: false,
+    });
+  });
+
+  return zoneNodes;
+};
+
+const zoneNodes = buildZoneNodes(layoutedNodes);
+
+const initialFlowNodes: Node[] = [...zoneNodes, ...layoutedNodes];
+
+const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
+  <div
+    className="flex h-full w-full flex-col justify-between rounded-[40px] border border-dashed px-8 py-6"
+    style={{
+      borderColor: data.border,
+      background: data.background,
+      color: "#0F172A",
+    }}
+  >
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#4F46E5]">
+        {data.label}
+      </p>
+      <p className="mt-1 text-sm text-[#374151]">{data.description}</p>
+    </div>
+    <span
+      className="h-1 w-12 rounded-full"
+      style={{ backgroundColor: data.accent }}
+    />
+  </div>
+);
 
 const legendItems = [
   { label: "Entry / Client", color: groupPalette.entry.border },
@@ -166,6 +245,7 @@ const legendItems = [
 ];
 
 export default function Home() {
+  const nodeTypes = useMemo(() => ({ zone: ZoneNode }), []);
   const [flowNodes, setFlowNodes] = useState<Node[]>(() => initialFlowNodes);
   const [flowEdges] = useState<Edge[]>(() => layoutedEdges);
 
@@ -206,6 +286,7 @@ export default function Home() {
             panOnScroll
             className="!bg-white"
             proOptions={{ hideAttribution: true }}
+            nodeTypes={nodeTypes}
             onNodesChange={handleNodesChange}
           >
             <Background color="#E9E4FF" gap={24} size={2} />
@@ -213,13 +294,25 @@ export default function Home() {
               pannable
               zoomable
               nodeStrokeColor={(n) => {
-                const data = n?.data as NodeData | undefined;
-                return data ? groupPalette[data.group].border : "#D1D5DB";
+                const data = n?.data as NodeData | ZoneNodeData | undefined;
+                if (data && "group" in data) {
+                  return groupPalette[data.group].border;
+                }
+                if (data && "border" in data) {
+                  return data.border;
+                }
+                return "#D1D5DB";
               }}
               maskColor="rgba(255,255,255,0.8)"
               nodeColor={(n) => {
-                const data = n?.data as NodeData | undefined;
-                return data ? groupPalette[data.group].background : "#E9E4FF";
+                const data = n?.data as NodeData | ZoneNodeData | undefined;
+                if (data && "group" in data) {
+                  return groupPalette[data.group].background;
+                }
+                if (data && "background" in data) {
+                  return data.background;
+                }
+                return "#E9E4FF";
               }}
             />
             <Controls
