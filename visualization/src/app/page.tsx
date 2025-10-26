@@ -17,7 +17,7 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   architectureEdges,
@@ -166,6 +166,19 @@ type ZoneNodeData = {
 
 type ClusterZoneNode = Node<ZoneNodeData, "zone">;
 
+type ServiceStatus = {
+  id: string;
+  name: string;
+  description: string;
+  lastUpdated: string;
+};
+
+type ClusterSnapshot = {
+  clusterName: string;
+  updatedAt: string;
+  services: ServiceStatus[];
+};
+
 const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
   const padding = 80;
   const zoneNodes: ClusterZoneNode[] = [];
@@ -248,11 +261,78 @@ export default function Home() {
   const nodeTypes = useMemo(() => ({ zone: ZoneNode }), []);
   const [flowNodes, setFlowNodes] = useState<Node[]>(() => initialFlowNodes);
   const [flowEdges] = useState<Edge[]>(() => layoutedEdges);
+  const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(true);
+
+  const snapshotUrl = useMemo(() => {
+    const base =
+      process.env.NEXT_PUBLIC_VISUALIZATION_BACKEND_URL ?? "http://localhost:8080";
+    return `${base.replace(/\/$/, "")}/snapshot`;
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchSnapshot = async () => {
+      try {
+        const response = await fetch(snapshotUrl, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(`Snapshot request failed (${response.status})`);
+        }
+        const body = (await response.json()) as ClusterSnapshot;
+        if (!isMounted) {
+          return;
+        }
+        setSnapshot(body);
+        setSnapshotError(null);
+        setSnapshotLoading(false);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        setSnapshotError((error as Error).message);
+        setSnapshotLoading(false);
+      }
+    };
+
+    fetchSnapshot();
+    const interval = setInterval(fetchSnapshot, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [snapshotUrl]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => setFlowNodes((nds) => applyNodeChanges(changes, nds)),
     [],
   );
+
+  useEffect(() => {
+    setFlowNodes((nodes) =>
+      nodes.map((node) => {
+        if (node.type === "zone") {
+          return node;
+        }
+        const service = snapshot?.services.find((svc) => svc.id === node.id);
+        const isActive = Boolean(service);
+        const updatedStyle = {
+          ...(node.style ?? {}),
+          opacity: isActive ? 1 : 0.55,
+          boxShadow: isActive
+            ? "0px 30px 60px rgba(79,70,229,0.35)"
+            : "0px 10px 25px rgba(15,23,42,0.12)",
+          borderWidth: isActive ? 3 : 2,
+        };
+        return {
+          ...node,
+          style: updatedStyle,
+        };
+      }),
+    );
+  }, [snapshot]);
 
   return (
     <div className="min-h-screen w-full bg-[#F5F5F5] px-6 py-12 text-[#111827] md:px-10">
@@ -343,6 +423,39 @@ export default function Home() {
                 <li className="mb-1">Dashed coral = mirrord mirrored path.</li>
                 <li>Navy dash = mirrord control plane.</li>
               </ul>
+            </Panel>
+            <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
+                Live snapshot
+              </p>
+              {snapshotLoading && <p className="mt-2 text-xs text-[#6B7280]">Contacting backend…</p>}
+              {snapshotError && (
+                <p className="mt-2 text-xs text-red-500">
+                  Failed to fetch snapshot: {snapshotError}
+                </p>
+              )}
+              {snapshot && !snapshotError && (
+                <div className="mt-2 space-y-1">
+                  <p className="text-base font-semibold">{snapshot.clusterName}</p>
+                  <p className="text-xs text-[#6B7280]">
+                    Updated {new Date(snapshot.updatedAt).toLocaleTimeString()}
+                  </p>
+                  <div className="mt-3 max-h-32 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-2">
+                    {snapshot.services.length === 0 && (
+                      <p className="text-xs text-[#94A3B8]">No active services reported yet.</p>
+                    )}
+                    {snapshot.services.map((service) => (
+                      <div key={service.id} className="mb-2 last:mb-0">
+                        <p className="text-xs font-semibold text-[#111827]">{service.name}</p>
+                        <p className="text-[11px] text-[#6B7280]">{service.description}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
+                          Seen {new Date(service.lastUpdated).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Panel>
           </ReactFlow>
         </div>
