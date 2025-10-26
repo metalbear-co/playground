@@ -5,6 +5,7 @@ resources:
 - ip-info-grpc
 - ip-visit-consumer
 - ip-visit-counter
+- visualization-backend
 - redis
 
 helmCharts:
