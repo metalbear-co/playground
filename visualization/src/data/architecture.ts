@@ -88,6 +88,14 @@ export const architectureNodes: ArchitectureNode[] = [
     zone: "cluster",
   },
   {
+    id: "mirrord-agent",
+    label: "mirrord Agent",
+    stack: "Injected sidecar",
+    description: "Appears in pods when mirrord sessions run.",
+    group: "mirrord",
+    zone: "cluster",
+  },
+  {
     id: "ip-visit-counter",
     label: "ip-visit-counter",
     stack: "Go / Gin",

@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { AppsV1Api, KubeConfig } from "@kubernetes/client-node";
+import { AppsV1Api, CoreV1Api, KubeConfig } from "@kubernetes/client-node";
 const app = express();
 const port = process.env.PORT || 8080;
 app.use(cors());
@@ -8,6 +8,7 @@ app.use(express.json());
 class SnapshotStore {
     constructor(clusterName) {
         this.services = new Map();
+        this.sessions = new Map();
         this.clusterName = clusterName;
     }
     setClusterName(name) {
@@ -18,6 +19,7 @@ class SnapshotStore {
             clusterName: this.clusterName,
             updatedAt: new Date().toISOString(),
             services: Array.from(this.services.values()).sort((a, b) => a.name.localeCompare(b.name)),
+            sessions: Array.from(this.sessions.values()).sort((a, b) => a.podName.localeCompare(b.podName)),
         };
     }
     replaceSnapshot(partial) {
@@ -32,12 +34,28 @@ class SnapshotStore {
             };
             this.services.set(status.id, status);
         });
+        if (partial.sessions) {
+            this.sessions.clear();
+            partial.sessions.forEach((session) => {
+                const status = {
+                    ...session,
+                    lastUpdated: session.lastUpdated ?? new Date().toISOString(),
+                };
+                this.sessions.set(status.id, status);
+            });
+        }
     }
     upsertService(service) {
         this.services.set(service.id, service);
     }
     removeService(id) {
         this.services.delete(id);
+    }
+    setSessions(nextSessions) {
+        this.sessions.clear();
+        nextSessions.forEach((session) => {
+            this.sessions.set(session.id, session);
+        });
     }
 }
 const snapshotStore = new SnapshotStore(process.env.CLUSTER_NAME || "playground");
@@ -93,22 +111,26 @@ const knownDeployments = [
 ];
 const defaultNamespace = process.env.WATCH_NAMESPACE || "default";
 const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
-const startDeploymentPoller = () => {
+const loadKubeConfiguration = () => {
     const kubeConfig = new KubeConfig();
     try {
         kubeConfig.loadFromCluster();
         console.log("Loaded in-cluster Kubernetes configuration");
+        return kubeConfig;
     }
     catch (clusterError) {
         try {
             kubeConfig.loadFromDefault();
             console.log("Loaded local kubeconfig");
+            return kubeConfig;
         }
         catch (localError) {
             console.warn("Kubernetes configuration not found; automatic snapshot updates disabled.");
-            return;
+            return null;
         }
     }
+};
+const startDeploymentPoller = (kubeConfig) => {
     const appsApi = kubeConfig.makeApiClient(AppsV1Api);
     const poll = async () => {
         await Promise.all(knownDeployments.map(async (service) => {
@@ -134,7 +156,7 @@ const startDeploymentPoller = () => {
                 }
             }
             catch (error) {
-                console.warn(`Failed to read deployment ${service.deployment} in namespace ${namespace}`, error);
+                console.warn(`Failed to read deployment ${service.deployment} in namespace ${namespace}`, error instanceof Error ? error.message : error);
                 snapshotStore.upsertService({
                     id: service.id,
                     name: service.name,
@@ -144,14 +166,64 @@ const startDeploymentPoller = () => {
                     message: error instanceof Error ? error.message : "Unknown Kubernetes error",
                 });
             }
-        }));
+        })).then(() => {
+            const snapshot = snapshotStore.getSnapshot();
+            console.log(`[deployment-poller] ${new Date().toISOString()} - ` +
+                `${snapshot.services.length} services tracked`);
+        });
     };
     poll().catch((error) => console.error("Initial deployment poll failed", error));
     setInterval(() => {
         poll().catch((error) => console.error("Deployment poll failed", error));
     }, pollIntervalMs);
 };
-startDeploymentPoller();
+const startMirrordAgentPoller = (kubeConfig) => {
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+    const poll = async () => {
+        try {
+            const pods = await coreApi.listPodForAllNamespaces();
+            const sessions = [];
+            pods.items?.forEach((pod) => {
+                const containers = [
+                    ...(pod.spec?.containers ?? []),
+                    ...(pod.spec?.initContainers ?? []),
+                ];
+                const hasAgent = containers.some((container) => container.name.includes("mirrord-agent"));
+                if (!hasAgent) {
+                    return;
+                }
+                const namespace = pod.metadata?.namespace ?? "default";
+                const podName = pod.metadata?.name ?? "unknown-pod";
+                const targetName = pod.metadata?.annotations?.["mirrord.io/target-name"] ??
+                    pod.metadata?.ownerReferences?.[0]?.name;
+                sessions.push({
+                    id: `${namespace}/${podName}`,
+                    podName,
+                    namespace,
+                    targetWorkload: targetName,
+                    lastUpdated: new Date().toISOString(),
+                });
+            });
+            snapshotStore.setSessions(sessions);
+            console.log(`[agent-poller] ${new Date().toISOString()} - ${sessions.length} mirrord agents detected`);
+        }
+        catch (error) {
+            console.warn("Failed to poll mirrord agent pods", error instanceof Error ? error.message : error);
+        }
+    };
+    poll().catch((error) => console.error("Initial mirrord agent poll failed", error));
+    setInterval(() => {
+        poll().catch((error) => console.error("Mirrord agent poll failed", error));
+    }, pollIntervalMs);
+};
+const kubeConfig = loadKubeConfiguration();
+if (kubeConfig) {
+    startDeploymentPoller(kubeConfig);
+    startMirrordAgentPoller(kubeConfig);
+}
+else {
+    console.warn("Kubernetes configuration unavailable; snapshot watchers are disabled.");
+}
 app.listen(port, () => {
     console.log(`Visualization backend listening on port ${port}`);
 });

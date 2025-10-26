@@ -14,6 +14,8 @@ spec:
       labels:
         app: visualization-backend
     spec:
+      serviceAccountName: visualization-backend
+      automountServiceAccountToken: true
       containers:
         - name: backend
           image: docker.io/karlod/visualization-backend:latest

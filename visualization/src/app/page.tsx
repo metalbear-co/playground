@@ -180,6 +180,15 @@ type ClusterSnapshot = {
   clusterName: string;
   updatedAt: string;
   services: ServiceStatus[];
+  sessions: SessionStatus[];
+};
+
+type SessionStatus = {
+  id: string;
+  podName: string;
+  namespace: string;
+  targetWorkload?: string;
+  lastUpdated: string;
 };
 
 const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
@@ -284,11 +293,17 @@ export default function Home() {
         if (!response.ok) {
           throw new Error(`Snapshot request failed (${response.status})`);
         }
-        const body = (await response.json()) as ClusterSnapshot;
+        const body = (await response.json()) as Partial<ClusterSnapshot>;
         if (!isMounted) {
           return;
         }
-        setSnapshot(body);
+        const normalizedSnapshot: ClusterSnapshot = {
+          clusterName: body.clusterName ?? "unknown-cluster",
+          updatedAt: body.updatedAt ?? new Date().toISOString(),
+          services: body.services ?? [],
+          sessions: body.sessions ?? [],
+        };
+        setSnapshot(normalizedSnapshot);
         setSnapshotError(null);
         setSnapshotLoading(false);
       } catch (error) {
@@ -314,10 +329,28 @@ export default function Home() {
   );
 
   useEffect(() => {
+    const sessions = snapshot?.sessions ?? [];
     setFlowNodes((nodes) =>
       nodes.map((node) => {
         if (node.type === "zone") {
           return node;
+        }
+        if (node.id === "mirrord-agent") {
+          const hasSession = sessions.length > 0;
+          const updatedStyle = {
+            ...(node.style ?? {}),
+            opacity: hasSession ? 1 : 0.45,
+            boxShadow: hasSession
+              ? "0px 30px 60px rgba(230,100,121,0.35)"
+              : "0px 10px 25px rgba(15,23,42,0.12)",
+            border: hasSession
+              ? "3px solid #E66479"
+              : "2px dashed rgba(148,163,184,0.8)",
+          };
+          return {
+            ...node,
+            style: updatedStyle,
+          };
         }
         const service = snapshot?.services.find((svc) => svc.id === node.id);
         const status = service?.status ?? "unavailable";
@@ -477,6 +510,28 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
+                  {snapshot.sessions.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                        Active mirrord sessions ({snapshot.sessions.length})
+                      </p>
+                      <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
+                        {snapshot.sessions.map((session) => (
+                          <div key={session.id} className="mb-2 last:mb-0">
+                            <p className="text-xs font-semibold text-[#111827]">
+                              {session.targetWorkload ?? "Unknown target"}
+                            </p>
+                            <p className="text-[11px] text-[#6B7280]">
+                              Pod {session.podName} in {session.namespace}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
+                              Updated {new Date(session.lastUpdated).toLocaleTimeString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Panel>
