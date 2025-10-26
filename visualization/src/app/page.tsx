@@ -171,6 +171,9 @@ type ServiceStatus = {
   name: string;
   description: string;
   lastUpdated: string;
+  status?: string;
+  availableReplicas?: number;
+  message?: string;
 };
 
 type ClusterSnapshot = {
@@ -317,14 +320,23 @@ export default function Home() {
           return node;
         }
         const service = snapshot?.services.find((svc) => svc.id === node.id);
-        const isActive = Boolean(service);
+        const status = service?.status ?? "unavailable";
+        const isActive = status === "available";
+        const isDegraded = status === "degraded";
+        const nodeData = node.data as NodeData;
+        const palette = groupPalette[nodeData.group];
+        const baseBorderColor = palette?.border ?? "#E5E7EB";
+        const borderColor = isDegraded ? "#F5B42A" : baseBorderColor;
+        const borderWidth = isActive ? 3 : 2;
         const updatedStyle = {
           ...(node.style ?? {}),
-          opacity: isActive ? 1 : 0.55,
+          opacity: isActive ? 1 : isDegraded ? 0.7 : 0.55,
           boxShadow: isActive
             ? "0px 30px 60px rgba(79,70,229,0.35)"
-            : "0px 10px 25px rgba(15,23,42,0.12)",
-          borderWidth: isActive ? 3 : 2,
+            : isDegraded
+              ? "0px 20px 35px rgba(245,180,42,0.35)"
+              : "0px 10px 25px rgba(15,23,42,0.12)",
+          border: `${borderWidth}px solid ${borderColor}`,
         };
         return {
           ...node,
@@ -451,6 +463,17 @@ export default function Home() {
                         <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
                           Seen {new Date(service.lastUpdated).toLocaleTimeString()}
                         </p>
+                        <div className="mt-1 flex items-center justify-between text-[10px] text-[#6B7280]">
+                          <span className="font-semibold text-[#4F46E5]">
+                            {(service.status ?? "unknown").toUpperCase()}
+                          </span>
+                          {service.availableReplicas !== undefined && (
+                            <span>{service.availableReplicas} ready</span>
+                          )}
+                        </div>
+                        {service.message && (
+                          <p className="mt-1 text-[10px] text-red-500">{service.message}</p>
+                        )}
                       </div>
                     ))}
                   </div>
