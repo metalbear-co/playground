@@ -194,8 +194,22 @@ const startMirrordAgentPoller = (kubeConfig) => {
                 }
                 const namespace = pod.metadata?.namespace ?? "default";
                 const podName = pod.metadata?.name ?? "unknown-pod";
-                const targetName = pod.metadata?.annotations?.["mirrord.io/target-name"] ??
+                let targetName = pod.metadata?.annotations?.["mirrord.io/target-name"] ??
                     pod.metadata?.ownerReferences?.[0]?.name;
+                if (!targetName) {
+                    const labelTarget = pod.metadata?.labels?.["mirrord.io/target-deployment"] ??
+                        pod.metadata?.labels?.["mirrord.io/target-workload"];
+                    if (labelTarget) {
+                        targetName = `${namespace}/${labelTarget}`;
+                    }
+                }
+                if (!targetName && pod.metadata?.annotations) {
+                    const annotationTarget = Object.entries(pod.metadata.annotations)
+                        .find(([key]) => key.toLowerCase().includes("target"))?.[1];
+                    if (annotationTarget) {
+                        targetName = annotationTarget;
+                    }
+                }
                 sessions.push({
                     id: `${namespace}/${podName}`,
                     podName,

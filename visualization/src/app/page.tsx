@@ -330,6 +330,12 @@ export default function Home() {
 
   useEffect(() => {
     const sessions = snapshot?.sessions ?? [];
+    const sessionTargets = new Set(
+      sessions
+        .map((session) => session.targetWorkload?.toLowerCase())
+        .filter((target): target is string => Boolean(target)),
+    );
+
     setFlowNodes((nodes) =>
       nodes.map((node) => {
         if (node.type === "zone") {
@@ -361,15 +367,26 @@ export default function Home() {
         const baseBorderColor = palette?.border ?? "#E5E7EB";
         const borderColor = isDegraded ? "#F5B42A" : baseBorderColor;
         const borderWidth = isActive ? 3 : 2;
+        const targetHighlight = sessionTargets.has(node.id.toLowerCase());
+
         const updatedStyle = {
           ...(node.style ?? {}),
-          opacity: isActive ? 1 : isDegraded ? 0.7 : 0.55,
+          opacity:
+            targetHighlight || node.id === "mirrord-operator"
+              ? 1
+              : isActive
+                ? 1
+                : isDegraded
+                  ? 0.7
+                  : 0.55,
           boxShadow: isActive
             ? "0px 30px 60px rgba(79,70,229,0.35)"
             : isDegraded
               ? "0px 20px 35px rgba(245,180,42,0.35)"
               : "0px 10px 25px rgba(15,23,42,0.12)",
-          border: `${borderWidth}px solid ${borderColor}`,
+          border: targetHighlight
+            ? `3px solid #E66479`
+            : `${borderWidth}px solid ${borderColor}`,
         };
         return {
           ...node,
@@ -516,19 +533,19 @@ export default function Home() {
                         Active mirrord sessions ({snapshot.sessions.length})
                       </p>
                       <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
-                        {snapshot.sessions.map((session) => (
-                          <div key={session.id} className="mb-2 last:mb-0">
-                            <p className="text-xs font-semibold text-[#111827]">
-                              {session.targetWorkload ?? "Unknown target"}
-                            </p>
-                            <p className="text-[11px] text-[#6B7280]">
-                              Pod {session.podName} in {session.namespace}
-                            </p>
-                            <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
-                              Updated {new Date(session.lastUpdated).toLocaleTimeString()}
-                            </p>
-                          </div>
-                        ))}
+                    {snapshot.sessions.map((session) => (
+                      <div key={session.id} className="mb-2 last:mb-0">
+                        <p className="text-xs font-semibold text-[#E66479]">
+                          Target • {session.targetWorkload ?? "Unknown workload"}
+                        </p>
+                        <p className="text-[11px] text-[#6B7280]">
+                          Pod {session.podName} in {session.namespace}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
+                          Updated {new Date(session.lastUpdated).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    ))}
                       </div>
                     </div>
                   )}
