@@ -326,15 +326,18 @@ const handleStyle = { background: "#E66479", width: 8, height: 8 };
 
 type MirrordNodeType = Node<NodeData, "mirrord">;
 
-const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
+const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
   const info = architectureNodes.find((node) => node.id === id);
   const palette = groupPalette.mirrord;
   const isLayer = id === "mirrord-layer";
   const isAgent = id === "mirrord-agent";
+  const label = info?.label ?? id;
+  const stack = info?.stack;
+  const description = info?.description;
 
   return (
     <div
-      className="flex h-full w-full flex-col justify-between rounded-[18px] border border-solid px-4 py-4 text-left shadow-md"
+      className="flex h-full w-full flex-col justify-between whitespace-normal rounded-[18px] border border-solid px-4 py-4 text-left shadow-md"
       style={{
         borderColor: palette.border,
         background: palette.background,
@@ -355,15 +358,15 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Right} id="agent-source-right" style={handleStyle} />
         </>
       )}
-      <div className="flex flex-col gap-1">
-        <p className="text-sm font-semibold text-slate-900">{data.label}</p>
-        {info?.stack && (
+      <div className="flex flex-col gap-1 text-left">
+        <p className="text-sm font-semibold text-slate-900">{label}</p>
+        {stack && (
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {info.stack}
+            {stack}
           </p>
         )}
-        {info?.description && (
-          <p className="text-xs leading-snug text-slate-600">{info.description}</p>
+        {description && (
+          <p className="text-xs leading-snug text-slate-600">{description}</p>
         )}
       </div>
     </div>
@@ -382,7 +385,13 @@ const legendItems = [
 export default function Home() {
   const nodeTypes = useMemo(() => ({ zone: ZoneNode, mirrord: MirrordNode }), []);
   const [flowNodes, setFlowNodes] = useState<Node[]>(() => initialFlowNodes);
-  const [flowEdges] = useState<Edge[]>(() => layoutedEdges);
+  const baseEdges = useMemo(() => layoutedEdges, []);
+  const tunnelEdgeId = "layer-to-agent";
+  const edgesWithoutTunnel = useMemo(
+    () => baseEdges.filter((edge) => edge.id !== tunnelEdgeId),
+    [baseEdges],
+  );
+  const [flowEdges, setFlowEdges] = useState<Edge[]>(edgesWithoutTunnel);
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
@@ -616,6 +625,11 @@ export default function Home() {
       }),
     );
   }, [snapshot, plannedTargets]);
+
+  useEffect(() => {
+    const hasSessions = (snapshot?.sessions ?? []).length > 0;
+    setFlowEdges(hasSessions ? baseEdges : edgesWithoutTunnel);
+  }, [edgesWithoutTunnel, baseEdges, snapshot]);
 
   return (
     <div className="min-h-screen w-full bg-[#F5F5F5] px-6 py-12 text-[#111827] md:px-10">
