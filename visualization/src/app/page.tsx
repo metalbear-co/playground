@@ -82,16 +82,8 @@ const buildFlowNodes = (): Node<NodeData>[] =>
         width: nodeWidth,
         zIndex: 10,
       },
-      sourcePosition:
-        node.id === "mirrord-layer"
-          ? Position.Top
-          : node.id === "mirrord-operator"
-            ? Position.Right
-            : Position.Right,
-      targetPosition:
-        node.id === "mirrord-agent"
-          ? Position.Left
-          : Position.Left,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       connectable: false,
       draggable: true,
       selectable: true,
@@ -103,17 +95,36 @@ const buildFlowEdges = (): Edge[] =>
   architectureEdges.map((edge) => {
     const intent = edge.intent ?? "default";
     const style = intentStyles[intent];
+    let edgeType: Edge["type"] = "bezier";
+    let sourcePosition: Position | undefined;
+    let targetPosition: Position | undefined;
+
+    switch (edge.id) {
+      case "layer-to-agent":
+        edgeType = "smoothstep";
+        sourcePosition = Position.Top;
+        targetPosition = Position.Bottom;
+        break;
+      case "agent-to-target":
+        sourcePosition = Position.Right;
+        targetPosition = Position.Left;
+        break;
+      case "operator-to-agent":
+        sourcePosition = Position.Right;
+        targetPosition = Position.Left;
+        break;
+      default:
+        break;
+    }
+
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
       label: edge.label,
-      type:
-        edge.id === "layer-to-agent"
-          ? "step"
-          : "bezier",
-      sourceHandle: edge.id === "layer-to-agent" ? "top" : undefined,
-      targetHandle: edge.id === "layer-to-agent" ? "bottom" : undefined,
+      type: edgeType,
+      sourcePosition,
+      targetPosition,
       animated: Boolean(style.animated),
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -259,7 +270,7 @@ const nodeZoneIndex = new Map<string, ZoneId>(
 );
 
 const LOCAL_ZONE_OFFSET_Y = 420;
-const LOCAL_ZONE_OFFSET_X = 1000;
+const LOCAL_ZONE_OFFSET_X = 320;
 
 const adjustedNodes = layoutedNodes.map((node) => {
   const zone = nodeZoneIndex.get(node.id);
