@@ -6,6 +6,7 @@ import dagre from "dagre";
 import {
   Background,
   Controls,
+  Handle,
   MarkerType,
   MiniMap,
   Panel,
@@ -51,6 +52,8 @@ const intentStyles: Record<
 
 const buildFlowNodes = (): Node<NodeData>[] =>
   architectureNodes.map((node) => {
+    const isMirrordNode =
+      node.id === "mirrord-layer" || node.id === "mirrord-agent";
     const palette = groupPalette[node.group];
 
     return {
@@ -82,12 +85,18 @@ const buildFlowNodes = (): Node<NodeData>[] =>
         width: nodeWidth,
         zIndex: 10,
       },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
+      sourcePosition: isMirrordNode ? Position.Right : Position.Right,
+      targetPosition:
+        node.id === "mirrord-layer"
+          ? Position.Left
+          : node.id === "mirrord-agent"
+            ? Position.Left
+            : Position.Left,
       connectable: false,
       draggable: true,
       selectable: true,
       position: { x: 0, y: 0 },
+      type: isMirrordNode ? "mirrord" : undefined,
     };
   });
 
@@ -96,22 +105,23 @@ const buildFlowEdges = (): Edge[] =>
     const intent = edge.intent ?? "default";
     const style = intentStyles[intent];
     let edgeType: Edge["type"] = "bezier";
-    let sourcePosition: Position | undefined;
-    let targetPosition: Position | undefined;
+    let sourceHandle: string | undefined;
+    let targetHandle: string | undefined;
 
     switch (edge.id) {
       case "layer-to-agent":
         edgeType = "smoothstep";
-        sourcePosition = Position.Top;
-        targetPosition = Position.Bottom;
+        sourceHandle = "layer-source-top";
+        targetHandle = "agent-target-bottom";
+        break;
+      case "local-to-layer":
+        targetHandle = "layer-target-left";
         break;
       case "agent-to-target":
-        sourcePosition = Position.Right;
-        targetPosition = Position.Left;
+        sourceHandle = "agent-source-right";
         break;
       case "operator-to-agent":
-        sourcePosition = Position.Right;
-        targetPosition = Position.Left;
+        targetHandle = "agent-target-left";
         break;
       default:
         break;
@@ -123,8 +133,8 @@ const buildFlowEdges = (): Edge[] =>
       target: edge.target,
       label: edge.label,
       type: edgeType,
-      sourcePosition,
-      targetPosition,
+      sourceHandle,
+      targetHandle,
       animated: Boolean(style.animated),
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -312,6 +322,54 @@ const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   </div>
 );
 
+const handleStyle = { background: "#E66479", width: 8, height: 8 };
+
+type MirrordNodeType = Node<NodeData, "mirrord">;
+
+const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
+  const info = architectureNodes.find((node) => node.id === id);
+  const palette = groupPalette.mirrord;
+  const isLayer = id === "mirrord-layer";
+  const isAgent = id === "mirrord-agent";
+
+  return (
+    <div
+      className="flex h-full w-full flex-col justify-between rounded-[18px] border border-solid px-4 py-4 text-left shadow-md"
+      style={{
+        borderColor: palette.border,
+        background: palette.background,
+        color: palette.text,
+      }}
+    >
+      {isLayer && (
+        <>
+          <Handle type="target" position={Position.Left} id="layer-target-left" style={handleStyle} />
+          <Handle type="source" position={Position.Top} id="layer-source-top" style={handleStyle} />
+          <Handle type="source" position={Position.Right} id="layer-source-right" style={handleStyle} />
+        </>
+      )}
+      {isAgent && (
+        <>
+          <Handle type="target" position={Position.Left} id="agent-target-left" style={handleStyle} />
+          <Handle type="target" position={Position.Bottom} id="agent-target-bottom" style={handleStyle} />
+          <Handle type="source" position={Position.Right} id="agent-source-right" style={handleStyle} />
+        </>
+      )}
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-semibold text-slate-900">{data.label}</p>
+        {info?.stack && (
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {info.stack}
+          </p>
+        )}
+        {info?.description && (
+          <p className="text-xs leading-snug text-slate-600">{info.description}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const legendItems = [
   { label: "Entry / Client", color: groupPalette.entry.border },
   { label: "Frontend", color: groupPalette.frontend.border },
@@ -322,7 +380,7 @@ const legendItems = [
 ];
 
 export default function Home() {
-  const nodeTypes = useMemo(() => ({ zone: ZoneNode }), []);
+  const nodeTypes = useMemo(() => ({ zone: ZoneNode, mirrord: MirrordNode }), []);
   const [flowNodes, setFlowNodes] = useState<Node[]>(() => initialFlowNodes);
   const [flowEdges] = useState<Edge[]>(() => layoutedEdges);
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
