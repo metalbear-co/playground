@@ -82,8 +82,8 @@ const buildFlowNodes = (): Node<NodeData>[] =>
         width: nodeWidth,
         zIndex: 10,
       },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
+      sourcePosition: node.id === "mirrord-layer" ? Position.Top : Position.Right,
+      targetPosition: node.id === "mirrord-agent" ? Position.Bottom : Position.Left,
       connectable: false,
       draggable: true,
       selectable: true,
@@ -100,7 +100,12 @@ const buildFlowEdges = (): Edge[] =>
       source: edge.source,
       target: edge.target,
       label: edge.label,
-      type: "bezier",
+      type:
+        edge.id === "layer-to-agent"
+          ? "step"
+          : "bezier",
+      sourceHandle: edge.id === "layer-to-agent" ? "top" : undefined,
+      targetHandle: edge.id === "layer-to-agent" ? "bottom" : undefined,
       animated: Boolean(style.animated),
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -239,9 +244,32 @@ const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
   return zoneNodes;
 };
 
-const zoneNodes = buildZoneNodes(layoutedNodes);
+type ZoneId = ArchitectureNode["zone"] | "cluster";
 
-const initialFlowNodes: Node[] = [...zoneNodes, ...layoutedNodes];
+const nodeZoneIndex = new Map<string, ZoneId>(
+  architectureNodes.map((node) => [node.id, (node.zone ?? "cluster") as ZoneId]),
+);
+
+const LOCAL_ZONE_OFFSET_Y = 420;
+const LOCAL_ZONE_OFFSET_X = 1000;
+
+const adjustedNodes = layoutedNodes.map((node) => {
+  const zone = nodeZoneIndex.get(node.id);
+  if (zone === "local") {
+    return {
+      ...node,
+      position: {
+        x: node.position.x + LOCAL_ZONE_OFFSET_X,
+        y: node.position.y + LOCAL_ZONE_OFFSET_Y,
+      },
+    };
+  }
+  return node;
+});
+
+const zoneNodes = buildZoneNodes(adjustedNodes);
+
+const initialFlowNodes: Node[] = [...zoneNodes, ...adjustedNodes];
 
 const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   <div
@@ -426,6 +454,8 @@ export default function Home() {
 
   useEffect(() => {
     const sessions = snapshot?.sessions ?? [];
+    const hasSessions = sessions.length > 0;
+    const hasPlan = plannedTargets.size > 0;
     const sessionTargets = new Set(
       sessions
         .map((session) => session.targetWorkload?.toLowerCase())
@@ -438,16 +468,32 @@ export default function Home() {
           return node;
         }
         if (node.id === "mirrord-agent") {
-          const hasSession = sessions.length > 0;
           const updatedStyle = {
             ...(node.style ?? {}),
-            opacity: hasSession ? 1 : 0.45,
-            boxShadow: hasSession
+            opacity: hasSessions ? 1 : 0.45,
+            boxShadow: hasSessions
               ? "0px 30px 60px rgba(230,100,121,0.35)"
               : "0px 10px 25px rgba(15,23,42,0.12)",
-            border: hasSession
+            border: hasSessions
               ? "3px solid #E66479"
               : "2px dashed rgba(148,163,184,0.8)",
+          };
+          return {
+            ...node,
+            style: updatedStyle,
+          };
+        }
+        if (node.id === "mirrord-layer" || node.id === "local-process") {
+          const active = hasSessions || hasPlan;
+          const updatedStyle = {
+            ...(node.style ?? {}),
+            opacity: active ? 1 : 0.55,
+            boxShadow: active
+              ? "0px 25px 50px rgba(230,100,121,0.35)"
+              : "0px 10px 25px rgba(15,23,42,0.12)",
+            border: active
+              ? "3px solid #E66479"
+              : node.style?.border ?? "2px dashed rgba(148,163,184,0.8)",
           };
           return {
             ...node,
@@ -684,6 +730,29 @@ export default function Home() {
                       </div>
                     ))}
                       </div>
+                    </div>
+                  )}
+                  {(snapshot.sessions.length > 0 || plannedTargetList.length > 0) && (
+                    <div className="mt-4 space-y-1 rounded-lg border border-[#E5E7EB] bg-white p-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                        Local process & mirrord-layer
+                      </p>
+                      {plannedTargetList.length > 0 && (
+                        <p className="text-[11px] text-[#6B7280]">
+                          mirrord-layer will hook the local binary and request access to:
+                        </p>
+                      )}
+                      {plannedTargetList.length === 0 && snapshot.sessions.length === 0 && (
+                        <p className="text-[11px] text-[#94A3B8]">
+                          No planned sessions selected.
+                        </p>
+                      )}
+                      {snapshot.sessions.length > 0 && (
+                        <p className="text-[11px] text-[#6B7280]">
+                          Session traffic tunnels over a port-forward between mirrord-layer and the
+                          in-cluster agent.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

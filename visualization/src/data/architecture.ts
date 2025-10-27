@@ -12,7 +12,7 @@ export type ArchitectureNode = {
     | "queue"
     | "mirrord";
   repoPath?: string;
-  zone?: "cluster" | "external";
+  zone?: "cluster" | "external" | "local";
 };
 
 export type ArchitectureEdge = {
@@ -35,6 +35,15 @@ export type ArchitectureZone = {
 
 export const architectureZones: ArchitectureZone[] = [
   {
+    id: "local",
+    label: "Local Machine",
+    description: "Developer laptop running the binary with mirrord-layer inserted.",
+    nodes: ["local-process", "mirrord-layer"],
+    border: "#E66479",
+    background: "rgba(254, 226, 226, 0.4)",
+    accent: "#E66479",
+  },
+  {
     id: "cluster",
     label: "GKE Cluster",
     description: "Ingress, services, data stores, and mirrord operator running in-cluster.",
@@ -46,6 +55,7 @@ export const architectureZones: ArchitectureZone[] = [
       "ip-info-http",
       "ip-visit-consumer",
       "mirrord-operator",
+      "mirrord-agent",
     ],
     border: "#4F46E5",
     background: "rgba(233, 228, 255, 0.4)",
@@ -94,6 +104,22 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Appears in pods when mirrord sessions run.",
     group: "mirrord",
     zone: "cluster",
+  },
+  {
+    id: "mirrord-layer",
+    label: "mirrord-layer",
+    stack: "LD_PRELOAD",
+    description: "Intercepts libc calls from the local process.",
+    group: "mirrord",
+    zone: "local",
+  },
+  {
+    id: "local-process",
+    label: "Local process",
+    stack: "Developer machine",
+    description: "Runs your binary with mirrord-layer inserted.",
+    group: "mirrord",
+    zone: "local",
   },
   {
     id: "ip-visit-counter",
@@ -203,6 +229,27 @@ export const architectureEdges: ArchitectureEdge[] = [
     target: "ip-visit-consumer",
     label: "Process events",
     intent: "data",
+  },
+  {
+    id: "layer-to-agent",
+    source: "mirrord-layer",
+    target: "mirrord-agent",
+    label: "Port-forward tunnel",
+    intent: "mirrored",
+  },
+  {
+    id: "local-to-layer",
+    source: "local-process",
+    target: "mirrord-layer",
+    label: "LD_PRELOAD hook",
+    intent: "mirrored",
+  },
+  {
+    id: "agent-to-target",
+    source: "mirrord-agent",
+    target: "ip-visit-counter",
+    label: "Impersonate target pod",
+    intent: "mirrored",
   },
 ];
 
