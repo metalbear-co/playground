@@ -82,8 +82,16 @@ const buildFlowNodes = (): Node<NodeData>[] =>
         width: nodeWidth,
         zIndex: 10,
       },
-      sourcePosition: node.id === "mirrord-layer" ? Position.Top : Position.Right,
-      targetPosition: node.id === "mirrord-agent" ? Position.Bottom : Position.Left,
+      sourcePosition:
+        node.id === "mirrord-layer"
+          ? Position.Top
+          : node.id === "mirrord-operator"
+            ? Position.Right
+            : Position.Right,
+      targetPosition:
+        node.id === "mirrord-agent"
+          ? Position.Left
+          : Position.Left,
       connectable: false,
       draggable: true,
       selectable: true,
