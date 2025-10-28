@@ -5,7 +5,6 @@ export type ArchitectureNode = {
   description: string;
   group:
     | "entry"
-    | "frontend"
     | "infra"
     | "service"
     | "data"
@@ -70,15 +69,6 @@ export const architectureNodes: ArchitectureNode[] = [
     stack: "Browser / curl",
     description: "Initiates traffic through the UI or direct HTTP calls.",
     group: "entry",
-    zone: "external",
-  },
-  {
-    id: "frontend",
-    label: "ip-visit-frontend",
-    stack: "Next.js",
-    description: "Serves the demo UI and fetches the visit counter API.",
-    group: "frontend",
-    repoPath: "ip-visit-frontend/",
     zone: "external",
   },
   {
@@ -168,20 +158,6 @@ export const architectureNodes: ArchitectureNode[] = [
 
 export const architectureEdges: ArchitectureEdge[] = [
   {
-    id: "user-to-frontend",
-    source: "user",
-    target: "frontend",
-    label: "Open playground UI",
-    intent: "request",
-  },
-  {
-    id: "frontend-to-ingress",
-    source: "frontend",
-    target: "ingress",
-    label: "Fetch /count",
-    intent: "request",
-  },
-  {
     id: "user-direct-to-ingress",
     source: "user",
     target: "ingress",
@@ -258,7 +234,6 @@ export const groupPalette: Record<
   { background: string; border: string; text: string }
 > = {
   entry: { background: "#F5F5F5", border: "#0F172A", text: "#111827" },
-  frontend: { background: "#E9E4FF", border: "#4F46E5", text: "#1E1B4B" },
   infra: { background: "#FFFFFF", border: "#D1D5DB", text: "#111827" },
   service: { background: "#FFF6E6", border: "#F5B42A", text: "#7C2D12" },
   data: { background: "#FDF0F2", border: "#E66479", text: "#7F1D1D" },

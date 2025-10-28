@@ -396,7 +396,6 @@ const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
 
 const legendItems = [
   { label: "Entry / Client", color: groupPalette.entry.border },
-  { label: "Frontend", color: groupPalette.frontend.border },
   { label: "Core services", color: groupPalette.service.border },
   { label: "Data services", color: groupPalette.data.border },
   { label: "Queues & Streams", color: groupPalette.queue.border },
