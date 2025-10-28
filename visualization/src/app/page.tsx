@@ -652,181 +652,162 @@ export default function Home() {
   }, [snapshot, plannedTargets]);
 
   return (
-    <div className="min-h-screen w-full bg-[#F5F5F5] px-6 py-12 text-[#111827] md:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-10">
-        <header className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-            Demo visualization
+    <div className="flex h-screen w-screen bg-[#F5F5F5] text-[#111827]">
+      <ReactFlow
+        style={{ width: "100%", height: "100%" }}
+        nodes={flowNodes}
+        edges={flowEdges}
+        fitView
+        minZoom={0.3}
+        maxZoom={1.5}
+        elevateEdgesOnSelect={false}
+        panOnScroll
+        className="!bg-white"
+        proOptions={{ hideAttribution: true }}
+        nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange}
+      >
+        <Background color="#E9E4FF" gap={24} size={2} />
+        <MiniMap
+          pannable
+          zoomable
+          nodeStrokeColor={(n) => {
+            const data = n?.data as NodeData | ZoneNodeData | undefined;
+            if (data && "group" in data) {
+              return groupPalette[data.group].border;
+            }
+            if (data && "border" in data) {
+              return data.border;
+            }
+            return "#D1D5DB";
+          }}
+          maskColor="rgba(255,255,255,0.8)"
+          nodeColor={(n) => {
+            const data = n?.data as NodeData | ZoneNodeData | undefined;
+            if (data && "group" in data) {
+              return groupPalette[data.group].background;
+            }
+            if (data && "background" in data) {
+              return data.background;
+            }
+            return "#E9E4FF";
+          }}
+        />
+        <Controls
+          showInteractive={false}
+          className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
+        />
+        <Panel position="top-right" className="w-64 rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
+            mirrord config
           </p>
-          <h1 className="mt-4 text-4xl font-semibold leading-tight text-[#111827] md:text-5xl">
-            mirrord traffic map
-          </h1>
-          <p className="mt-4 text-lg text-[#4B5563]">
-            Visual overview of how requests move through the playground demo,
-            where mirrord taps into the stack, and which services react to each
-            event. Every node matches a repo in{" "}
-            <code className="rounded bg-[#E9E4FF] px-2 py-1 text-sm text-[#4F46E5]">
-              metalbear-co/playground
-            </code>
-            .
-          </p>
-        </header>
-
-        <div className="h-[760px] w-full overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_25px_80px_rgba(15,23,42,0.12)]">
-          <ReactFlow
-            nodes={flowNodes}
-            edges={flowEdges}
-            fitView
-            minZoom={0.3}
-            maxZoom={1.5}
-            elevateEdgesOnSelect={false}
-            panOnScroll
-            className="!bg-white"
-            proOptions={{ hideAttribution: true }}
-            nodeTypes={nodeTypes}
-            onNodesChange={handleNodesChange}
-          >
-            <Background color="#E9E4FF" gap={24} size={2} />
-            <MiniMap
-              pannable
-              zoomable
-              nodeStrokeColor={(n) => {
-                const data = n?.data as NodeData | ZoneNodeData | undefined;
-                if (data && "group" in data) {
-                  return groupPalette[data.group].border;
-                }
-                if (data && "border" in data) {
-                  return data.border;
-                }
-                return "#D1D5DB";
-              }}
-              maskColor="rgba(255,255,255,0.8)"
-              nodeColor={(n) => {
-                const data = n?.data as NodeData | ZoneNodeData | undefined;
-                if (data && "group" in data) {
-                  return groupPalette[data.group].background;
-                }
-                if (data && "background" in data) {
-                  return data.background;
-                }
-                return "#E9E4FF";
-              }}
-            />
-            <Controls
-              showInteractive={false}
-              className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
-            />
-            <Panel position="top-right" className="w-64 rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-                mirrord config
+          {configsLoading ? (
+            <p className="mt-2 text-xs text-[#6B7280]">Loading configs…</p>
+          ) : (
+            <select
+              value={selectedConfigPath}
+              onChange={(event) => handleConfigSelection(event.target.value)}
+              className="mt-2 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-sm focus:border-[#4F46E5] focus:outline-none"
+            >
+              <option value="">Select mirrord.json…</option>
+              {configSummaries.map((config) => (
+                <option key={config.path} value={config.path}>
+                  {config.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {configsError && (
+            <p className="mt-2 text-xs text-red-500">{configsError}</p>
+          )}
+          {plannedError && (
+            <p className="mt-2 text-xs text-red-500">{plannedError}</p>
+          )}
+          {plannedTargetList.length > 0 && (
+            <div className="mt-3 space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                Planned targets
               </p>
-              {configsLoading ? (
-                <p className="mt-2 text-xs text-[#6B7280]">Loading configs…</p>
-              ) : (
-                <select
-                  value={selectedConfigPath}
-                  onChange={(event) => handleConfigSelection(event.target.value)}
-                  className="mt-2 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-sm focus:border-[#4F46E5] focus:outline-none"
-                >
-                  <option value="">Select mirrord.json…</option>
-                  {configSummaries.map((config) => (
-                    <option key={config.path} value={config.path}>
-                      {config.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {configsError && (
-                <p className="mt-2 text-xs text-red-500">{configsError}</p>
-              )}
-              {plannedError && (
-                <p className="mt-2 text-xs text-red-500">{plannedError}</p>
-              )}
-              {plannedTargetList.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                    Planned targets
-                  </p>
-                  {plannedTargetList.map((target) => (
-                    <p key={target} className="text-xs text-[#111827]">
-                      {target}
+              {plannedTargetList.map((target) => (
+                <p key={target} className="text-xs text-[#111827]">
+                  {target}
+                </p>
+              ))}
+            </div>
+          )}
+        </Panel>
+        <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
+          <p className="text-sm font-semibold uppercase tracking-wide text-[#6B7280]">
+            Legend
+          </p>
+          <div className="mt-3 flex flex-col gap-2 text-sm">
+            {legendItems.map((item) => (
+              <div key={item.label} className="flex items-center gap-2">
+                <span
+                  className="h-3 w-3 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel position="bottom-right" className="rounded-2xl border border-[#0F172A]/10 bg-[#111827] p-4 text-white shadow-xl">
+          <p className="text-sm font-semibold text-white">How to read this</p>
+          <ul className="mt-2 list-disc pl-5 text-xs text-slate-200">
+            <li className="mb-1">Purple arrows = live requests.</li>
+            <li className="mb-1">Gold links = data fan-out (Redis/Kafka/SQS).</li>
+            <li className="mb-1">Dashed coral = mirrord mirrored path.</li>
+            <li>Navy dash = mirrord control plane.</li>
+          </ul>
+        </Panel>
+        <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
+            Live snapshot
+          </p>
+          {snapshotLoading && <p className="mt-2 text-xs text-[#6B7280]">Contacting backend…</p>}
+          {snapshotError && (
+            <p className="mt-2 text-xs text-red-500">
+              Failed to fetch snapshot: {snapshotError}
+            </p>
+          )}
+          {snapshot && !snapshotError && (
+            <div className="mt-2 space-y-1">
+              <p className="text-base font-semibold">{snapshot.clusterName}</p>
+              <p className="text-xs text-[#6B7280]">
+                Updated {new Date(snapshot.updatedAt).toLocaleTimeString()}
+              </p>
+              <div className="mt-3 max-h-32 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-2">
+                {snapshot.services.length === 0 && (
+                  <p className="text-xs text-[#94A3B8]">No active services reported yet.</p>
+                )}
+                {snapshot.services.map((service) => (
+                  <div key={service.id} className="mb-2 last:mb-0">
+                    <p className="text-xs font-semibold text-[#111827]">{service.name}</p>
+                    <p className="text-[11px] text-[#6B7280]">{service.description}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
+                      Seen {new Date(service.lastUpdated).toLocaleTimeString()}
                     </p>
-                  ))}
-                </div>
-              )}
-            </Panel>
-            <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
-              <p className="text-sm font-semibold uppercase tracking-wide text-[#6B7280]">
-                Legend
-              </p>
-              <div className="mt-3 flex flex-col gap-2 text-sm">
-                {legendItems.map((item) => (
-                  <div key={item.label} className="flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span>{item.label}</span>
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-[#6B7280]">
+                      <span className="font-semibold text-[#4F46E5]">
+                        {(service.status ?? "unknown").toUpperCase()}
+                      </span>
+                      {service.availableReplicas !== undefined && (
+                        <span>{service.availableReplicas} ready</span>
+                      )}
+                    </div>
+                    {service.message && (
+                      <p className="mt-1 text-[10px] text-red-500">{service.message}</p>
+                    )}
                   </div>
                 ))}
               </div>
-            </Panel>
-            <Panel position="bottom-right" className="rounded-2xl border border-[#0F172A]/10 bg-[#111827] p-4 text-white shadow-xl">
-              <p className="text-sm font-semibold text-white">How to read this</p>
-              <ul className="mt-2 list-disc pl-5 text-xs text-slate-200">
-                <li className="mb-1">Purple arrows = live requests.</li>
-                <li className="mb-1">Gold links = data fan-out (Redis/Kafka/SQS).</li>
-                <li className="mb-1">Dashed coral = mirrord mirrored path.</li>
-                <li>Navy dash = mirrord control plane.</li>
-              </ul>
-            </Panel>
-            <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-                Live snapshot
-              </p>
-              {snapshotLoading && <p className="mt-2 text-xs text-[#6B7280]">Contacting backend…</p>}
-              {snapshotError && (
-                <p className="mt-2 text-xs text-red-500">
-                  Failed to fetch snapshot: {snapshotError}
-                </p>
-              )}
-              {snapshot && !snapshotError && (
-                <div className="mt-2 space-y-1">
-                  <p className="text-base font-semibold">{snapshot.clusterName}</p>
-                  <p className="text-xs text-[#6B7280]">
-                    Updated {new Date(snapshot.updatedAt).toLocaleTimeString()}
+              {snapshot.sessions.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                    Active mirrord sessions ({snapshot.sessions.length})
                   </p>
-                  <div className="mt-3 max-h-32 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-2">
-                    {snapshot.services.length === 0 && (
-                      <p className="text-xs text-[#94A3B8]">No active services reported yet.</p>
-                    )}
-                    {snapshot.services.map((service) => (
-                      <div key={service.id} className="mb-2 last:mb-0">
-                        <p className="text-xs font-semibold text-[#111827]">{service.name}</p>
-                        <p className="text-[11px] text-[#6B7280]">{service.description}</p>
-                        <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
-                          Seen {new Date(service.lastUpdated).toLocaleTimeString()}
-                        </p>
-                        <div className="mt-1 flex items-center justify-between text-[10px] text-[#6B7280]">
-                          <span className="font-semibold text-[#4F46E5]">
-                            {(service.status ?? "unknown").toUpperCase()}
-                          </span>
-                          {service.availableReplicas !== undefined && (
-                            <span>{service.availableReplicas} ready</span>
-                          )}
-                        </div>
-                        {service.message && (
-                          <p className="mt-1 text-[10px] text-red-500">{service.message}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {snapshot.sessions.length > 0 && (
-                    <div className="mt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
-                        Active mirrord sessions ({snapshot.sessions.length})
-                      </p>
-                      <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
+                  <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
                     {snapshot.sessions.map((session) => (
                       <div key={session.id} className="mb-2 last:mb-0">
                         <p className="text-xs font-semibold text-[#E66479]">
@@ -840,38 +821,36 @@ export default function Home() {
                         </p>
                       </div>
                     ))}
-                      </div>
-                    </div>
+                  </div>
+                </div>
+              )}
+              {(snapshot.sessions.length > 0 || plannedTargetList.length > 0) && (
+                <div className="mt-4 space-y-1 rounded-lg border border-[#E5E7EB] bg-white p-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                    Local process & mirrord-layer
+                  </p>
+                  {plannedTargetList.length > 0 && (
+                    <p className="text-[11px] text-[#6B7280]">
+                      mirrord-layer will hook the local binary and request access to:
+                    </p>
                   )}
-                  {(snapshot.sessions.length > 0 || plannedTargetList.length > 0) && (
-                    <div className="mt-4 space-y-1 rounded-lg border border-[#E5E7EB] bg-white p-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
-                        Local process & mirrord-layer
-                      </p>
-                      {plannedTargetList.length > 0 && (
-                        <p className="text-[11px] text-[#6B7280]">
-                          mirrord-layer will hook the local binary and request access to:
-                        </p>
-                      )}
-                      {plannedTargetList.length === 0 && snapshot.sessions.length === 0 && (
-                        <p className="text-[11px] text-[#94A3B8]">
-                          No planned sessions selected.
-                        </p>
-                      )}
-                      {snapshot.sessions.length > 0 && (
-                        <p className="text-[11px] text-[#6B7280]">
-                          Session traffic tunnels over a port-forward between mirrord-layer and the
-                          in-cluster agent.
-                        </p>
-                      )}
-                    </div>
+                  {plannedTargetList.length === 0 && snapshot.sessions.length === 0 && (
+                    <p className="text-[11px] text-[#94A3B8]">
+                      No planned sessions selected.
+                    </p>
+                  )}
+                  {snapshot.sessions.length > 0 && (
+                    <p className="text-[11px] text-[#6B7280]">
+                      Session traffic tunnels over a port-forward between mirrord-layer and the
+                      in-cluster agent.
+                    </p>
                   )}
                 </div>
               )}
-            </Panel>
-          </ReactFlow>
-        </div>
-      </div>
+            </div>
+          )}
+        </Panel>
+      </ReactFlow>
     </div>
   );
 }
