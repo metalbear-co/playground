@@ -349,6 +349,10 @@ const adjustedNodes = layoutedNodes.map((node) => {
   };
 });
 
+const initialZoneNodes = buildZoneNodes(adjustedNodes);
+const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
+const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
+
 const SESSION_NODE_IDS = new Set([
   "mirrord-layer",
   "local-process",
@@ -459,14 +463,6 @@ export default function Home() {
     () => architectureNodesState.filter((node) => !node.hidden),
     [architectureNodesState],
   );
-  const zoneNodes = useMemo(
-    () => buildZoneNodes(visibleArchitectureNodes),
-    [visibleArchitectureNodes],
-  );
-  const flowNodes = useMemo(
-    () => [...zoneNodes, ...visibleArchitectureNodes],
-    [zoneNodes, visibleArchitectureNodes],
-  );
   const baseEdges = useMemo(() => layoutedEdges, []);
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -477,8 +473,11 @@ export default function Home() {
   const [selectedConfigPath, setSelectedConfigPath] = useState<string>("");
   const [plannedTargetList, setPlannedTargetList] = useState<string[]>([]);
   const [plannedError, setPlannedError] = useState<string | null>(null);
+  const hasSessions = useMemo(
+    () => (snapshot?.sessions ?? []).length > 0,
+    [snapshot],
+  );
   const flowEdges = useMemo(() => {
-    const hasSessions = (snapshot?.sessions ?? []).length > 0;
     return baseEdges.filter((edge) => {
       if (
         SESSION_NODE_IDS.has(edge.source) ||
@@ -488,7 +487,19 @@ export default function Home() {
       }
       return true;
     });
-  }, [baseEdges, snapshot]);
+  }, [baseEdges, hasSessions]);
+
+  const flowNodes = useMemo(() => {
+    const nodes: Node<NodeData | ZoneNodeData>[] = [];
+    if (clusterZoneNode) {
+      nodes.push(clusterZoneNode);
+    }
+    if (hasSessions && localZoneNode) {
+      nodes.push(localZoneNode);
+    }
+    nodes.push(...visibleArchitectureNodes);
+    return nodes;
+  }, [visibleArchitectureNodes, hasSessions]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
