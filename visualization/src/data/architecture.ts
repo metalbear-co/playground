@@ -38,9 +38,9 @@ export const architectureZones: ArchitectureZone[] = [
     label: "Local Machine",
     description: "Developer laptop running the binary with mirrord-layer inserted.",
     nodes: ["local-process", "mirrord-layer"],
-    border: "#E66479",
-    background: "rgba(254, 226, 226, 0.4)",
-    accent: "#E66479",
+    border: "#60A5FA",
+    background: "rgba(191, 219, 254, 0.4)",
+    accent: "#3B82F6",
   },
   {
     id: "cluster",
