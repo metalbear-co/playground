@@ -18,7 +18,13 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   architectureEdges,
@@ -308,6 +314,13 @@ const initialArchitectureNodes: Node<NodeData>[] = adjustedNodes.map((node) =>
   SESSION_NODE_IDS.has(node.id) ? { ...node, hidden: true } : node,
 );
 
+const originalNodeStyles = new Map<string, Node<NodeData>["style"]>();
+adjustedNodes.forEach((node) => {
+  if (!originalNodeStyles.has(node.id)) {
+    originalNodeStyles.set(node.id, node.style ? { ...node.style } : undefined);
+  }
+});
+
 const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   <div
     className="flex h-full w-full flex-col justify-between rounded-[40px] border border-dashed px-8 py-6"
@@ -415,7 +428,6 @@ export default function Home() {
   const [configsLoading, setConfigsLoading] = useState(true);
   const [configsError, setConfigsError] = useState<string | null>(null);
   const [selectedConfigPath, setSelectedConfigPath] = useState<string>("");
-  const [plannedTargets, setPlannedTargets] = useState<Set<string>>(() => new Set());
   const [plannedTargetList, setPlannedTargetList] = useState<string[]>([]);
   const [plannedError, setPlannedError] = useState<string | null>(null);
   const flowEdges = useMemo(() => {
@@ -538,7 +550,6 @@ export default function Home() {
       setSelectedConfigPath(value);
 
       if (!value) {
-        setPlannedTargets(new Set());
         setPlannedTargetList([]);
         setPlannedError(null);
         return;
@@ -562,7 +573,6 @@ export default function Home() {
           throw new Error(body.error);
         }
         const targets = extractTargetsFromConfig(body.config);
-        setPlannedTargets(new Set(targets.map((target) => target.toLowerCase())));
         setPlannedTargetList(targets);
         setPlannedError(
           targets.length === 0
@@ -570,7 +580,6 @@ export default function Home() {
             : null,
         );
       } catch (error) {
-        setPlannedTargets(new Set());
         setPlannedTargetList([]);
         setPlannedError((error as Error).message);
       }
@@ -581,75 +590,47 @@ export default function Home() {
   useEffect(() => {
     const sessions = snapshot?.sessions ?? [];
     const hasSessions = sessions.length > 0;
-    const sessionTargets = new Set(
-      sessions
-        .map((session) => session.targetWorkload?.toLowerCase())
-        .filter((target): target is string => Boolean(target)),
-    );
 
     setArchitectureNodesState((nodes) =>
       nodes.map((node) => {
-        const baseStyle = node.style ?? {};
+        const baseStyle = { ...(originalNodeStyles.get(node.id) ?? {}) };
 
-        if (SESSION_NODE_IDS.has(node.id)) {
-          const updatedStyle = {
-            ...baseStyle,
-            opacity: hasSessions ? 1 : 0.45,
-            boxShadow: hasSessions
-              ? "0px 30px 60px rgba(230,100,121,0.35)"
-              : "0px 10px 25px rgba(15,23,42,0.12)",
-            border: hasSessions
-              ? "3px solid #E66479"
-              : baseStyle.border ?? "2px dashed rgba(148,163,184,0.8)",
-          };
+        if (node.id === "mirrord-layer" || node.id === "mirrord-agent") {
+          const styleWithGlow = hasSessions
+            ? {
+                ...baseStyle,
+                opacity: 1,
+                boxShadow: "0px 30px 60px rgba(230,100,121,0.35)",
+                border: "3px solid #E66479",
+              }
+            : {
+                ...baseStyle,
+                opacity: 1,
+              };
+
           return {
             ...node,
             hidden: !hasSessions,
-            style: updatedStyle,
+            style: styleWithGlow,
           };
         }
 
-        const service = snapshot?.services.find((svc) => svc.id === node.id);
-        const status = service?.status ?? "unavailable";
-        const isActive = status === "available";
-        const isDegraded = status === "degraded";
-        const nodeData = node.data as NodeData;
-        const palette = groupPalette[nodeData.group];
-        const baseBorderColor = palette?.border ?? "#E5E7EB";
-        const borderColor = isDegraded ? "#F5B42A" : baseBorderColor;
-        const borderWidth = isActive ? 3 : 2;
-        const isPlanned = plannedTargets.has(node.id.toLowerCase());
-        const targetHighlight = sessionTargets.has(node.id.toLowerCase());
-
-        const updatedStyle = {
-          ...baseStyle,
-          opacity:
-            targetHighlight || isPlanned || node.id === "mirrord-operator"
-              ? 1
-              : isActive
-                ? 1
-                : isDegraded
-                  ? 0.7
-                  : 0.55,
-          boxShadow: isActive
-            ? "0px 30px 60px rgba(79,70,229,0.35)"
-            : isDegraded
-              ? "0px 20px 35px rgba(245,180,42,0.35)"
-              : "0px 10px 25px rgba(15,23,42,0.12)",
-          border:
-            targetHighlight || isPlanned
-              ? `3px solid #E66479`
-              : `${borderWidth}px solid ${borderColor}`,
-        };
+        if (node.id === "local-process") {
+          return {
+            ...node,
+            hidden: !hasSessions,
+            style: { ...baseStyle, opacity: 1 },
+          };
+        }
 
         return {
           ...node,
           hidden: false,
-          style: updatedStyle,
+          style: { ...baseStyle, opacity: 1 },
         };
       }),
     );
-  }, [snapshot, plannedTargets]);
+  }, [snapshot]);
 
   return (
     <div className="flex h-screen w-screen bg-[#F5F5F5] text-[#111827]">
