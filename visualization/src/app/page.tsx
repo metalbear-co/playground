@@ -239,10 +239,11 @@ type SessionStatus = {
 };
 
 const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
-  const padding = 80;
+  const defaultPadding = 80;
   const zoneNodes: ClusterZoneNode[] = [];
 
   architectureZones.forEach((zone) => {
+    const padding = zone.id === "cluster" ? 48 : defaultPadding;
     const memberNodes = nodes.filter((node) => zone.nodes.includes(node.id));
     if (!memberNodes.length) {
       return;
@@ -289,19 +290,52 @@ const nodeZoneIndex = new Map<string, ZoneId>(
 
 const LOCAL_ZONE_OFFSET_Y = 420;
 const LOCAL_ZONE_OFFSET_X = 320;
+const EXTERNAL_USER_OFFSET_X = 240;
+const INGRESS_LEFT_SHIFT_X = 90;
+const EXTERNAL_USER_SHIFT_Y = 100;
+const INGRESS_SHIFT_Y = 100;
+const MIRRORD_OPERATOR_SHIFT_X = 480;
+const MIRRORD_OPERATOR_SHIFT_Y = 100;
 
 const adjustedNodes = layoutedNodes.map((node) => {
   const zone = nodeZoneIndex.get(node.id);
+  let position = { ...node.position };
+
   if (zone === "local") {
-    return {
-      ...node,
-      position: {
-        x: node.position.x + LOCAL_ZONE_OFFSET_X,
-        y: node.position.y + LOCAL_ZONE_OFFSET_Y,
-      },
+    position = {
+      x: position.x + LOCAL_ZONE_OFFSET_X,
+      y: position.y + LOCAL_ZONE_OFFSET_Y,
     };
   }
-  return node;
+
+  if (node.id === "user") {
+    position = {
+      ...position,
+      x: position.x - EXTERNAL_USER_OFFSET_X,
+      y: position.y + EXTERNAL_USER_SHIFT_Y,
+    };
+  }
+
+  if (node.id === "ingress") {
+    position = {
+      ...position,
+      x: position.x - INGRESS_LEFT_SHIFT_X,
+      y: position.y + INGRESS_SHIFT_Y,
+    };
+  }
+
+  if (node.id === "mirrord-operator") {
+    position = {
+      ...position,
+      x: position.x + MIRRORD_OPERATOR_SHIFT_X,
+      y: position.y + MIRRORD_OPERATOR_SHIFT_Y,
+    };
+  }
+
+  return {
+    ...node,
+    position,
+  };
 });
 
 const SESSION_NODE_IDS = new Set([
