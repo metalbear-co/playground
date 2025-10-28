@@ -288,14 +288,16 @@ const nodeZoneIndex = new Map<string, ZoneId>(
   architectureNodes.map((node) => [node.id, (node.zone ?? "cluster") as ZoneId]),
 );
 
-const LOCAL_ZONE_OFFSET_Y = 420;
-const LOCAL_ZONE_OFFSET_X = 320;
+const LOCAL_ZONE_OFFSET_Y = 520;
+const LOCAL_ZONE_OFFSET_X = 520;
 const EXTERNAL_USER_OFFSET_X = 240;
 const INGRESS_LEFT_SHIFT_X = 90;
 const EXTERNAL_USER_SHIFT_Y = 100;
 const INGRESS_SHIFT_Y = 100;
 const MIRRORD_OPERATOR_SHIFT_X = 480;
 const MIRRORD_OPERATOR_SHIFT_Y = 100;
+const MIRRORD_AGENT_SHIFT_X = 200;
+const MIRRORD_AGENT_SHIFT_Y = 100;
 
 const adjustedNodes = layoutedNodes.map((node) => {
   const zone = nodeZoneIndex.get(node.id);
@@ -329,6 +331,14 @@ const adjustedNodes = layoutedNodes.map((node) => {
       ...position,
       x: position.x + MIRRORD_OPERATOR_SHIFT_X,
       y: position.y + MIRRORD_OPERATOR_SHIFT_Y,
+    };
+  }
+
+  if (node.id === "mirrord-agent") {
+    position = {
+      ...position,
+      x: position.x + MIRRORD_AGENT_SHIFT_X,
+      y: position.y + MIRRORD_AGENT_SHIFT_Y,
     };
   }
 
