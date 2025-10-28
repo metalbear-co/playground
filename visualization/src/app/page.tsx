@@ -62,15 +62,17 @@ const buildFlowNodes = (): Node<NodeData>[] =>
         group: node.group,
         label: (
           <div className="flex flex-col gap-1 text-left">
-            <p className="text-sm font-semibold text-slate-900">{node.label}</p>
+            <span className="text-sm font-semibold text-slate-900">
+              {node.label}
+            </span>
             {node.stack && (
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {node.stack}
-              </p>
+              </span>
             )}
             <p className="text-xs leading-snug text-slate-600">{node.description}</p>
             {node.repoPath && (
-              <p className="text-[11px] text-slate-400">{node.repoPath}</p>
+              <span className="text-[11px] text-slate-400">{node.repoPath}</span>
             )}
           </div>
         ),
@@ -296,9 +298,15 @@ const adjustedNodes = layoutedNodes.map((node) => {
   return node;
 });
 
-const zoneNodes = buildZoneNodes(adjustedNodes);
+const SESSION_NODE_IDS = new Set([
+  "mirrord-layer",
+  "local-process",
+  "mirrord-agent",
+]);
 
-const initialFlowNodes: Node[] = [...zoneNodes, ...adjustedNodes];
+const initialArchitectureNodes: Node<NodeData>[] = adjustedNodes.map((node) =>
+  SESSION_NODE_IDS.has(node.id) ? { ...node, hidden: true } : node,
+);
 
 const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   <div
@@ -359,11 +367,11 @@ const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
         </>
       )}
       <div className="flex flex-col gap-1 text-left">
-        <p className="text-sm font-semibold text-slate-900">{label}</p>
+        <span className="text-sm font-semibold text-slate-900">{label}</span>
         {stack && (
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {stack}
-          </p>
+          </span>
         )}
         {description && (
           <p className="text-xs leading-snug text-slate-600">{description}</p>
@@ -384,14 +392,22 @@ const legendItems = [
 
 export default function Home() {
   const nodeTypes = useMemo(() => ({ zone: ZoneNode, mirrord: MirrordNode }), []);
-  const [flowNodes, setFlowNodes] = useState<Node[]>(() => initialFlowNodes);
-  const baseEdges = useMemo(() => layoutedEdges, []);
-  const tunnelEdgeId = "layer-to-agent";
-  const edgesWithoutTunnel = useMemo(
-    () => baseEdges.filter((edge) => edge.id !== tunnelEdgeId),
-    [baseEdges],
+  const [architectureNodesState, setArchitectureNodesState] = useState<
+    Node<NodeData>[]
+  >(() => initialArchitectureNodes);
+  const visibleArchitectureNodes = useMemo(
+    () => architectureNodesState.filter((node) => !node.hidden),
+    [architectureNodesState],
   );
-  const [flowEdges, setFlowEdges] = useState<Edge[]>(edgesWithoutTunnel);
+  const zoneNodes = useMemo(
+    () => buildZoneNodes(visibleArchitectureNodes),
+    [visibleArchitectureNodes],
+  );
+  const flowNodes = useMemo(
+    () => [...zoneNodes, ...visibleArchitectureNodes],
+    [zoneNodes, visibleArchitectureNodes],
+  );
+  const baseEdges = useMemo(() => layoutedEdges, []);
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
@@ -402,6 +418,18 @@ export default function Home() {
   const [plannedTargets, setPlannedTargets] = useState<Set<string>>(() => new Set());
   const [plannedTargetList, setPlannedTargetList] = useState<string[]>([]);
   const [plannedError, setPlannedError] = useState<string | null>(null);
+  const flowEdges = useMemo(() => {
+    const hasSessions = (snapshot?.sessions ?? []).length > 0;
+    return baseEdges.filter((edge) => {
+      if (
+        SESSION_NODE_IDS.has(edge.source) ||
+        SESSION_NODE_IDS.has(edge.target)
+      ) {
+        return hasSessions;
+      }
+      return true;
+    });
+  }, [baseEdges, snapshot]);
 
   const snapshotUrl = useMemo(() => {
     const base =
@@ -489,7 +517,19 @@ export default function Home() {
   }, []);
 
   const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => setFlowNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange[]) =>
+      setArchitectureNodesState((nodes) => {
+        const filteredChanges = changes.filter(
+          (change) => !("id" in change && change.id.startsWith("zone-")),
+        );
+        if (filteredChanges.length === 0) {
+          return nodes;
+        }
+        return applyNodeChanges<Node<NodeData>>(
+          filteredChanges as NodeChange<Node<NodeData>>[],
+          nodes,
+        );
+      }),
     [],
   );
 
@@ -541,51 +581,34 @@ export default function Home() {
   useEffect(() => {
     const sessions = snapshot?.sessions ?? [];
     const hasSessions = sessions.length > 0;
-    const hasPlan = plannedTargets.size > 0;
     const sessionTargets = new Set(
       sessions
         .map((session) => session.targetWorkload?.toLowerCase())
         .filter((target): target is string => Boolean(target)),
     );
 
-    setFlowNodes((nodes) =>
+    setArchitectureNodesState((nodes) =>
       nodes.map((node) => {
-        if (node.type === "zone") {
-          return node;
-        }
-        if (node.id === "mirrord-agent") {
+        const baseStyle = node.style ?? {};
+
+        if (SESSION_NODE_IDS.has(node.id)) {
           const updatedStyle = {
-            ...(node.style ?? {}),
+            ...baseStyle,
             opacity: hasSessions ? 1 : 0.45,
             boxShadow: hasSessions
               ? "0px 30px 60px rgba(230,100,121,0.35)"
               : "0px 10px 25px rgba(15,23,42,0.12)",
             border: hasSessions
               ? "3px solid #E66479"
-              : "2px dashed rgba(148,163,184,0.8)",
+              : baseStyle.border ?? "2px dashed rgba(148,163,184,0.8)",
           };
           return {
             ...node,
+            hidden: !hasSessions,
             style: updatedStyle,
           };
         }
-        if (node.id === "mirrord-layer" || node.id === "local-process") {
-          const active = hasSessions || hasPlan;
-          const updatedStyle = {
-            ...(node.style ?? {}),
-            opacity: active ? 1 : 0.55,
-            boxShadow: active
-              ? "0px 25px 50px rgba(230,100,121,0.35)"
-              : "0px 10px 25px rgba(15,23,42,0.12)",
-            border: active
-              ? "3px solid #E66479"
-              : node.style?.border ?? "2px dashed rgba(148,163,184,0.8)",
-          };
-          return {
-            ...node,
-            style: updatedStyle,
-          };
-        }
+
         const service = snapshot?.services.find((svc) => svc.id === node.id);
         const status = service?.status ?? "unavailable";
         const isActive = status === "available";
@@ -599,7 +622,7 @@ export default function Home() {
         const targetHighlight = sessionTargets.has(node.id.toLowerCase());
 
         const updatedStyle = {
-          ...(node.style ?? {}),
+          ...baseStyle,
           opacity:
             targetHighlight || isPlanned || node.id === "mirrord-operator"
               ? 1
@@ -618,18 +641,15 @@ export default function Home() {
               ? `3px solid #E66479`
               : `${borderWidth}px solid ${borderColor}`,
         };
+
         return {
           ...node,
+          hidden: false,
           style: updatedStyle,
         };
       }),
     );
   }, [snapshot, plannedTargets]);
-
-  useEffect(() => {
-    const hasSessions = (snapshot?.sessions ?? []).length > 0;
-    setFlowEdges(hasSessions ? baseEdges : edgesWithoutTunnel);
-  }, [edgesWithoutTunnel, baseEdges, snapshot]);
 
   return (
     <div className="min-h-screen w-full bg-[#F5F5F5] px-6 py-12 text-[#111827] md:px-10">
