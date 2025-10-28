@@ -22,6 +22,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -453,6 +454,7 @@ export default function Home() {
   const [architectureNodesState, setArchitectureNodesState] = useState<
     Node<NodeData>[]
   >(() => initialArchitectureNodes);
+  const isMountedRef = useRef(true);
   const visibleArchitectureNodes = useMemo(
     () => architectureNodesState.filter((node) => !node.hidden),
     [architectureNodesState],
@@ -488,24 +490,42 @@ export default function Home() {
     });
   }, [baseEdges, snapshot]);
 
-  const snapshotUrl = useMemo(() => {
+  const snapshotBaseUrl = useMemo(() => {
     const base =
       process.env.NEXT_PUBLIC_VISUALIZATION_BACKEND_URL ?? "http://localhost:8080";
-    return `${base.replace(/\/$/, "")}/snapshot`;
+    return base.replace(/\/$/, "");
   }, []);
 
+  const snapshotUrl = useMemo(
+    () => `${snapshotBaseUrl}/snapshot`,
+    [snapshotBaseUrl],
+  );
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchSnapshot = async () => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const fetchSnapshot = useCallback(
+    async (options?: { showSpinner?: boolean; forceRefresh?: boolean }) => {
+      const shouldShowSpinner = options?.showSpinner ?? false;
+      if (shouldShowSpinner) {
+        setSnapshotLoading(true);
+      }
       try {
-        const response = await fetch(snapshotUrl, {
+        const targetUrl = options?.forceRefresh
+          ? `${snapshotUrl}?refresh=1`
+          : snapshotUrl;
+        const response = await fetch(targetUrl, {
           cache: "no-store",
         });
         if (!response.ok) {
           throw new Error(`Snapshot request failed (${response.status})`);
         }
         const body = (await response.json()) as Partial<ClusterSnapshot>;
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
         const normalizedSnapshot: ClusterSnapshot = {
@@ -518,21 +538,33 @@ export default function Home() {
         setSnapshotError(null);
         setSnapshotLoading(false);
       } catch (error) {
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
         setSnapshotError((error as Error).message);
         setSnapshotLoading(false);
       }
+    },
+    [snapshotUrl],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) {
+        await fetchSnapshot();
+      }
     };
 
-    fetchSnapshot();
-    const interval = setInterval(fetchSnapshot, 5000);
+    run();
+    const interval = setInterval(() => {
+      void fetchSnapshot();
+    }, 5000);
     return () => {
-      isMounted = false;
+      cancelled = true;
       clearInterval(interval);
     };
-  }, [snapshotUrl]);
+  }, [fetchSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -631,6 +663,10 @@ export default function Home() {
     },
     [],
   );
+
+  const handleSnapshotRefresh = useCallback(() => {
+    void fetchSnapshot({ showSpinner: true, forceRefresh: true });
+  }, [fetchSnapshot]);
 
   useEffect(() => {
     const sessions = snapshot?.sessions ?? [];
@@ -787,11 +823,41 @@ export default function Home() {
             <li>Navy dash = mirrord control plane.</li>
           </ul>
         </Panel>
+        {!SHOW_SNAPSHOT_PANEL && (
+          <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
+                Live snapshot
+              </p>
+              <button
+                type="button"
+                onClick={handleSnapshotRefresh}
+                disabled={snapshotLoading}
+                className="rounded-md border border-[#4F46E5] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#4F46E5] transition-colors hover:bg-[#4F46E5] hover:text-white disabled:cursor-not-allowed disabled:border-[#A5B4FC] disabled:text-[#A5B4FC]"
+              >
+                {snapshotLoading ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+            {snapshotError && (
+              <p className="mt-2 text-xs text-red-500">Last error: {snapshotError}</p>
+            )}
+          </Panel>
+        )}
         {SHOW_SNAPSHOT_PANEL && (
           <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-              Live snapshot
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
+                Live snapshot
+              </p>
+              <button
+                type="button"
+                onClick={handleSnapshotRefresh}
+                disabled={snapshotLoading}
+                className="rounded-md border border-[#4F46E5] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#4F46E5] transition-colors hover:bg-[#4F46E5] hover:text-white disabled:cursor-not-allowed disabled:border-[#A5B4FC] disabled:text-[#A5B4FC]"
+              >
+                {snapshotLoading ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
             {snapshotLoading && <p className="mt-2 text-xs text-[#6B7280]">Contacting backend…</p>}
             {snapshotError && (
               <p className="mt-2 text-xs text-red-500">

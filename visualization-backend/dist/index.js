@@ -59,16 +59,54 @@ class SnapshotStore {
     }
 }
 const snapshotStore = new SnapshotStore(process.env.CLUSTER_NAME || "playground");
+let triggerDeploymentPoll = null;
+let triggerAgentPoll = null;
+const runRefreshPollers = async () => {
+    if (triggerDeploymentPoll) {
+        await triggerDeploymentPoll();
+    }
+    if (triggerAgentPoll) {
+        await triggerAgentPoll();
+    }
+};
 app.get("/healthz", (_req, res) => {
     res.json({ status: "ok" });
 });
-app.get("/snapshot", (_req, res) => {
-    res.json(snapshotStore.getSnapshot());
+app.get("/snapshot", async (req, res) => {
+    try {
+        const wantsRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+        if (wantsRefresh) {
+            await runRefreshPollers();
+        }
+        res.json(snapshotStore.getSnapshot());
+    }
+    catch (error) {
+        console.error("Snapshot retrieval failed", error instanceof Error ? error.message : error);
+        res.status(500).json({
+            error: error instanceof Error
+                ? error.message
+                : "Failed to retrieve snapshot. See server logs for details.",
+        });
+    }
 });
 app.post("/snapshot", (req, res) => {
     const body = req.body;
     snapshotStore.replaceSnapshot(body);
     res.json(snapshotStore.getSnapshot());
+});
+app.post("/snapshot/refresh", async (_req, res) => {
+    try {
+        await runRefreshPollers();
+        res.json(snapshotStore.getSnapshot());
+    }
+    catch (error) {
+        console.error("Snapshot refresh failed", error instanceof Error ? error.message : error);
+        res.status(500).json({
+            error: error instanceof Error
+                ? error.message
+                : "Failed to refresh snapshot. See server logs for details.",
+        });
+    }
 });
 const knownDeployments = [
     {
@@ -172,10 +210,24 @@ const startDeploymentPoller = (kubeConfig) => {
                 `${snapshot.services.length} services tracked`);
         });
     };
-    poll().catch((error) => console.error("Initial deployment poll failed", error));
+    const runPoll = async () => {
+        try {
+            await poll();
+        }
+        catch (error) {
+            console.error("Deployment poll failed", error instanceof Error ? error.message : error);
+            throw error;
+        }
+    };
+    runPoll().catch(() => {
+        /* error logged above */
+    });
     setInterval(() => {
-        poll().catch((error) => console.error("Deployment poll failed", error));
+        runPoll().catch(() => {
+            /* error logged above */
+        });
     }, pollIntervalMs);
+    return runPoll;
 };
 const startMirrordAgentPoller = (kubeConfig) => {
     const coreApi = kubeConfig.makeApiClient(CoreV1Api);
@@ -223,17 +275,32 @@ const startMirrordAgentPoller = (kubeConfig) => {
         }
         catch (error) {
             console.warn("Failed to poll mirrord agent pods", error instanceof Error ? error.message : error);
+            throw error;
         }
     };
-    poll().catch((error) => console.error("Initial mirrord agent poll failed", error));
+    const runPoll = async () => {
+        try {
+            await poll();
+        }
+        catch (error) {
+            console.error("Mirrord agent poll failed", error instanceof Error ? error.message : error);
+            throw error;
+        }
+    };
+    runPoll().catch(() => {
+        /* error logged above */
+    });
     setInterval(() => {
-        poll().catch((error) => console.error("Mirrord agent poll failed", error));
+        runPoll().catch(() => {
+            /* error logged above */
+        });
     }, pollIntervalMs);
+    return runPoll;
 };
 const kubeConfig = loadKubeConfiguration();
 if (kubeConfig) {
-    startDeploymentPoller(kubeConfig);
-    startMirrordAgentPoller(kubeConfig);
+    triggerDeploymentPoll = startDeploymentPoller(kubeConfig);
+    triggerAgentPoll = startMirrordAgentPoller(kubeConfig);
 }
 else {
     console.warn("Kubernetes configuration unavailable; snapshot watchers are disabled.");
