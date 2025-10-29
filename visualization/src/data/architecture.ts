@@ -210,7 +210,6 @@ export const architectureEdges: ArchitectureEdge[] = [
     id: "layer-to-agent",
     source: "mirrord-layer",
     target: "mirrord-agent",
-    label: "Port-forward tunnel",
     intent: "mirrored",
   },
   {
