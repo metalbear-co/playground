@@ -865,31 +865,6 @@ export default function Home() {
         onNodesChange={handleNodesChange}
       >
         <Background color="#E9E4FF" gap={24} size={2} />
-        <MiniMap
-          pannable
-          zoomable
-          nodeStrokeColor={(n) => {
-            const data = n?.data as NodeData | ZoneNodeData | undefined;
-            if (data && "group" in data) {
-              return groupPalette[data.group].border;
-            }
-            if (data && "border" in data) {
-              return data.border;
-            }
-            return "#D1D5DB";
-          }}
-          maskColor="rgba(255,255,255,0.8)"
-          nodeColor={(n) => {
-            const data = n?.data as NodeData | ZoneNodeData | undefined;
-            if (data && "group" in data) {
-              return groupPalette[data.group].background;
-            }
-            if (data && "background" in data) {
-              return data.background;
-            }
-            return "#E9E4FF";
-          }}
-        />
         <Controls
           showInteractive={false}
           className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
