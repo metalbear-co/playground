@@ -8,7 +8,6 @@ import {
   Controls,
   Handle,
   MarkerType,
-  MiniMap,
   Panel,
   Position,
   ReactFlow,
@@ -18,14 +17,7 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   architectureEdges,
@@ -130,6 +122,7 @@ const buildFlowEdges = (): Edge[] =>
         sourceHandle = "agent-source-right";
         break;
       case "operator-to-agent":
+      case "operator-to-agent-mirrored":
         edgeType = "smoothstep";
         sourceHandle = undefined;
         targetHandle = "agent-target-left";
@@ -226,11 +219,6 @@ type ClusterSnapshot = {
   updatedAt: string;
   services: ServiceStatus[];
   sessions: SessionStatus[];
-};
-
-type MirrordConfigSummary = {
-  path: string;
-  label: string;
 };
 
 type SessionStatus = {
@@ -562,12 +550,6 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
-  const [configSummaries, setConfigSummaries] = useState<MirrordConfigSummary[]>([]);
-  const [configsLoading, setConfigsLoading] = useState(true);
-  const [configsError, setConfigsError] = useState<string | null>(null);
-  const [selectedConfigPath, setSelectedConfigPath] = useState<string>("");
-  const [plannedTargetList, setPlannedTargetList] = useState<string[]>([]);
-  const [plannedError, setPlannedError] = useState<string | null>(null);
   const hasSessions = useMemo(
     () => (snapshot?.sessions ?? []).length > 0,
     [snapshot],
@@ -698,45 +680,6 @@ export default function Home() {
     };
   }, [fetchSnapshot]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadConfigs = async () => {
-      try {
-        const response = await fetch("/api/mirrord-configs", {
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error(`Config request failed (${response.status})`);
-        }
-        const body = (await response.json()) as {
-          configs?: MirrordConfigSummary[];
-          error?: string;
-        };
-        if (cancelled) {
-          return;
-        }
-        if (body.error) {
-          throw new Error(body.error);
-        }
-        setConfigSummaries(body.configs ?? []);
-        setConfigsError(null);
-      } catch (error) {
-        if (!cancelled) {
-          setConfigsError((error as Error).message);
-        }
-      } finally {
-        if (!cancelled) {
-          setConfigsLoading(false);
-        }
-      }
-    };
-
-    loadConfigs();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) =>
       setArchitectureNodesState((nodes) => {
@@ -751,48 +694,6 @@ export default function Home() {
           nodes,
         );
       }),
-    [],
-  );
-
-  const handleConfigSelection = useCallback(
-    async (value: string) => {
-      setSelectedConfigPath(value);
-
-      if (!value) {
-        setPlannedTargetList([]);
-        setPlannedError(null);
-        return;
-      }
-
-      try {
-        const response = await fetch(
-          `/api/mirrord-configs?path=${encodeURIComponent(value)}`,
-          {
-            cache: "no-store",
-          },
-        );
-        if (!response.ok) {
-          throw new Error(`Failed to load config (${response.status})`);
-        }
-        const body = (await response.json()) as {
-          config?: unknown;
-          error?: string;
-        };
-        if (body.error) {
-          throw new Error(body.error);
-        }
-        const targets = extractTargetsFromConfig(body.config);
-        setPlannedTargetList(targets);
-        setPlannedError(
-          targets.length === 0
-            ? "No deployment target found in selected config"
-            : null,
-        );
-      } catch (error) {
-        setPlannedTargetList([]);
-        setPlannedError((error as Error).message);
-      }
-    },
     [],
   );
 
@@ -869,45 +770,6 @@ export default function Home() {
           showInteractive={false}
           className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
         />
-        <Panel position="top-right" className="w-64 rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-            mirrord config
-          </p>
-          {configsLoading ? (
-            <p className="mt-2 text-xs text-[#6B7280]">Loading configs…</p>
-          ) : (
-            <select
-              value={selectedConfigPath}
-              onChange={(event) => handleConfigSelection(event.target.value)}
-              className="mt-2 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-sm focus:border-[#4F46E5] focus:outline-none"
-            >
-              <option value="">Select mirrord.json…</option>
-              {configSummaries.map((config) => (
-                <option key={config.path} value={config.path}>
-                  {config.label}
-                </option>
-              ))}
-            </select>
-          )}
-          {configsError && (
-            <p className="mt-2 text-xs text-red-500">{configsError}</p>
-          )}
-          {plannedError && (
-            <p className="mt-2 text-xs text-red-500">{plannedError}</p>
-          )}
-          {plannedTargetList.length > 0 && (
-            <div className="mt-3 space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                Planned targets
-              </p>
-              {plannedTargetList.map((target) => (
-                <p key={target} className="text-xs text-[#111827]">
-                  {target}
-                </p>
-              ))}
-            </div>
-          )}
-        </Panel>
         <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
           <p className="text-sm font-semibold uppercase tracking-wide text-[#6B7280]">
             Legend
@@ -1018,29 +880,6 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-                {(snapshot.sessions.length > 0 || plannedTargetList.length > 0) && (
-                  <div className="mt-4 space-y-1 rounded-lg border border-[#E5E7EB] bg-white p-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
-                      Local process & mirrord-layer
-                    </p>
-                    {plannedTargetList.length > 0 && (
-                      <p className="text-[11px] text-[#6B7280]">
-                        mirrord-layer will hook the local binary and request access to:
-                      </p>
-                    )}
-                    {plannedTargetList.length === 0 && snapshot.sessions.length === 0 && (
-                      <p className="text-[11px] text-[#94A3B8]">
-                        No planned sessions selected.
-                      </p>
-                    )}
-                    {snapshot.sessions.length > 0 && (
-                      <p className="text-[11px] text-[#6B7280]">
-                        Session traffic tunnels over a port-forward between mirrord-layer and the
-                        in-cluster agent.
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </Panel>
@@ -1048,29 +887,4 @@ export default function Home() {
       </ReactFlow>
     </div>
   );
-}
-
-function extractTargetsFromConfig(config: unknown): string[] {
-  if (!config || typeof config !== "object") {
-    return [];
-  }
-
-  const targets = new Set<string>();
-  const root = config as Record<string, unknown>;
-  const target = root.target;
-
-  if (target && typeof target === "object") {
-    const pathCandidate = (target as Record<string, unknown>).path;
-    if (pathCandidate && typeof pathCandidate === "object") {
-      const pathMap = pathCandidate as Record<string, unknown>;
-      ["deployment", "pod", "statefulset", "job"].forEach((key) => {
-        const value = pathMap[key];
-        if (typeof value === "string" && value.trim().length > 0) {
-          targets.add(value.trim());
-        }
-      });
-    }
-  }
-
-  return Array.from(targets);
 }

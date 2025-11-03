@@ -213,7 +213,7 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "mirrored",
   },
   {
-    id: "operator-to-agent",
+    id: "operator-to-agent-mirrored",
     source: "mirrord-operator",
     target: "mirrord-agent",
     label: "Launch agent",
