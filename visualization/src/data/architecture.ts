@@ -209,7 +209,14 @@ export const architectureEdges: ArchitectureEdge[] = [
   {
     id: "layer-to-agent",
     source: "mirrord-layer",
+    target: "mirrord-operator",
+    intent: "mirrored",
+  },
+  {
+    id: "operator-to-agent",
+    source: "mirrord-operator",
     target: "mirrord-agent",
+    label: "Launch agent",
     intent: "mirrored",
   },
   {

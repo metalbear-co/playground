@@ -121,7 +121,7 @@ const buildFlowEdges = (): Edge[] =>
       case "layer-to-agent":
         edgeType = "smoothstep";
         sourceHandle = "layer-source-top";
-        targetHandle = "agent-target-bottom";
+        targetHandle = undefined;
         break;
       case "local-to-layer":
         targetHandle = "layer-target-left";
@@ -130,6 +130,8 @@ const buildFlowEdges = (): Edge[] =>
         sourceHandle = "agent-source-right";
         break;
       case "operator-to-agent":
+        edgeType = "smoothstep";
+        sourceHandle = undefined;
         targetHandle = "agent-target-left";
         break;
       default:
@@ -289,8 +291,61 @@ const nodeZoneIndex = new Map<string, ZoneId>(
   architectureNodes.map((node) => [node.id, (node.zone ?? "cluster") as ZoneId]),
 );
 
-const LOCAL_ZONE_OFFSET_Y = 520;
-const LOCAL_ZONE_OFFSET_X = 520;
+type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
+
+const computeBounds = (
+  nodes: Node<NodeData>[],
+  predicate: (node: Node<NodeData>) => boolean,
+): Bounds | null => {
+  const filtered = nodes.filter(predicate);
+  if (filtered.length === 0) {
+    return null;
+  }
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  filtered.forEach((node) => {
+    const x = node.position.x;
+    const y = node.position.y;
+    const right = x + nodeWidth;
+    const bottom = y + nodeHeight;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, right);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, bottom);
+  });
+  return { minX, maxX, minY, maxY };
+};
+
+const LOCAL_ZONE_DEFAULT_OFFSET = { x: 520, y: 520 };
+const LOCAL_ZONE_ADJUSTMENT = { x: -400, y: 0 };
+const LOCAL_ZONE_GAP_Y = 220;
+
+const clusterBounds = computeBounds(layoutedNodes, (node) => {
+  const zone = nodeZoneIndex.get(node.id);
+  return zone === "cluster";
+});
+
+const localBounds = computeBounds(layoutedNodes, (node) => {
+  const zone = nodeZoneIndex.get(node.id);
+  return zone === "local";
+});
+
+const LOCAL_ZONE_OFFSET = (() => {
+  if (!clusterBounds || !localBounds) {
+    return LOCAL_ZONE_DEFAULT_OFFSET;
+  }
+  const clusterCenterX = (clusterBounds.minX + clusterBounds.maxX) / 2;
+  const localCenterX = (localBounds.minX + localBounds.maxX) / 2;
+  const offsetX = clusterCenterX - localCenterX;
+  const offsetY = clusterBounds.maxY + LOCAL_ZONE_GAP_Y - localBounds.minY;
+  return {
+    x: offsetX + LOCAL_ZONE_ADJUSTMENT.x,
+    y: offsetY + LOCAL_ZONE_ADJUSTMENT.y,
+  };
+})();
+
 const EXTERNAL_USER_OFFSET_X = 240;
 const INGRESS_LEFT_SHIFT_X = 90;
 const EXTERNAL_USER_SHIFT_Y = 100;
@@ -306,8 +361,8 @@ const adjustedNodes = layoutedNodes.map((node) => {
 
   if (zone === "local") {
     position = {
-      x: position.x + LOCAL_ZONE_OFFSET_X,
-      y: position.y + LOCAL_ZONE_OFFSET_Y,
+      x: position.x + LOCAL_ZONE_OFFSET.x,
+      y: position.y + LOCAL_ZONE_OFFSET.y,
     };
   }
 
