@@ -359,6 +359,46 @@ const SESSION_NODE_IDS = new Set([
   "mirrord-agent",
 ]);
 
+const buildAliasIndex = () => {
+  const aliasIndex = new Map<string, string>();
+  architectureNodes.forEach((node) => {
+    const aliases = new Set<string>();
+    const lowerId = node.id.toLowerCase();
+    aliases.add(lowerId);
+    aliases.add(lowerId.replace(/_/g, "-"));
+    aliases.add(lowerId.replace(/-/g, ""));
+    if (node.repoPath) {
+      const repo = node.repoPath.toLowerCase().replace(/\/$/, "");
+      aliases.add(repo);
+      aliases.add(repo.replace(/[\/]/g, ""));
+    }
+    if (typeof node.label === "string") {
+      const label = node.label.toLowerCase();
+      aliases.add(label);
+      aliases.add(label.replace(/\s+/g, "-"));
+      aliases.add(label.replace(/\s+/g, ""));
+    }
+    aliases.forEach((alias) => {
+      if (alias) {
+        aliasIndex.set(alias, node.id);
+      }
+    });
+  });
+  return aliasIndex;
+};
+
+const extractTargetAliases = (rawTarget: string): string[] => {
+  const normalized = rawTarget.toLowerCase();
+  const aliases = new Set<string>([normalized]);
+  const parts = normalized.split("/").filter(Boolean);
+  parts.forEach((part) => aliases.add(part));
+  const last = parts[parts.length - 1];
+  if (last && /-[a-z0-9]{4,}$/.test(last)) {
+    aliases.add(last.replace(/-[a-z0-9]{4,}$/, ""));
+  }
+  return Array.from(aliases);
+};
+
 const initialArchitectureNodes: Node<NodeData>[] = adjustedNodes.map((node) =>
   SESSION_NODE_IDS.has(node.id) ? { ...node, hidden: true } : node,
 );
@@ -477,17 +517,43 @@ export default function Home() {
     () => (snapshot?.sessions ?? []).length > 0,
     [snapshot],
   );
+  const aliasIndex = useMemo(() => buildAliasIndex(), []);
+  const targetedNodeId = useMemo(() => {
+    const sessions = snapshot?.sessions ?? [];
+    for (const session of sessions) {
+      const target = session.targetWorkload;
+      if (!target) {
+        continue;
+      }
+      const variants = extractTargetAliases(target);
+      for (const variant of variants) {
+        const nodeId = aliasIndex.get(variant);
+        if (nodeId) {
+          return nodeId;
+        }
+      }
+    }
+    return undefined;
+  }, [snapshot, aliasIndex]);
   const flowEdges = useMemo(() => {
-    return baseEdges.filter((edge) => {
-      if (
-        SESSION_NODE_IDS.has(edge.source) ||
-        SESSION_NODE_IDS.has(edge.target)
-      ) {
+    const remappedEdges = baseEdges.map((edge) => {
+      if (edge.id === "agent-to-target" && targetedNodeId) {
+        const targetExists = visibleArchitectureNodes.some(
+          (node) => node.id === targetedNodeId,
+        );
+        if (targetExists) {
+          return { ...edge, target: targetedNodeId };
+        }
+      }
+      return edge;
+    });
+    return remappedEdges.filter((edge) => {
+      if (SESSION_NODE_IDS.has(edge.source) || SESSION_NODE_IDS.has(edge.target)) {
         return hasSessions;
       }
       return true;
     });
-  }, [baseEdges, hasSessions]);
+  }, [baseEdges, hasSessions, targetedNodeId, visibleArchitectureNodes]);
 
   const flowNodes = useMemo(() => {
     const nodes: Node<NodeData | ZoneNodeData>[] = [];
@@ -718,7 +784,10 @@ export default function Home() {
         return {
           ...node,
           hidden: false,
-          style: { ...baseStyle, opacity: 1 },
+          style: {
+            ...baseStyle,
+            opacity: 1,
+          },
         };
       }),
     );

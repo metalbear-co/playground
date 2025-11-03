@@ -5,6 +5,20 @@ const app = express();
 const port = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json());
+const normalizeContainerId = (rawId) => {
+    if (!rawId) {
+        return null;
+    }
+    const trimmed = rawId.trim();
+    if (trimmed.length === 0) {
+        return null;
+    }
+    const delimiterIndex = trimmed.indexOf("//");
+    if (delimiterIndex !== -1) {
+        return trimmed.slice(delimiterIndex + 2);
+    }
+    return trimmed;
+};
 class SnapshotStore {
     constructor(clusterName) {
         this.services = new Map();
@@ -234,39 +248,72 @@ const startMirrordAgentPoller = (kubeConfig) => {
     const poll = async () => {
         try {
             const pods = await coreApi.listPodForAllNamespaces();
+            const containerIdIndex = new Map();
+            pods.items?.forEach((pod) => {
+                const namespace = pod.metadata?.namespace ?? "default";
+                const podName = pod.metadata?.name ?? "unknown-pod";
+                const ownerReferences = pod.metadata?.ownerReferences ?? [];
+                const ownerWorkload = ownerReferences.find((owner) => [
+                    "Deployment",
+                    "StatefulSet",
+                    "DaemonSet",
+                    "Job",
+                    "CronJob",
+                ].includes(owner.kind ?? ""))?.name;
+                const replicaSetOwner = ownerReferences.find((owner) => owner.kind === "ReplicaSet")?.name;
+                const inferredWorkload = ownerWorkload ?? replicaSetOwner ?? podName;
+                const workloadId = `${namespace}/${inferredWorkload}`;
+                const containerStatuses = [
+                    ...(pod.status?.containerStatuses ?? []),
+                    ...(pod.status?.initContainerStatuses ?? []),
+                ];
+                containerStatuses.forEach((status) => {
+                    const normalizedId = normalizeContainerId(status.containerID);
+                    if (!normalizedId) {
+                        return;
+                    }
+                    containerIdIndex.set(normalizedId, {
+                        namespace,
+                        podName,
+                        workload: workloadId,
+                    });
+                });
+            });
             const sessions = [];
             pods.items?.forEach((pod) => {
                 const containers = [
                     ...(pod.spec?.containers ?? []),
                     ...(pod.spec?.initContainers ?? []),
                 ];
-                const hasAgent = containers.some((container) => container.name.includes("mirrord-agent"));
-                if (!hasAgent) {
+                const agentContainer = containers.find((container) => container.name.includes("mirrord-agent"));
+                if (!agentContainer) {
                     return;
                 }
                 const namespace = pod.metadata?.namespace ?? "default";
                 const podName = pod.metadata?.name ?? "unknown-pod";
-                let targetName = pod.metadata?.annotations?.["mirrord.io/target-name"] ??
-                    pod.metadata?.ownerReferences?.[0]?.name;
-                if (!targetName) {
-                    const labelTarget = pod.metadata?.labels?.["mirrord.io/target-deployment"] ??
-                        pod.metadata?.labels?.["mirrord.io/target-workload"];
-                    if (labelTarget) {
-                        targetName = `${namespace}/${labelTarget}`;
-                    }
+                const agentArgs = [
+                    ...(agentContainer.command ?? []),
+                    ...(agentContainer.args ?? []),
+                ];
+                const containerIdFlagIndex = agentArgs.findIndex((arg) => arg === "--container-id");
+                if (containerIdFlagIndex === -1) {
+                    return;
                 }
-                if (!targetName && pod.metadata?.annotations) {
-                    const annotationTarget = Object.entries(pod.metadata.annotations)
-                        .find(([key]) => key.toLowerCase().includes("target"))?.[1];
-                    if (annotationTarget) {
-                        targetName = annotationTarget;
-                    }
+                const targetContainerId = agentArgs[containerIdFlagIndex + 1];
+                const normalizedTargetId = normalizeContainerId(targetContainerId);
+                if (!normalizedTargetId) {
+                    return;
                 }
+                const targetInfo = containerIdIndex.get(normalizedTargetId);
+                if (!targetInfo) {
+                    return;
+                }
+                const targetWorkload = targetInfo.workload;
                 sessions.push({
                     id: `${namespace}/${podName}`,
                     podName,
                     namespace,
-                    targetWorkload: targetName,
+                    targetWorkload,
                     lastUpdated: new Date().toISOString(),
                 });
             });
