@@ -2,12 +2,18 @@ import express from "express";
 import cors from "cors";
 import { AppsV1Api, CoreV1Api, KubeConfig } from "@kubernetes/client-node";
 
+/**
+ * Express application that exposes the cluster snapshot consumed by the React visualization.
+ */
 const app = express();
 const port = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
 
+/**
+ * Service information tracked in the snapshot. Derived from known deployments or manual POSTs.
+ */
 type ServiceStatus = {
   id: string;
   name: string;
@@ -18,6 +24,9 @@ type ServiceStatus = {
   message?: string;
 };
 
+/**
+ * Active mirrord agent session information captured from the agent poller.
+ */
 type SessionStatus = {
   id: string;
   podName: string;
@@ -26,6 +35,10 @@ type SessionStatus = {
   lastUpdated: string;
 };
 
+/**
+ * Normalize container IDs reported by Kubernetes so the runtime prefix
+ * (docker://, containerd://, ...) does not impact equality checks.
+ */
 const normalizeContainerId = (rawId: string | undefined): string | null => {
   if (!rawId) {
     return null;
@@ -41,6 +54,9 @@ const normalizeContainerId = (rawId: string | undefined): string | null => {
   return trimmed;
 };
 
+/**
+ * Aggregated snapshot shared with the frontend.
+ */
 type ClusterSnapshot = {
   clusterName: string;
   updatedAt: string;
@@ -48,6 +64,10 @@ type ClusterSnapshot = {
   sessions: SessionStatus[];
 };
 
+/**
+ * In-memory store that keeps the latest cluster snapshot. All pollers and API handlers interact with
+ * this store so the frontend can always pull a single coherent object.
+ */
 class SnapshotStore {
   private clusterName: string;
   private services = new Map<string, ServiceStatus>();
@@ -121,6 +141,9 @@ const snapshotStore = new SnapshotStore(process.env.CLUSTER_NAME || "playground"
 let triggerDeploymentPoll: (() => Promise<void>) | null = null;
 let triggerAgentPoll: (() => Promise<void>) | null = null;
 
+/**
+ * Helper used by refresh endpoints/query params to run the pollers synchronously on demand.
+ */
 const runRefreshPollers = async () => {
   if (triggerDeploymentPoll) {
     await triggerDeploymentPoll();
@@ -134,6 +157,9 @@ app.get("/healthz", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+/**
+ * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
+ */
 app.get("/snapshot", async (req, res) => {
   try {
     const wantsRefresh =
@@ -156,12 +182,18 @@ app.get("/snapshot", async (req, res) => {
   }
 });
 
+/**
+ * Replace the snapshot with user-provided data (handy for demos without a real cluster).
+ */
 app.post("/snapshot", (req, res) => {
   const body = req.body as Partial<ClusterSnapshot>;
   snapshotStore.replaceSnapshot(body);
   res.json(snapshotStore.getSnapshot());
 });
 
+/**
+ * Force both pollers to run and return the updated snapshot.
+ */
 app.post("/snapshot/refresh", async (_req, res) => {
   try {
     await runRefreshPollers();
@@ -188,6 +220,9 @@ type KnownDeployment = {
   namespace?: string;
 };
 
+/**
+ * Deployments we poll for status information. Each entry becomes a service node in the snapshot.
+ */
 const knownDeployments: KnownDeployment[] = [
   {
     id: "mirrord-operator",
@@ -231,6 +266,9 @@ const knownDeployments: KnownDeployment[] = [
 const defaultNamespace = process.env.WATCH_NAMESPACE || "default";
 const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
 
+/**
+ * Attempt to load Kubernetes credentials (preferring in-cluster config, falling back to local kubeconfig).
+ */
 const loadKubeConfiguration = (): KubeConfig | null => {
   const kubeConfig = new KubeConfig();
   try {
@@ -254,6 +292,9 @@ const loadKubeConfiguration = (): KubeConfig | null => {
 const startDeploymentPoller = (kubeConfig: KubeConfig) => {
   const appsApi = kubeConfig.makeApiClient(AppsV1Api);
 
+  /**
+   * Poll Kubernetes Deployments listed in `knownDeployments` and update the snapshot with their status.
+   */
   const poll = async () => {
     await Promise.all(
       knownDeployments.map(async (service) => {
@@ -330,6 +371,10 @@ const startDeploymentPoller = (kubeConfig: KubeConfig) => {
 const startMirrordAgentPoller = (kubeConfig: KubeConfig) => {
   const coreApi = kubeConfig.makeApiClient(CoreV1Api);
 
+  /**
+   * Poll pods across the cluster, index container IDs, and resolve mirrord agents back to their
+   * targeted workloads using the agent `--container-id` flag.
+   */
   const poll = async () => {
     try {
       const pods = await coreApi.listPodForAllNamespaces();
