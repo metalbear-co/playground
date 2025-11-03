@@ -949,15 +949,6 @@ export default function Home() {
             ))}
           </div>
         </Panel>
-        <Panel position="bottom-right" className="rounded-2xl border border-[#0F172A]/10 bg-[#111827] p-4 text-white shadow-xl">
-          <p className="text-sm font-semibold text-white">How to read this</p>
-          <ul className="mt-2 list-disc pl-5 text-xs text-slate-200">
-            <li className="mb-1">Purple arrows = live requests.</li>
-            <li className="mb-1">Gold links = data fan-out (Redis/Kafka/SQS).</li>
-            <li className="mb-1">Dashed coral = mirrord mirrored path.</li>
-            <li>Navy dash = mirrord control plane.</li>
-          </ul>
-        </Panel>
         {!SHOW_SNAPSHOT_PANEL && (
           <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
             <div className="flex items-center gap-3">
