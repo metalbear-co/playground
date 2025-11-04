@@ -6,3 +6,9 @@ overlays/localstack/charts
 
 .idea
 .vscode
+
+# Node dependencies
+**/node_modules
+
+# Next.js build output
+**/.next
