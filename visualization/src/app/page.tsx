@@ -17,7 +17,14 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   architectureEdges,
@@ -28,6 +35,9 @@ import {
   type ArchitectureNode,
 } from "@/data/architecture";
 
+/**
+ * Custom data payload carried by each React Flow node rendered in the visualization.
+ */
 type NodeData = {
   label: ReactNode;
   group: ArchitectureNode["group"];
@@ -38,6 +48,9 @@ const nodeHeight = 130;
 
 type EdgeIntent = NonNullable<ArchitectureEdge["intent"]>;
 
+/**
+ * Visual styles keyed by edge intent (request, data, mirrored, etc.).
+ */
 const intentStyles: Record<
   EdgeIntent | "default",
   { color: string; dash?: string; animated?: boolean }
@@ -49,6 +62,9 @@ const intentStyles: Record<
   default: { color: "#94A3B8" },
 };
 
+/**
+ * Transform the static architecture node definitions into React Flow nodes with layout metadata.
+ */
 const buildFlowNodes = (): Node<NodeData>[] =>
   architectureNodes.map((node) => {
     const isMirrordNode =
@@ -101,6 +117,9 @@ const buildFlowNodes = (): Node<NodeData>[] =>
     };
   });
 
+/**
+ * Transform the static architecture edges into React Flow edges with styling and handle placement.
+ */
 const buildFlowEdges = (): Edge[] =>
   architectureEdges.map((edge) => {
     const intent = edge.intent ?? "default";
@@ -162,6 +181,9 @@ const buildFlowEdges = (): Edge[] =>
     };
   });
 
+/**
+ * Use dagre to compute an initial left-to-right layout for the architecture graph.
+ */
 const getLayoutedElements = (nodes: Node<NodeData>[], edges: Edge[]) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
@@ -194,6 +216,9 @@ const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   buildFlowEdges(),
 );
 
+/**
+ * Convenience type used when rendering zone overlays (cluster/local backgrounds).
+ */
 type ZoneNodeData = {
   label: string;
   description: string;
@@ -221,6 +246,9 @@ type ClusterSnapshot = {
   sessions: SessionStatus[];
 };
 
+/**
+ * Snapshot session payload returned by the backend (mirrord agents resolved to workloads).
+ */
 type SessionStatus = {
   id: string;
   podName: string;
@@ -229,6 +257,9 @@ type SessionStatus = {
   lastUpdated: string;
 };
 
+/**
+ * Build non-interactive zone nodes that visually group parts of the architecture.
+ */
 const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
   const defaultPadding = 80;
   const zoneNodes: ClusterZoneNode[] = [];
@@ -281,6 +312,9 @@ const nodeZoneIndex = new Map<string, ZoneId>(
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 
+/**
+ * Helper used to compute bounding boxes for groups of nodes (e.g. cluster/local zones).
+ */
 const computeBounds = (
   nodes: Node<NodeData>[],
   predicate: (node: Node<NodeData>) => boolean,
@@ -320,6 +354,9 @@ const localBounds = computeBounds(layoutedNodes, (node) => {
   return zone === "local";
 });
 
+/**
+ * Final offset applied to local nodes, taking into account cluster bounds and desired gaps.
+ */
 const LOCAL_ZONE_OFFSET = (() => {
   if (!clusterBounds || !localBounds) {
     return LOCAL_ZONE_DEFAULT_OFFSET;
@@ -402,6 +439,10 @@ const SESSION_NODE_IDS = new Set([
   "mirrord-agent",
 ]);
 
+/**
+ * Build an index of possible string aliases for each architecture node so snapshot targets can be
+ * matched regardless of naming conventions (k8s resource vs repo path, etc.).
+ */
 const buildAliasIndex = () => {
   const aliasIndex = new Map<string, string>();
   architectureNodes.forEach((node) => {
@@ -430,6 +471,9 @@ const buildAliasIndex = () => {
   return aliasIndex;
 };
 
+/**
+ * Produce variant strings for a snapshot target (namespace/name, pod name, base workload name…).
+ */
 const extractTargetAliases = (rawTarget: string): string[] => {
   const normalized = rawTarget.toLowerCase();
   const aliases = new Set<string>([normalized]);
@@ -453,6 +497,9 @@ adjustedNodes.forEach((node) => {
   }
 });
 
+/**
+ * Presentational node used for cluster/local zones. Rendered as a non-interactive background card.
+ */
 const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   <div
     className="flex h-full w-full flex-col justify-between rounded-[40px] border border-dashed px-8 py-6"
@@ -479,6 +526,9 @@ const handleStyle = { background: "#E66479", width: 8, height: 8 };
 
 type MirrordNodeType = Node<NodeData, "mirrord">;
 
+/**
+ * Custom renderer for mirrord-specific nodes (layer, agent, operator). Adds XYFlow handles and styling.
+ */
 const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
   const info = architectureNodes.find((node) => node.id === id);
   const palette = groupPalette.mirrord;
@@ -526,6 +576,7 @@ const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
   );
 };
 
+// Legend entries rendered in the top-left panel.
 const legendItems = [
   { label: "Entry / Client", color: groupPalette.entry.border },
   { label: "Core services", color: groupPalette.service.border },
@@ -536,6 +587,10 @@ const legendItems = [
 
 const SHOW_SNAPSHOT_PANEL = false;
 
+/**
+ * Main visualization page. Builds the React Flow graph, keeps snapshot state in sync with the backend,
+ * and wires up UI panels for the demo.
+ */
 export default function Home() {
   const nodeTypes = useMemo(() => ({ zone: ZoneNode, mirrord: MirrordNode }), []);
   const [architectureNodesState, setArchitectureNodesState] = useState<
@@ -555,6 +610,7 @@ export default function Home() {
     [snapshot],
   );
   const aliasIndex = useMemo(() => buildAliasIndex(), []);
+  // Match active mirrord sessions to architecture node ids so the agent edge can be rewired.
   const targetedNodeId = useMemo(() => {
     const sessions = snapshot?.sessions ?? [];
     for (const session of sessions) {
@@ -572,6 +628,7 @@ export default function Home() {
     }
     return undefined;
   }, [snapshot, aliasIndex]);
+  // Rebuild edges when session state changes, swapping the agent target dynamically.
   const flowEdges = useMemo(() => {
     const remappedEdges = baseEdges.map((edge) => {
       if (edge.id === "agent-to-target" && targetedNodeId) {
@@ -592,6 +649,7 @@ export default function Home() {
     });
   }, [baseEdges, hasSessions, targetedNodeId, visibleArchitectureNodes]);
 
+  // Merge static zone overlays with the current architecture nodes.
   const flowNodes = useMemo(() => {
     const nodes: Node<NodeData | ZoneNodeData>[] = [];
     if (clusterZoneNode) {
@@ -615,6 +673,7 @@ export default function Home() {
     [snapshotBaseUrl],
   );
 
+  // React to session changes by toggling mirrord node visibility and styling.
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -622,6 +681,7 @@ export default function Home() {
     };
   }, []);
 
+  // Fetch the latest backend snapshot; supports optional spinner and forced refresh.
   const fetchSnapshot = useCallback(
     async (options?: { showSpinner?: boolean; forceRefresh?: boolean }) => {
       const shouldShowSpinner = options?.showSpinner ?? false;
@@ -662,6 +722,7 @@ export default function Home() {
     [snapshotUrl],
   );
 
+  // Periodically refresh the snapshot (in addition to manual refresh requests).
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -681,6 +742,9 @@ export default function Home() {
   }, [fetchSnapshot]);
 
   const handleNodesChange = useCallback(
+    /**
+     * React Flow change handler that ignores updates for static zone nodes while allowing user drags.
+     */
     (changes: NodeChange[]) =>
       setArchitectureNodesState((nodes) => {
         const filteredChanges = changes.filter(
@@ -697,10 +761,13 @@ export default function Home() {
     [],
   );
 
+  // Bound to the Refresh button so operators can trigger an immediate backend poll.
   const handleSnapshotRefresh = useCallback(() => {
+    // Allow the operator to force an immediate backend poll instead of waiting for the interval tick.
     void fetchSnapshot({ showSpinner: true, forceRefresh: true });
   }, [fetchSnapshot]);
 
+  // React to session changes by toggling mirrord node visibility and styling.
   useEffect(() => {
     const sessions = snapshot?.sessions ?? [];
     const hasSessions = sessions.length > 0;
