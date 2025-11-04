@@ -107,7 +107,7 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "local-process",
     label: "Local process",
     stack: "Developer machine",
-    description: "Runs your binary with mirrord-layer inserted.",
+    description: "Runs your binary with mirrord-layer injected.",
     group: "mirrord",
     zone: "local",
   },
