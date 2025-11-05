@@ -43,8 +43,8 @@ When the frontend is deployed in Kubernetes it expects the visualization backend
 
    ```bash
    eval "$(minikube docker-env)"
-   docker build -t karlod/visualization-backend:local ../visualization-backend
-   docker build -t karlod/visualization-frontend:local .
+   docker build --build-arg NEXT_DISABLE_TURBO=1 -t karlod/visualization-backend:local ../visualization-backend
+   docker build --build-arg NEXT_DISABLE_TURBO=1 -t karlod/visualization-frontend:local .
    ```
 
 2. Deploy the backend and frontend manifests:

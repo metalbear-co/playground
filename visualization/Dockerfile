@@ -7,6 +7,7 @@ RUN npm ci
 
 FROM node:20-alpine AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_DISABLE_TURBO=1
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
