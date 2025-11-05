@@ -16,10 +16,10 @@ spec:
           image: ghcr.io/metalbear-co/visualization-frontend:latest
           imagePullPolicy: Always
           env:
-            - name: PORT
-              value: "3000"
-            - name: NEXT_PUBLIC_VISUALIZATION_BACKEND_URL
-              value: "http://visualization-backend.default.svc.cluster.local:8080"
+        - name: PORT
+          value: "3000"
+        - name: NEXT_PUBLIC_VISUALIZATION_BACKEND_URL
+          value: "/visualization/api"
           ports:
             - containerPort: 3000
               protocol: TCP

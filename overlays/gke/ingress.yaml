@@ -21,6 +21,13 @@ spec:
             name: ip-visit-counter
             port:
               number: 80
+      - path: /visualization/api
+        pathType: Prefix
+        backend:
+          service:
+            name: visualization-backend
+            port:
+              number: 80
       - path: /visualization
         pathType: Prefix
         backend:
