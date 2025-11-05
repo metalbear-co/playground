@@ -6,6 +6,7 @@ resources:
 - ip-visit-consumer
 - ip-visit-counter
 - visualization-backend
+- visualization-frontend
 - redis
 
 helmCharts:
