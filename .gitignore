@@ -12,3 +12,6 @@ overlays/localstack/charts
 
 # Next.js build output
 **/.next
+
+# Generated TypeScript output (server build)
+visualization-backend/dist/

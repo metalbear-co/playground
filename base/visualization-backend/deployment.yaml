@@ -18,7 +18,7 @@ spec:
       automountServiceAccountToken: true
       containers:
         - name: backend
-          image: docker.io/karlod/visualization-backend:latest
+          image: ghcr.io/metalbear-co/visualization-backend:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
