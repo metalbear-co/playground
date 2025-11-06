@@ -34,7 +34,7 @@ jobs:
         with:
           context: ./visualization
           file: ./visualization/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ghcr.io/metalbear-co/visualization-frontend:latest
