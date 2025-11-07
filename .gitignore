@@ -4,6 +4,9 @@ ip-visit-sqs-consumer/ip-visit-sqs-consumer
 # The localstack helm charts get cloned when creating the localstack setup.
 overlays/localstack/charts
 
+# Helm charts that are used in base (like kafka) get cloned there when installing the chart.
+base/charts
+
 .idea
 .vscode
 
