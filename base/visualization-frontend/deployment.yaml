@@ -18,8 +18,8 @@ spec:
           env:
             - name: PORT
               value: "3000"
-            - name: NEXT_PUBLIC_VISUALIZATION_BACKEND_URL
-              value: "/visualization/api"
+            - name: NEXT_BASE_PATH
+              value: "/visualization"
           ports:
             - containerPort: 3000
               protocol: TCP
@@ -27,10 +27,10 @@ spec:
             httpGet:
               path: /
               port: 3000
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 3000
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
           resources:
             requests:
               cpu: 100m
