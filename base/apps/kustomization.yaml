@@ -9,7 +9,6 @@ resources:
   - ip-visit-frontend.yaml
   - visualization-frontend.yaml
   - visualization.yaml
-  - visualization-frontend.yaml
   - ip-visit-sqs-consumer.yaml
   - kafka.yaml
   - redis.yaml
