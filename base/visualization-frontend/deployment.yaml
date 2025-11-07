@@ -27,10 +27,10 @@ spec:
             httpGet:
               path: /
               port: 3000
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 3000
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
           resources:
             requests:
               cpu: 100m
