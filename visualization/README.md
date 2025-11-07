@@ -43,8 +43,8 @@ When the frontend is deployed in Kubernetes it expects the visualization backend
 
    ```bash
    eval "$(minikube docker-env)"
-   docker build --build-arg NEXT_DISABLE_TURBO=1 -t karlod/visualization-backend:local ../visualization-backend
-   docker build --build-arg NEXT_DISABLE_TURBO=1 -t karlod/visualization-frontend:local .
+   docker build --build-arg NEXT_DISABLE_TURBO=1 --build-arg NEXT_BASE_PATH=/visualization -t karlod/visualization-backend:local ../visualization-backend
+   docker build --build-arg NEXT_DISABLE_TURBO=1 --build-arg NEXT_BASE_PATH=/visualization -t karlod/visualization-frontend:local .
    ```
 
 2. Deploy the backend and frontend manifests:
@@ -76,7 +76,7 @@ When the frontend is deployed in Kubernetes it expects the visualization backend
    kubectl port-forward svc/visualization-frontend 3000:80
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000) to view the visualization. The frontend now reaches the backend via `http://localhost:8080/visualization/api` through the port-forward.
+5. Open [http://localhost:3000/visualization](http://localhost:3000/visualization) to view the visualization. The frontend now reaches the backend via `http://localhost:8080/visualization/api` through the port-forward.
 
 When you are finished testing, undo the Docker environment with:
 

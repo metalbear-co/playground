@@ -35,6 +35,8 @@ jobs:
           context: ./visualization
           file: ./visualization/Dockerfile
           platforms: linux/amd64
+          build-args: |
+            NEXT_BASE_PATH=/visualization
           push: true
           tags: |
             ghcr.io/metalbear-co/visualization-frontend:latest
