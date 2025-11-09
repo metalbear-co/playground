@@ -8,6 +8,15 @@ const defaultBackendUrl =
 const nextConfig: NextConfig = {
   basePath,
   assetPrefix: basePath || undefined,
+  async rewrites() {
+    if (!basePath) {
+      return [];
+    }
+    return [
+      { source: `${basePath}`, destination: `${basePath}/` },
+      { source: `${basePath}/`, destination: `/` },
+    ];
+  },
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath,
     NEXT_PUBLIC_VISUALIZATION_BACKEND_URL: defaultBackendUrl,
