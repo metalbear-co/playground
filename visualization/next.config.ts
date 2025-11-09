@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
       return [];
     }
     return [
-      { source: `${basePath}`, destination: `${basePath}/` },
+      { source: `${basePath}`, destination: `/` },
       { source: `${basePath}/`, destination: `/` },
     ];
   },
