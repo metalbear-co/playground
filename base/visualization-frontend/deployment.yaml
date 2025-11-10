@@ -24,10 +24,14 @@ spec:
             - containerPort: 3000
               protocol: TCP
           readinessProbe:
+            failureThreshold: 10
+            periodSeconds: 30
             httpGet:
               path: /visualization
               port: 3000
           livenessProbe:
+            failureThreshold: 10
+            periodSeconds: 30
             httpGet:
               path: /visualization
               port: 3000
