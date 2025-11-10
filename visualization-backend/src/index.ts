@@ -158,9 +158,20 @@ app.get("/healthz", (_req, res) => {
 });
 
 /**
+ * Route helper that allows us to serve the visualization backend under multiple URL prefixes
+ * (e.g. /snapshot locally and /visualization/api/snapshot behind the public ingress).
+ */
+const snapshotPaths = ["/snapshot", "/visualization/api/snapshot"];
+const snapshotPostPaths = ["/snapshot", "/visualization/api/snapshot"];
+const snapshotRefreshPaths = [
+  "/snapshot/refresh",
+  "/visualization/api/snapshot/refresh",
+];
+
+/**
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
-app.get("/snapshot", async (req, res) => {
+app.get(snapshotPaths, async (req, res) => {
   try {
     const wantsRefresh =
       req.query.refresh === "1" || req.query.refresh === "true";
@@ -185,7 +196,7 @@ app.get("/snapshot", async (req, res) => {
 /**
  * Replace the snapshot with user-provided data (handy for demos without a real cluster).
  */
-app.post("/snapshot", (req, res) => {
+app.post(snapshotPostPaths, (req, res) => {
   const body = req.body as Partial<ClusterSnapshot>;
   snapshotStore.replaceSnapshot(body);
   res.json(snapshotStore.getSnapshot());
@@ -194,7 +205,7 @@ app.post("/snapshot", (req, res) => {
 /**
  * Force both pollers to run and return the updated snapshot.
  */
-app.post("/snapshot/refresh", async (_req, res) => {
+app.post(snapshotRefreshPaths, async (_req, res) => {
   try {
     await runRefreshPollers();
     res.json(snapshotStore.getSnapshot());
