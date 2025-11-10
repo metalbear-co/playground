@@ -25,11 +25,11 @@ spec:
               protocol: TCP
           readinessProbe:
             httpGet:
-              path: /
+              path: /visualization
               port: 3000
           livenessProbe:
             httpGet:
-              path: /
+              path: /visualization
               port: 3000
             resources:
               requests:
