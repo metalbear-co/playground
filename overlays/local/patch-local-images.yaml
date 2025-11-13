@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visualization-frontend
+spec:
+  template:
+    spec:
+      containers:
+        - name: frontend
+          image: viz-frontend:dev
+          imagePullPolicy: IfNotPresent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visualization-backend
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          image: viz-backend:dev
+          imagePullPolicy: IfNotPresent

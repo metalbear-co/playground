@@ -4,3 +4,6 @@ resources:
 - ../../base
 patches:
 - path: patch-nodeport.yaml
+- path: patch-remove-backendconfig.yaml
+- path: patch-remove-backendconfig-annotation.yaml
+- path: patch-local-images.yaml
