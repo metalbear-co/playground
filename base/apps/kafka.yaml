@@ -5,23 +5,16 @@ metadata:
   name: kafka
   namespace: argocd
   finalizers:
-  - resources-finalizer.argocd.argoproj.io
+    - resources-finalizer.argocd.argoproj.io
 spec:
   destination:
     namespace: default
     server: https://kubernetes.default.svc
   project: default
   source:
-    chart: kafka
-    repoURL: https://charts.bitnami.com/bitnami
-    targetRevision: 32.2.9
-    helm:
-      valuesObject:
-        listeners:
-          client:
-            protocol: 'PLAINTEXT'
-          controller:
-            protocol: 'PLAINTEXT'
+    path: base/kafka
+    repoURL: https://github.com/metalbear-co/MetalBear.git
+    targetRevision: HEAD
   syncPolicy:
     automated:
       prune: true
