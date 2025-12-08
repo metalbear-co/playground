@@ -44,8 +44,8 @@ spec:
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
               value: "1@kafka-0.kafka.default.svc.cluster.local:9093"
             # TODO: If we want to enable auto-create topics, we need to add this env var
-            # - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
-            #   value: "true"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
