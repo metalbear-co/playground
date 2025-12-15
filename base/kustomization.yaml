@@ -1,22 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- ip-info
-- ip-info-grpc
-- ip-visit-consumer
-- ip-visit-counter
-- visualization-backend
-- visualization-frontend
-- redis
-
-helmCharts:
-- name: kafka
-  valuesInline:
-    listeners:
-      client:
-        protocol: 'PLAINTEXT'
-      controller:
-        protocol: 'PLAINTEXT'
-  releaseName: kafka
-  version: 32.2.0
-  repo: oci://registry-1.docker.io/bitnamicharts
+  - ip-info
+  - ip-info-grpc
+  - ip-visit-consumer
+  - ip-visit-counter
+  - visualization-backend
+  - visualization-frontend
+  - redis
+  - kafka
