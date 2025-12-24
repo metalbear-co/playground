@@ -13,7 +13,7 @@ spec:
   project: default
   source:
     path: overlays/gke/apps
-    repoURL: https://github.com/metalbear-co/playground
+    repoURL: https://github.com/metalbear-co/playground.git
     targetRevision: HEAD
   syncPolicy:
     automated:
