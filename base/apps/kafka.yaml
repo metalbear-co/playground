@@ -14,7 +14,7 @@ spec:
   source:
     path: base/kafka
     repoURL: https://github.com/metalbear-co/MetalBear.git
-    targetRevision: HEAD
+    targetRevision: gke-dev-playground
   syncPolicy:
     automated:
       prune: true

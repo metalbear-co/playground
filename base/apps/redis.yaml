@@ -14,7 +14,7 @@ spec:
   source:
     path: base/redis
     repoURL: https://github.com/metalbear-co/playground.git
-    targetRevision: HEAD
+    targetRevision: gke-dev-playground
   syncPolicy:
     automated:
       prune: true
