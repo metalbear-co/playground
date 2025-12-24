@@ -25,3 +25,7 @@ infra/*.tfstate
 infra/*.tfstate.backup
 infra/.terraform.lock.hcl
 infra/terraform.tfvars
+
+# SSH Keys
+argocd_key
+argocd_key.pub
