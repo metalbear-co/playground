@@ -3,6 +3,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../../base/apps
+  - cluster-secret-store.yaml
+  - external-secret-aws.yaml
+
 patches:
   - path: ip-visit-counter-patch.yaml
   - path: ip-visit-sqs-consumer-patch.yaml
