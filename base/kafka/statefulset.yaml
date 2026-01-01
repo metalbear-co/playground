@@ -55,7 +55,7 @@ spec:
             - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
               value: "1"
             - name: KAFKA_LOG_DIRS
-              value: "/tmp/kraft-combined-logs"
+              value: "/tmp/kraft-combined-logs/logs"
             - name: CLUSTER_ID
               value: "MkU3OEVBNTcwNTJENDM2Qk"
           volumeMounts:
