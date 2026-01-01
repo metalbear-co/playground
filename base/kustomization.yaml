@@ -9,3 +9,5 @@ resources:
   - visualization-frontend
   - redis
   - kafka
+  - apps/external-secrets.yaml
+

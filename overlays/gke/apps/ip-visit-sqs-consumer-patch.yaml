@@ -18,7 +18,7 @@ spec:
                 name: AWS_ACCESS_KEY_ID
                 valueFrom:
                   secretKeyRef:
-                    name: aws-credentials
+                    name: ip-visit-aws-credentials
                     key: AWS_ACCESS_KEY_ID
             - op: add
               path: "/spec/template/spec/containers/0/env/-"
@@ -26,7 +26,7 @@ spec:
                 name: AWS_SECRET_ACCESS_KEY
                 valueFrom:
                   secretKeyRef:
-                    name: aws-credentials
+                    name: ip-visit-aws-credentials
                     key: AWS_SECRET_ACCESS_KEY
             - op: add
               path: "/spec/template/spec/containers/0/env/-"

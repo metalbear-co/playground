@@ -7,4 +7,5 @@ resources:
   - ingress.yaml
   - namespace.yaml
   - certificate.yaml
-  - secret.yaml
+  - apps/cluster-secret-store.yaml
+  - apps/external-secret-aws.yaml

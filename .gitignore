@@ -29,3 +29,7 @@ infra/terraform.tfvars
 # SSH Keys
 argocd_key
 argocd_key.pub
+
+# Secrets
+secret_prod.yaml
+
