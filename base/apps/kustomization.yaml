@@ -13,4 +13,5 @@ resources:
   - kafka.yaml
   - redis.yaml
   - external-secrets.yaml
+  - mirrord-operator.yaml
 
