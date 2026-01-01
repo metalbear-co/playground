@@ -9,3 +9,4 @@ resources:
   - certificate.yaml
   - apps/cluster-secret-store.yaml
   - apps/external-secret-aws.yaml
+  - apps/external-secret-mirrord.yaml
