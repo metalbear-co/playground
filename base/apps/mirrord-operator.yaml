@@ -13,9 +13,7 @@ spec:
     targetRevision: 1.38.0 # Latest stable version found
     helm:
       parameters:
-        - name: license.keyRef.name
-          value: mirrord-operator-license
-        - name: license.keyRef.key
+        - name: license.keyRef
           value: mirrord-operator-license
   destination:
     server: https://kubernetes.default.svc
