@@ -5,6 +5,7 @@ resources:
   - ../../../base/apps
   - cluster-secret-store.yaml
   - external-secret-aws.yaml
+  - external-secret-mirrord.yaml
 
 patches:
   - path: ip-visit-counter-patch.yaml
