@@ -10,7 +10,7 @@ spec:
   source:
     chart: mirrord-operator
     repoURL: https://metalbear-co.github.io/charts
-    targetRevision: 2.50.0 # Using a pinned version or latest stable
+    targetRevision: 1.38.0 # Latest stable version found
     helm:
       parameters:
         - name: license.keyRef.name
