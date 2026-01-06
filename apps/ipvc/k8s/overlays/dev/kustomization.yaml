@@ -17,6 +17,9 @@ patches:
     name: ip-visit-sqs-consumer
     version: v1
 images:
+- name: ip-visit-consumer
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-consumer
+  newTag: 4a1b18cef621c075e07d29000f84172d914f3e4b
 - name: ip-visit-counter
   newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-counter
   newTag: bc2ab4fc4eaa1df9c8a3134eea4e79411392b025
