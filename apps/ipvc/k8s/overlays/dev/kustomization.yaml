@@ -25,4 +25,4 @@ images:
   newTag: bc2ab4fc4eaa1df9c8a3134eea4e79411392b025
 - name: ip-visit-sqs-consumer
   newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-sqs-consumer
-  newTag: c99f1422fa75d342f2cbe3bd493e5ab93ef86f2a
+  newTag: 4a1b18cef621c075e07d29000f84172d914f3e4b
