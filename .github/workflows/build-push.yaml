@@ -20,14 +20,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - ip-visit-counter
-          - ip-visit-consumer
-          - ip-visit-frontend
-          - ip-visit-sqs-consumer
-          - visualization-backend
-          - visualization-frontend
-          - ip-info
+        include:
+          - service: ip-visit-counter
+            path: ip-visit-counter
+          - service: ip-visit-consumer
+            path: ip-visit-consumer
+          - service: ip-visit-frontend
+            path: ip-visit-frontend
+          - service: ip-visit-sqs-consumer
+            path: ip-visit-sqs-consumer
+          - service: visualization-backend
+            path: visualization-backend
+          - service: visualization-frontend
+            path: visualization
+          - service: ip-info
+            path: ip-info
 
     steps:
       - name: Checkout
@@ -53,8 +60,8 @@ jobs:
         id: build-push
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ${{ matrix.service }}/Dockerfile
+          context: ${{ matrix.path }}
+          file: ${{ matrix.path }}/Dockerfile
           push: true
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
 
