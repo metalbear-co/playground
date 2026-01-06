@@ -23,18 +23,25 @@ jobs:
         include:
           - service: ip-visit-counter
             path: ip-visit-counter
+            context: .
           - service: ip-visit-consumer
             path: ip-visit-consumer
+            context: ip-visit-consumer
           - service: ip-visit-frontend
             path: ip-visit-frontend
+            context: ip-visit-frontend
           - service: ip-visit-sqs-consumer
             path: ip-visit-sqs-consumer
+            context: ip-visit-sqs-consumer
           - service: visualization-backend
             path: visualization-backend
+            context: visualization-backend
           - service: visualization-frontend
             path: visualization
+            context: visualization
           - service: ip-info
             path: ip-info
+            context: ip-info
 
     steps:
       - name: Checkout
@@ -60,7 +67,7 @@ jobs:
         id: build-push
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.path }}
+          context: ${{ matrix.context }}
           file: ${{ matrix.path }}/Dockerfile
           push: true
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
