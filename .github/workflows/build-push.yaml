@@ -80,7 +80,7 @@ jobs:
           kustomize edit set image ${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
 
       - name: Commit and Push
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: ./.github/actions/git-auto-commit-action
         with:
           commit_message: "chore(ci): update image tag for ${{ matrix.service }} to ${{ github.sha }}"
           file_pattern: ${{ steps.kustomize-dir.outputs.file }}
