@@ -5,4 +5,7 @@ resources:
 images:
 - name: visualization-backend
   newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/visualization-backend
-  newTag: 4a1b18cef621c075e07d29000f84172d914f3e4b
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319
+- name: visualization-frontend
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/visualization-frontend
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319
