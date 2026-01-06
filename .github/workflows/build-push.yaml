@@ -2,7 +2,7 @@ name: Build and Push
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "gke-dev-playground" ]
   workflow_dispatch:
 
 env:
@@ -63,8 +63,19 @@ jobs:
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
           sudo mv kustomize /usr/local/bin/
 
+      - name: Determine Kustomize Directory
+        id: kustomize-dir
+        run: |
+          if [[ "${{ matrix.service }}" == "visualization-backend" ]] || [[ "${{ matrix.service }}" == "visualization-frontend" ]]; then
+            echo "dir=apps/visualization/k8s/overlays/dev" >> $GITHUB_OUTPUT
+            echo "file=apps/visualization/k8s/overlays/dev/kustomization.yaml" >> $GITHUB_OUTPUT
+          else
+            echo "dir=apps/ipvc/k8s/overlays/dev" >> $GITHUB_OUTPUT
+            echo "file=apps/ipvc/k8s/overlays/dev/kustomization.yaml" >> $GITHUB_OUTPUT
+          fi
+
       - name: Update Image Tag in Kustomize
-        working-directory: overlays/gke/apps
+        working-directory: ${{ steps.kustomize-dir.outputs.dir }}
         run: |
           kustomize edit set image ${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
 
@@ -72,4 +83,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(ci): update image tag for ${{ matrix.service }} to ${{ github.sha }}"
-          file_pattern: overlays/gke/apps/kustomization.yaml
+          file_pattern: ${{ steps.kustomize-dir.outputs.file }}

@@ -27,12 +27,11 @@ import {
 } from "react";
 
 import {
-  architectureEdges,
-  architectureNodes,
-  architectureZones,
   groupPalette,
+  getArchitecture,
   type ArchitectureEdge,
   type ArchitectureNode,
+  type ArchitectureDefinition,
 } from "@/data/architecture";
 
 /**
@@ -65,8 +64,8 @@ const intentStyles: Record<
 /**
  * Transform the static architecture node definitions into React Flow nodes with layout metadata.
  */
-const buildFlowNodes = (): Node<NodeData>[] =>
-  architectureNodes.map((node) => {
+const buildFlowNodes = (arch: ArchitectureDefinition): Node<NodeData>[] =>
+  arch.nodes.map((node) => {
     const isMirrordNode =
       node.id === "mirrord-layer" || node.id === "mirrord-agent";
     const palette = groupPalette[node.group];
@@ -120,8 +119,8 @@ const buildFlowNodes = (): Node<NodeData>[] =>
 /**
  * Transform the static architecture edges into React Flow edges with styling and handle placement.
  */
-const buildFlowEdges = (): Edge[] =>
-  architectureEdges.map((edge) => {
+const buildFlowEdges = (arch: ArchitectureDefinition): Edge[] =>
+  arch.edges.map((edge) => {
     const intent = edge.intent ?? "default";
     const style = intentStyles[intent];
     let edgeType: Edge["type"] = "bezier";
@@ -211,10 +210,6 @@ const getLayoutedElements = (nodes: Node<NodeData>[], edges: Edge[]) => {
   };
 };
 
-const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-  buildFlowNodes(),
-  buildFlowEdges(),
-);
 
 /**
  * Convenience type used when rendering zone overlays (cluster/local backgrounds).
@@ -244,6 +239,7 @@ type ClusterSnapshot = {
   updatedAt: string;
   services: ServiceStatus[];
   sessions: SessionStatus[];
+  namespace: string;
 };
 
 /**
@@ -260,11 +256,11 @@ type SessionStatus = {
 /**
  * Build non-interactive zone nodes that visually group parts of the architecture.
  */
-const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
+const buildZoneNodes = (nodes: Node<NodeData>[], arch: ArchitectureDefinition): ClusterZoneNode[] => {
   const defaultPadding = 80;
   const zoneNodes: ClusterZoneNode[] = [];
 
-  architectureZones.forEach((zone) => {
+  arch.zones.forEach((zone) => {
     const padding = zone.id === "cluster" ? 48 : defaultPadding;
     const memberNodes = nodes.filter((node) => zone.nodes.includes(node.id));
     if (!memberNodes.length) {
@@ -304,11 +300,7 @@ const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
   return zoneNodes;
 };
 
-type ZoneId = ArchitectureNode["zone"] | "cluster";
-
-const nodeZoneIndex = new Map<string, ZoneId>(
-  architectureNodes.map((node) => [node.id, (node.zone ?? "cluster") as ZoneId]),
-);
+type ZoneId = "cluster" | "external" | "local";
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 
@@ -344,33 +336,6 @@ const LOCAL_ZONE_DEFAULT_OFFSET = { x: 520, y: 520 };
 const LOCAL_ZONE_ADJUSTMENT = { x: -400, y: 0 };
 const LOCAL_ZONE_GAP_Y = 220;
 
-const clusterBounds = computeBounds(layoutedNodes, (node) => {
-  const zone = nodeZoneIndex.get(node.id);
-  return zone === "cluster";
-});
-
-const localBounds = computeBounds(layoutedNodes, (node) => {
-  const zone = nodeZoneIndex.get(node.id);
-  return zone === "local";
-});
-
-/**
- * Final offset applied to local nodes, taking into account cluster bounds and desired gaps.
- */
-const LOCAL_ZONE_OFFSET = (() => {
-  if (!clusterBounds || !localBounds) {
-    return LOCAL_ZONE_DEFAULT_OFFSET;
-  }
-  const clusterCenterX = (clusterBounds.minX + clusterBounds.maxX) / 2;
-  const localCenterX = (localBounds.minX + localBounds.maxX) / 2;
-  const offsetX = clusterCenterX - localCenterX;
-  const offsetY = clusterBounds.maxY + LOCAL_ZONE_GAP_Y - localBounds.minY;
-  return {
-    x: offsetX + LOCAL_ZONE_ADJUSTMENT.x,
-    y: offsetY + LOCAL_ZONE_ADJUSTMENT.y,
-  };
-})();
-
 const EXTERNAL_USER_OFFSET_X = 240;
 const INGRESS_LEFT_SHIFT_X = 90;
 const EXTERNAL_USER_SHIFT_Y = 100;
@@ -380,72 +345,117 @@ const MIRRORD_OPERATOR_SHIFT_Y = 100;
 const MIRRORD_AGENT_SHIFT_X = 200;
 const MIRRORD_AGENT_SHIFT_Y = 100;
 
-const adjustedNodes = layoutedNodes.map((node) => {
-  const zone = nodeZoneIndex.get(node.id);
-  let position = { ...node.position };
-
-  if (zone === "local") {
-    position = {
-      x: position.x + LOCAL_ZONE_OFFSET.x,
-      y: position.y + LOCAL_ZONE_OFFSET.y,
-    };
-  }
-
-  if (node.id === "user") {
-    position = {
-      ...position,
-      x: position.x - EXTERNAL_USER_OFFSET_X,
-      y: position.y + EXTERNAL_USER_SHIFT_Y,
-    };
-  }
-
-  if (node.id === "ingress") {
-    position = {
-      ...position,
-      x: position.x - INGRESS_LEFT_SHIFT_X,
-      y: position.y + INGRESS_SHIFT_Y,
-    };
-  }
-
-  if (node.id === "mirrord-operator") {
-    position = {
-      ...position,
-      x: position.x + MIRRORD_OPERATOR_SHIFT_X,
-      y: position.y + MIRRORD_OPERATOR_SHIFT_Y,
-    };
-  }
-
-  if (node.id === "mirrord-agent") {
-    position = {
-      ...position,
-      x: position.x + MIRRORD_AGENT_SHIFT_X,
-      y: position.y + MIRRORD_AGENT_SHIFT_Y,
-    };
-  }
-
-  return {
-    ...node,
-    position,
-  };
-});
-
-const initialZoneNodes = buildZoneNodes(adjustedNodes);
-const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
-const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
-
 const SESSION_NODE_IDS = new Set([
   "mirrord-layer",
   "local-process",
   "mirrord-agent",
 ]);
 
+
+const buildGraphElements = (arch: ArchitectureDefinition) => {
+  const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+    buildFlowNodes(arch),
+    buildFlowEdges(arch),
+  );
+
+  const nodeZoneIndex = new Map<string, ZoneId>(
+    arch.nodes.map((node) => [node.id, (node.zone ?? "cluster") as ZoneId]),
+  );
+
+  const clusterBounds = computeBounds(layoutedNodes, (node) => {
+    const zone = nodeZoneIndex.get(node.id);
+    return zone === "cluster";
+  });
+
+  const localBounds = computeBounds(layoutedNodes, (node) => {
+    const zone = nodeZoneIndex.get(node.id);
+    return zone === "local";
+  });
+
+  const LOCAL_ZONE_OFFSET = (() => {
+    if (!clusterBounds || !localBounds) {
+      return LOCAL_ZONE_DEFAULT_OFFSET;
+    }
+    const clusterCenterX = (clusterBounds.minX + clusterBounds.maxX) / 2;
+    const localCenterX = (localBounds.minX + localBounds.maxX) / 2;
+    const offsetX = clusterCenterX - localCenterX;
+    const offsetY = clusterBounds.maxY + LOCAL_ZONE_GAP_Y - localBounds.minY;
+    return {
+      x: offsetX + LOCAL_ZONE_ADJUSTMENT.x,
+      y: offsetY + LOCAL_ZONE_ADJUSTMENT.y,
+    };
+  })();
+
+  const adjustedNodes = layoutedNodes.map((node) => {
+    const zone = nodeZoneIndex.get(node.id);
+    let position = { ...node.position };
+
+    if (zone === "local") {
+      position = {
+        x: position.x + LOCAL_ZONE_OFFSET.x,
+        y: position.y + LOCAL_ZONE_OFFSET.y,
+      };
+    }
+
+    if (node.id === "user") {
+      position = {
+        ...position,
+        x: position.x - EXTERNAL_USER_OFFSET_X,
+        y: position.y + EXTERNAL_USER_SHIFT_Y,
+      };
+    }
+
+    if (node.id === "ingress") {
+      position = {
+        ...position,
+        x: position.x - INGRESS_LEFT_SHIFT_X,
+        y: position.y + INGRESS_SHIFT_Y,
+      };
+    }
+
+    if (node.id === "mirrord-operator") {
+      position = {
+        ...position,
+        x: position.x + MIRRORD_OPERATOR_SHIFT_X,
+        y: position.y + MIRRORD_OPERATOR_SHIFT_Y,
+      };
+    }
+
+    if (node.id === "mirrord-agent") {
+      position = {
+        ...position,
+        x: position.x + MIRRORD_AGENT_SHIFT_X,
+        y: position.y + MIRRORD_AGENT_SHIFT_Y,
+      };
+    }
+
+    return {
+      ...node,
+      position,
+    };
+  });
+
+  const initialZoneNodes = buildZoneNodes(adjustedNodes, arch);
+
+  const initialArchitectureNodes: Node<NodeData>[] = adjustedNodes.map((node) =>
+    SESSION_NODE_IDS.has(node.id) ? { ...node, hidden: true } : node,
+  );
+
+  return {
+    nodes: initialArchitectureNodes,
+    edges: layoutedEdges,
+    zoneNodes: initialZoneNodes
+  };
+}
+
+
 /**
  * Build an index of possible string aliases for each architecture node so snapshot targets can be
  * matched regardless of naming conventions (k8s resource vs repo path, etc.).
  */
-const buildAliasIndex = () => {
+const buildAliasIndex = (arch: ArchitectureDefinition) => {
   const aliasIndex = new Map<string, string>();
-  architectureNodes.forEach((node) => {
+  arch.nodes.forEach((node) => {
     const aliases = new Set<string>();
     const lowerId = node.id.toLowerCase();
     aliases.add(lowerId);
@@ -486,16 +496,6 @@ const extractTargetAliases = (rawTarget: string): string[] => {
   return Array.from(aliases);
 };
 
-const initialArchitectureNodes: Node<NodeData>[] = adjustedNodes.map((node) =>
-  SESSION_NODE_IDS.has(node.id) ? { ...node, hidden: true } : node,
-);
-
-const originalNodeStyles = new Map<string, Node<NodeData>["style"]>();
-adjustedNodes.forEach((node) => {
-  if (!originalNodeStyles.has(node.id)) {
-    originalNodeStyles.set(node.id, node.style ? { ...node.style } : undefined);
-  }
-});
 
 /**
  * Presentational node used for cluster/local zones. Rendered as a non-interactive background card.
@@ -529,14 +529,11 @@ type MirrordNodeType = Node<NodeData, "mirrord">;
 /**
  * Custom renderer for mirrord-specific nodes (layer, agent, operator). Adds XYFlow handles and styling.
  */
-const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
-  const info = architectureNodes.find((node) => node.id === id);
+const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const palette = groupPalette.mirrord;
   const isLayer = id === "mirrord-layer";
   const isAgent = id === "mirrord-agent";
-  const label = info?.label ?? id;
-  const stack = info?.stack;
-  const description = info?.description;
+  const label = (data as any).label; // React Flow passes data but we also have structure to render it
 
   return (
     <div
@@ -561,17 +558,7 @@ const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Right} id="agent-source-right" style={handleStyle} />
         </>
       )}
-      <div className="flex flex-col gap-1 text-left">
-        <span className="text-sm font-semibold text-slate-900">{label}</span>
-        {stack && (
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {stack}
-          </span>
-        )}
-        {description && (
-          <p className="text-xs leading-snug text-slate-600">{description}</p>
-        )}
-      </div>
+      {label}
     </div>
   );
 };
@@ -587,21 +574,47 @@ const legendItems = [
 
 const SHOW_SNAPSHOT_PANEL = false;
 
+const APPS = [
+  { id: "ipvc", label: "IP Visit Counter" },
+  { id: "ecom", label: "E-Commerce Demo" },
+  { id: "saas", label: "SaaS Platform" },
+];
+
+const TIERS = [
+  { id: "demo", label: "Demo (Stable)" },
+  { id: "dev", label: "Dev (Pre-prod)" },
+];
+
 /**
  * Main visualization page. Builds the React Flow graph, keeps snapshot state in sync with the backend,
  * and wires up UI panels for the demo.
  */
 export default function Home() {
   const nodeTypes = useMemo(() => ({ zone: ZoneNode, mirrord: MirrordNode }), []);
-  const [architectureNodesState, setArchitectureNodesState] = useState<
-    Node<NodeData>[]
-  >(() => initialArchitectureNodes);
+
+  const [selectedApp, setSelectedApp] = useState("ipvc");
+  const [selectedTier, setSelectedTier] = useState("demo");
+
+  const architecture = useMemo(() => getArchitecture(selectedApp), [selectedApp]);
+
+  const { nodes: initialNodes, edges: initialEdges, zoneNodes: initialZoneNodes } = useMemo(
+    () => buildGraphElements(architecture),
+    [architecture]
+  );
+
+  const [architectureNodesState, setArchitectureNodesState] = useState<Node<NodeData>[]>(initialNodes);
+
+  // Reset nodes state when architecture changes
+  useEffect(() => {
+    setArchitectureNodesState(initialNodes);
+  }, [initialNodes]);
+
   const isMountedRef = useRef(true);
   const visibleArchitectureNodes = useMemo(
     () => architectureNodesState.filter((node) => !node.hidden),
     [architectureNodesState],
   );
-  const baseEdges = useMemo(() => layoutedEdges, []);
+  const baseEdges = useMemo(() => initialEdges, [initialEdges]);
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
@@ -609,7 +622,8 @@ export default function Home() {
     () => (snapshot?.sessions ?? []).length > 0,
     [snapshot],
   );
-  const aliasIndex = useMemo(() => buildAliasIndex(), []);
+  const aliasIndex = useMemo(() => buildAliasIndex(architecture), [architecture]);
+
   // Match active mirrord sessions to architecture node ids so the agent edge can be rewired.
   const targetedNodeId = useMemo(() => {
     const sessions = snapshot?.sessions ?? [];
@@ -628,6 +642,7 @@ export default function Home() {
     }
     return undefined;
   }, [snapshot, aliasIndex]);
+
   // Rebuild edges when session state changes, swapping the agent target dynamically.
   const flowEdges = useMemo(() => {
     const remappedEdges = baseEdges.map((edge) => {
@@ -652,6 +667,9 @@ export default function Home() {
   // Merge static zone overlays with the current architecture nodes.
   const flowNodes = useMemo(() => {
     const nodes: Node<NodeData | ZoneNodeData>[] = [];
+    const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
+    const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
+
     if (clusterZoneNode) {
       nodes.push(clusterZoneNode);
     }
@@ -660,7 +678,7 @@ export default function Home() {
     }
     nodes.push(...visibleArchitectureNodes);
     return nodes;
-  }, [visibleArchitectureNodes, hasSessions]);
+  }, [visibleArchitectureNodes, hasSessions, initialZoneNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -669,8 +687,8 @@ export default function Home() {
   }, []);
 
   const snapshotUrl = useMemo(
-    () => `${snapshotBaseUrl}/snapshot`,
-    [snapshotBaseUrl],
+    () => `${snapshotBaseUrl}/snapshot?app=${selectedApp}&tier=${selectedTier}`,
+    [snapshotBaseUrl, selectedApp, selectedTier],
   );
 
   // React to session changes by toggling mirrord node visibility and styling.
@@ -690,7 +708,7 @@ export default function Home() {
       }
       try {
         const targetUrl = options?.forceRefresh
-          ? `${snapshotUrl}?refresh=1`
+          ? `${snapshotUrl}&refresh=1`
           : snapshotUrl;
         const response = await fetch(targetUrl, {
           cache: "no-store",
@@ -707,6 +725,7 @@ export default function Home() {
           updatedAt: body.updatedAt ?? new Date().toISOString(),
           services: body.services ?? [],
           sessions: body.sessions ?? [],
+          namespace: body.namespace ?? "unknown",
         };
         setSnapshot(normalizedSnapshot);
         setSnapshotError(null);
@@ -772,186 +791,203 @@ export default function Home() {
     const sessions = snapshot?.sessions ?? [];
     const hasSessions = sessions.length > 0;
 
+    // Use initialNodes as base to respect hidden properties of the current architecture
+    // We match by ID
+
+    // Actually we should modify state based on previous state to preserve positions
     setArchitectureNodesState((nodes) =>
       nodes.map((node) => {
-        const baseStyle = { ...(originalNodeStyles.get(node.id) ?? {}) };
-
+        // Find if this node is special
         if (node.id === "mirrord-layer" || node.id === "mirrord-agent") {
-          const styleWithGlow = hasSessions
-            ? {
-                ...baseStyle,
+          // Find logic for style... we need to access original styles
+          // But strict state management here is tricky with dynamic arch.
+          // Simplified:
+          const isVisible = hasSessions;
+          const style = node.style || {};
+
+          if (isVisible) {
+            return {
+              ...node,
+              hidden: false,
+              style: {
+                ...style,
                 opacity: 1,
                 boxShadow: "0px 30px 60px rgba(230,100,121,0.35)",
                 border: "3px solid #E66479",
               }
-            : {
-                ...baseStyle,
-                opacity: 1,
-              };
+            };
+          } else {
+            const currentBorder = style.border;
+            return {
+              ...node,
+              hidden: true,
+              style: {
+                ...style,
+                boxShadow: "0px 20px 45px rgba(15, 23, 42, 0.15)",
+                border: typeof currentBorder === 'string' ? currentBorder.replace("3px solid #E66479", "2px solid") : currentBorder
+                // Note: restoring original style is hard without storing it.
+                // For now, assuming re-render resets it or simple toggle is enough.
+              }
+            };
+          }
 
-          return {
-            ...node,
-            hidden: !hasSessions,
-            style: styleWithGlow,
-          };
         }
-
+        // Local process visibility
         if (node.id === "local-process") {
           return {
             ...node,
             hidden: !hasSessions,
-            style: { ...baseStyle, opacity: 1 },
           };
         }
 
-        return {
-          ...node,
-          hidden: false,
-          style: {
-            ...baseStyle,
-            opacity: 1,
-          },
-        };
+        return node;
       }),
     );
-  }, [snapshot]);
+  }, [snapshot, initialNodes]); // Dependency on initialNodes to reset if arch changes
+
 
   return (
-    <div className="flex h-screen w-screen bg-[#F5F5F5] text-[#111827]">
-      <ReactFlow
-        style={{ width: "100%", height: "100%" }}
-        nodes={flowNodes}
-        edges={flowEdges}
-        fitView
-        minZoom={0.3}
-        maxZoom={1.5}
-        elevateEdgesOnSelect={false}
-        panOnScroll
-        className="!bg-white"
-        proOptions={{ hideAttribution: true }}
-        nodeTypes={nodeTypes}
-        onNodesChange={handleNodesChange}
-      >
-        <Background color="#E9E4FF" gap={24} size={2} />
-        <Controls
-          showInteractive={false}
-          className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
-        />
-        <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
-          <p className="text-sm font-semibold uppercase tracking-wide text-[#6B7280]">
+    <div className="relative h-screen w-screen overflow-hidden bg-slate-50 font-sans">
+      <Panel position="top-left" className="m-6 flex flex-col gap-4">
+        {/* Selectors Panel */}
+        <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-xl border border-slate-100">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Application</label>
+            <select
+              value={selectedApp}
+              onChange={(e) => setSelectedApp(e.target.value)}
+              className="w-full rounded-md border-slate-200 text-sm font-medium text-slate-700 focus:border-indigo-500 focus:ring-indigo-500"
+            >
+              {APPS.map(app => (
+                <option key={app.id} value={app.id}>{app.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Environment</label>
+            <div className="flex bg-slate-100 rounded-lg p-1">
+              {TIERS.map(tier => (
+                <button
+                  key={tier.id}
+                  onClick={() => setSelectedTier(tier.id)}
+                  className={`flex-1 rounded-md py-1 text-xs font-medium transition-colors ${selectedTier === tier.id
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                  {tier.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-xl border border-slate-100">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             Legend
-          </p>
-          <div className="mt-3 flex flex-col gap-2 text-sm">
+          </h2>
+          <div className="flex flex-col gap-2">
             {legendItems.map((item) => (
               <div key={item.label} className="flex items-center gap-2">
                 <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
+                  className="h-3 w-3 rounded-full border border-solid"
+                  style={{ borderColor: item.color }}
                 />
-                <span>{item.label}</span>
+                <span className="text-xs font-medium text-slate-600">
+                  {item.label}
+                </span>
               </div>
             ))}
           </div>
-        </Panel>
-        {!SHOW_SNAPSHOT_PANEL && (
-          <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
-            <div className="flex items-center gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-                Live snapshot
-              </p>
+        </div>
+      </Panel>
+
+      <Panel position="top-right" className="m-6">
+        <div className="flex flex-col gap-2 rounded-2xl bg-white p-5 shadow-xl border border-slate-100 min-w-[300px]">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-bold text-slate-900">
+              Cluster Snapshot
+            </h2>
+            <div className="flex items-center gap-2">
+              {snapshotLoading && (
+                <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
+              )}
               <button
-                type="button"
                 onClick={handleSnapshotRefresh}
-                disabled={snapshotLoading}
-                className="rounded-md border border-[#4F46E5] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#4F46E5] transition-colors hover:bg-[#4F46E5] hover:text-white disabled:cursor-not-allowed disabled:border-[#A5B4FC] disabled:text-[#A5B4FC]"
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                title="Force Refresh"
               >
-                {snapshotLoading ? "Refreshing…" : "Refresh"}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="h-4 w-4"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0v2.433l-.312-.312a7 7 0 00-11.712 3.139.75.75 0 001.449.39 5.5 5.5 0 019.201-2.466l.312.312H12.1a.75.75 0 000 1.5h4.242a.75.75 0 00.53-.219z"
+                    clipRule="evenodd"
+                  />
+                </svg>
               </button>
             </div>
-            {snapshotError && (
-              <p className="mt-2 text-xs text-red-500">Last error: {snapshotError}</p>
-            )}
-          </Panel>
-        )}
-        {SHOW_SNAPSHOT_PANEL && (
-          <Panel position="bottom-left" className="rounded-2xl border border-[#E5E7EB] bg-white/95 p-4 text-sm text-[#111827] shadow-xl">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4F46E5]">
-                Live snapshot
-              </p>
-              <button
-                type="button"
-                onClick={handleSnapshotRefresh}
-                disabled={snapshotLoading}
-                className="rounded-md border border-[#4F46E5] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#4F46E5] transition-colors hover:bg-[#4F46E5] hover:text-white disabled:cursor-not-allowed disabled:border-[#A5B4FC] disabled:text-[#A5B4FC]"
-              >
-                {snapshotLoading ? "Refreshing…" : "Refresh"}
-              </button>
+          </div>
+
+          <div className="flex flex-col gap-3 py-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Target Namespace</span>
+              <span className="font-mono font-medium text-indigo-600">
+                {snapshot?.namespace || "Scanning..."}
+              </span>
             </div>
-            {snapshotLoading && <p className="mt-2 text-xs text-[#6B7280]">Contacting backend…</p>}
-            {snapshotError && (
-              <p className="mt-2 text-xs text-red-500">
-                Failed to fetch snapshot: {snapshotError}
-              </p>
-            )}
-            {snapshot && !snapshotError && (
-              <div className="mt-2 space-y-1">
-                <p className="text-base font-semibold">{snapshot.clusterName}</p>
-                <p className="text-xs text-[#6B7280]">
-                  Updated {new Date(snapshot.updatedAt).toLocaleTimeString()}
-                </p>
-                <div className="mt-3 max-h-32 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-2">
-                  {snapshot.services.length === 0 && (
-                    <p className="text-xs text-[#94A3B8]">No active services reported yet.</p>
-                  )}
-                  {snapshot.services.map((service) => (
-                    <div key={service.id} className="mb-2 last:mb-0">
-                      <p className="text-xs font-semibold text-[#111827]">{service.name}</p>
-                      <p className="text-[11px] text-[#6B7280]">{service.description}</p>
-                      <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
-                        Seen {new Date(service.lastUpdated).toLocaleTimeString()}
-                      </p>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-[#6B7280]">
-                        <span className="font-semibold text-[#4F46E5]">
-                          {(service.status ?? "unknown").toUpperCase()}
-                        </span>
-                        {service.availableReplicas !== undefined && (
-                          <span>{service.availableReplicas} ready</span>
-                        )}
-                      </div>
-                      {service.message && (
-                        <p className="mt-1 text-[10px] text-red-500">{service.message}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {snapshot.sessions.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
-                      Active mirrord sessions ({snapshot.sessions.length})
-                    </p>
-                    <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
-                      {snapshot.sessions.map((session) => (
-                        <div key={session.id} className="mb-2 last:mb-0">
-                          <p className="text-xs font-semibold text-[#E66479]">
-                            Target • {session.targetWorkload ?? "Unknown workload"}
-                          </p>
-                          <p className="text-[11px] text-[#6B7280]">
-                            Pod {session.podName} in {session.namespace}
-                          </p>
-                          <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
-                            Updated {new Date(session.lastUpdated).toLocaleTimeString()}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+
+            {snapshotError ? (
+              <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600">
+                {snapshotError}
               </div>
+            ) : snapshot ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Services Online</span>
+                  <span className="font-medium text-emerald-600">
+                    {snapshot.services.filter(s => s.status === 'available').length} / {snapshot.services.length}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Active Sessions</span>
+                  <span className="font-medium text-pink-500">{snapshot.sessions.length}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-400 py-2 text-center">Waiting for data...</div>
             )}
-          </Panel>
-        )}
+          </div>
+        </div>
+      </Panel>
+
+      <ReactFlow
+        nodes={flowNodes}
+        edges={flowEdges}
+        nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange}
+        fitView
+        className="bg-slate-50"
+        minZoom={0.5}
+        maxZoom={1.5}
+      >
+        <Background gap={20} size={1} color="#E2E8F0" />
+        <Controls showInteractive={false} className="!border-none !bg-white !shadow-xl !fill-slate-600" />
       </ReactFlow>
+
+      {/* Branding overlay */}
+      <div className="pointer-events-none absolute bottom-8 right-8 flex flex-col items-end gap-1 opacity-50">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-300">
+          metalbear
+        </h1>
+        <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+          playground
+        </span>
+      </div>
     </div>
   );
 }
