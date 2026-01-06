@@ -72,53 +72,68 @@ jobs:
           push: true
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
 
+      - name: Export Tag Info
+        run: |
+          echo "${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}" > ${{ matrix.service }}.tag
+
+      - name: Upload Tag Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tag-${{ matrix.service }}
+          path: ${{ matrix.service }}.tag
+
+  update-manifests:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
       - name: Install Kustomize
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
           sudo mv kustomize /usr/local/bin/
 
-      - name: Determine Kustomize Directory
-        id: kustomize-dir
-        run: |
-          if [[ "${{ matrix.service }}" == "visualization-backend" ]] || [[ "${{ matrix.service }}" == "visualization-frontend" ]]; then
-            echo "dir=apps/visualization/k8s/overlays/dev" >> $GITHUB_OUTPUT
-            echo "file=apps/visualization/k8s/overlays/dev/kustomization.yaml" >> $GITHUB_OUTPUT
-          else
-            echo "dir=apps/ipvc/k8s/overlays/dev" >> $GITHUB_OUTPUT
-            echo "file=apps/ipvc/k8s/overlays/dev/kustomization.yaml" >> $GITHUB_OUTPUT
-          fi
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: tags
+          pattern: tag-*
+          merge-multiple: true
 
-      - name: Update Image Tag in Kustomize
-        working-directory: ${{ steps.kustomize-dir.outputs.dir }}
+      - name: Update Manifests
         run: |
-          kustomize edit set image ${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
+          # Loop through all tag files
+          for tagfile in tags/*.tag; do
+            SERVICE_TAG=$(cat $tagfile)
+            SERVICE_NAME=${SERVICE_TAG%%=*}
+            NEW_IMAGE=${SERVICE_TAG#*=}
+            
+            echo "Updating $SERVICE_NAME to $NEW_IMAGE"
+            
+            # Determine correct kustomization directory
+            if [[ "$SERVICE_NAME" == "visualization-backend" ]] || [[ "$SERVICE_NAME" == "visualization-frontend" ]]; then
+              KUSTOMIZE_DIR="apps/visualization/k8s/overlays/dev"
+            else
+              KUSTOMIZE_DIR="apps/ipvc/k8s/overlays/dev"
+            fi
+            
+            # Update the image
+            (cd $KUSTOMIZE_DIR && kustomize edit set image $SERVICE_NAME=$NEW_IMAGE)
+          done
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add ${{ steps.kustomize-dir.outputs.file }}
+          git add .
           
-          # Check if there are changes to commit
           if git diff --staged --quiet; then
             echo "No changes to commit"
             exit 0
           fi
 
-          git commit -m "chore(ci): update image tag for ${{ matrix.service }} to ${{ github.sha }}"
-          
-          # Retry loop for push with rebase
-          MAX_RETRIES=10
-          for ((i=1; i<=MAX_RETRIES; i++)); do
-            echo "Push attempt $i..."
-            git pull origin ${{ github.ref_name }} --rebase
-            if git push origin ${{ github.ref_name }}; then
-              echo "Push successful!"
-              exit 0
-            fi
-            echo "Push failed. Retrying in $((i*2)) seconds..."
-            sleep $((i*2))
-          done
-          
-          echo "Failed to push after $MAX_RETRIES attempts."
-          exit 1
+          git commit -m "chore(ci): update image tags for ${{ github.sha }}"
+          git push origin ${{ github.ref_name }}
