@@ -13,8 +13,8 @@ spec:
   project: default
   source:
     path: base/ip-visit-sqs-consumer
-    repoURL: https://github.com/metalbear-co/playground
-    targetRevision: HEAD
+    repoURL: https://github.com/metalbear-co/playground.git
+    targetRevision: gke-dev-playground
   syncPolicy:
     automated:
       prune: true

@@ -22,6 +22,7 @@ type ServiceStatus = {
   status?: "available" | "degraded" | "unavailable";
   availableReplicas?: number;
   message?: string;
+  namespace?: string;
 };
 
 /**
@@ -62,223 +63,93 @@ type ClusterSnapshot = {
   updatedAt: string;
   services: ServiceStatus[];
   sessions: SessionStatus[];
+  namespace: string;
 };
 
 /**
- * In-memory store that keeps the latest cluster snapshot. All pollers and API handlers interact with
- * this store so the frontend can always pull a single coherent object.
+ * Store that manages snapshots keyed by namespace.
  */
 class SnapshotStore {
   private clusterName: string;
-  private services = new Map<string, ServiceStatus>();
-  private sessions = new Map<string, SessionStatus>();
+  // Map<Namespace, SnapshotData>
+  private snapshots = new Map<string, {
+    services: Map<string, ServiceStatus>;
+    sessions: Map<string, SessionStatus>;
+    lastUpdated: string;
+  }>();
 
   constructor(clusterName: string) {
     this.clusterName = clusterName;
   }
 
-  public setClusterName(name: string) {
-    this.clusterName = name;
+  private getNamespaceStore(namespace: string) {
+    let store = this.snapshots.get(namespace);
+    if (!store) {
+      store = {
+        services: new Map(),
+        sessions: new Map(),
+        lastUpdated: new Date().toISOString()
+      };
+      this.snapshots.set(namespace, store);
+    }
+    return store;
   }
 
-  public getSnapshot(): ClusterSnapshot {
+  public getSnapshot(namespace: string): ClusterSnapshot {
+    const store = this.getNamespaceStore(namespace);
     return {
       clusterName: this.clusterName,
-      updatedAt: new Date().toISOString(),
-      services: Array.from(this.services.values()).sort((a, b) =>
+      namespace,
+      updatedAt: store.lastUpdated,
+      services: Array.from(store.services.values()).sort((a, b) =>
         a.name.localeCompare(b.name),
       ),
-      sessions: Array.from(this.sessions.values()).sort((a, b) =>
+      sessions: Array.from(store.sessions.values()).sort((a, b) =>
         a.podName.localeCompare(b.podName),
       ),
     };
   }
 
-  public replaceSnapshot(partial: Partial<ClusterSnapshot>) {
-    if (partial.clusterName) {
-      this.clusterName = partial.clusterName;
-    }
-
-    this.services.clear();
-    partial.services?.forEach((service) => {
-      const status: ServiceStatus = {
-        ...service,
-        lastUpdated: service.lastUpdated ?? new Date().toISOString(),
-      };
-      this.services.set(status.id, status);
-    });
-
-    if (partial.sessions) {
-      this.sessions.clear();
-      partial.sessions.forEach((session) => {
-        const status: SessionStatus = {
-          ...session,
-          lastUpdated: session.lastUpdated ?? new Date().toISOString(),
-        };
-        this.sessions.set(status.id, status);
-      });
-    }
+  public updateServices(namespace: string, services: ServiceStatus[]) {
+    const store = this.getNamespaceStore(namespace);
+    store.services.clear(); // Replace current state for this namespace
+    services.forEach(s => store.services.set(s.id, s));
+    store.lastUpdated = new Date().toISOString();
   }
 
-  public upsertService(service: ServiceStatus) {
-    this.services.set(service.id, service);
-  }
-
-  public removeService(id: string) {
-    this.services.delete(id);
-  }
-
-  public setSessions(nextSessions: SessionStatus[]) {
-    this.sessions.clear();
-    nextSessions.forEach((session) => {
-      this.sessions.set(session.id, session);
-    });
+  public updateSessions(namespace: string, sessions: SessionStatus[]) {
+    const store = this.getNamespaceStore(namespace);
+    store.sessions.clear();
+    sessions.forEach(s => store.sessions.set(s.id, s));
+    store.lastUpdated = new Date().toISOString();
   }
 }
 
 const snapshotStore = new SnapshotStore(process.env.CLUSTER_NAME || "playground");
 
-let triggerDeploymentPoll: (() => Promise<void>) | null = null;
-let triggerAgentPoll: (() => Promise<void>) | null = null;
-
 /**
- * Helper used by refresh endpoints/query params to run the pollers synchronously on demand.
+ * Resolve (app, tier) to a Kubernetes Namespace.
  */
-const runRefreshPollers = async () => {
-  if (triggerDeploymentPoll) {
-    await triggerDeploymentPoll();
+const resolveNamespace = (app: string, tier: string): string => {
+  // Default fallback
+  if (!app || !tier) return "default";
+
+  // Convention:
+  // tier=demo -> demo-{app}
+  // tier=dev  -> demo-{app}-dev
+  const cleanApp = app.toLowerCase();
+  const cleanTier = tier.toLowerCase();
+
+  if (cleanTier === "dev") {
+    return `demo-${cleanApp}-dev`;
   }
-  if (triggerAgentPoll) {
-    await triggerAgentPoll();
-  }
+  return `demo-${cleanApp}`;
 };
 
-app.get("/healthz", (_req, res) => {
-  res.json({ status: "ok" });
-});
+const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "5000");
 
 /**
- * Route helper that allows us to serve the visualization backend under multiple URL prefixes
- * (e.g. /snapshot locally and /visualization/api/snapshot behind the public ingress).
- */
-const snapshotPaths = ["/snapshot", "/visualization/api/snapshot"];
-const snapshotPostPaths = ["/snapshot", "/visualization/api/snapshot"];
-const snapshotRefreshPaths = [
-  "/snapshot/refresh",
-  "/visualization/api/snapshot/refresh",
-];
-
-/**
- * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
- */
-app.get(snapshotPaths, async (req, res) => {
-  try {
-    const wantsRefresh =
-      req.query.refresh === "1" || req.query.refresh === "true";
-    if (wantsRefresh) {
-      await runRefreshPollers();
-    }
-    res.json(snapshotStore.getSnapshot());
-  } catch (error) {
-    console.error(
-      "Snapshot retrieval failed",
-      error instanceof Error ? error.message : error,
-    );
-    res.status(500).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to retrieve snapshot. See server logs for details.",
-    });
-  }
-});
-
-/**
- * Replace the snapshot with user-provided data (handy for demos without a real cluster).
- */
-app.post(snapshotPostPaths, (req, res) => {
-  const body = req.body as Partial<ClusterSnapshot>;
-  snapshotStore.replaceSnapshot(body);
-  res.json(snapshotStore.getSnapshot());
-});
-
-/**
- * Force both pollers to run and return the updated snapshot.
- */
-app.post(snapshotRefreshPaths, async (_req, res) => {
-  try {
-    await runRefreshPollers();
-    res.json(snapshotStore.getSnapshot());
-  } catch (error) {
-    console.error(
-      "Snapshot refresh failed",
-      error instanceof Error ? error.message : error,
-    );
-    res.status(500).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to refresh snapshot. See server logs for details.",
-    });
-  }
-});
-
-type KnownDeployment = {
-  id: string;
-  name: string;
-  description: string;
-  deployment: string;
-  namespace?: string;
-};
-
-/**
- * Deployments we poll for status information. Each entry becomes a service node in the snapshot.
- */
-const knownDeployments: KnownDeployment[] = [
-  {
-    id: "mirrord-operator",
-    name: "mirrord operator",
-    description: "Injects mirrord sessions",
-    deployment: "mirrord-operator",
-    namespace: "mirrord",
-  },
-  {
-    id: "ip-visit-counter",
-    name: "ip-visit-counter",
-    description: "Counts visits and emits events",
-    deployment: "ip-visit-counter",
-  },
-  {
-    id: "ip-visit-consumer",
-    name: "ip-visit-consumer",
-    description: "Kafka consumer printing visit events",
-    deployment: "ip-visit-consumer",
-  },
-  {
-    id: "ip-info",
-    name: "ip-info",
-    description: "HTTP IP info service",
-    deployment: "ip-info",
-  },
-  {
-    id: "ip-info-grpc",
-    name: "ip-info-grpc",
-    description: "gRPC IP info service",
-    deployment: "ip-info-grpc",
-  },
-  {
-    id: "redis",
-    name: "redis",
-    description: "Caching layer",
-    deployment: "redis-main",
-  },
-];
-
-const defaultNamespace = process.env.WATCH_NAMESPACE || "default";
-const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
-
-/**
- * Attempt to load Kubernetes credentials (preferring in-cluster config, falling back to local kubeconfig).
+ * Attempt to load Kubernetes credentials.
  */
 const loadKubeConfiguration = (): KubeConfig | null => {
   const kubeConfig = new KubeConfig();
@@ -292,238 +163,154 @@ const loadKubeConfiguration = (): KubeConfig | null => {
       console.log("Loaded local kubeconfig");
       return kubeConfig;
     } catch (localError) {
-      console.warn(
-        "Kubernetes configuration not found; automatic snapshot updates disabled.",
-      );
+      console.warn("Kubernetes configuration not found; automatic snapshot updates disabled.");
       return null;
     }
   }
 };
 
-const startDeploymentPoller = (kubeConfig: KubeConfig) => {
+/**
+ * Shared poller logic.
+ * Note: To keep it simple and scalable, we will poll namespaces demand-driven or just poll known namespaces.
+ * For this implementation, we will fetch ALL namespaces that look like `demo-*` to populate the cache proactively,
+ * OR allows polling specific namespace on request.
+ * 
+ * Given we want a reactive "Target-Aware" system, polling active namespaces is better.
+ */
+const startPollers = (kubeConfig: KubeConfig) => {
   const appsApi = kubeConfig.makeApiClient(AppsV1Api);
-
-  /**
-   * Poll Kubernetes Deployments listed in `knownDeployments` and update the snapshot with their status.
-   */
-  const poll = async () => {
-    await Promise.all(
-      knownDeployments.map(async (service) => {
-        const namespace = service.namespace ?? defaultNamespace;
-
-        try {
-          const deployment = await appsApi.readNamespacedDeploymentStatus({
-            name: service.deployment,
-            namespace,
-          });
-          const available = deployment.status?.availableReplicas ?? 0;
-
-          if (available > 0) {
-            snapshotStore.upsertService({
-              id: service.id,
-              name: service.name,
-              description: service.description,
-              lastUpdated: new Date().toISOString(),
-              status: "available",
-              availableReplicas: available,
-            });
-          } else {
-            snapshotStore.removeService(service.id);
-          }
-        } catch (error) {
-          console.warn(
-            `Failed to read deployment ${service.deployment} in namespace ${namespace}`,
-            error instanceof Error ? error.message : error,
-          );
-          snapshotStore.upsertService({
-            id: service.id,
-            name: service.name,
-            description: service.description,
-            lastUpdated: new Date().toISOString(),
-            status: "degraded",
-            message:
-              error instanceof Error ? error.message : "Unknown Kubernetes error",
-          });
-        }
-      }),
-    ).then(() => {
-      const snapshot = snapshotStore.getSnapshot();
-      console.log(
-        `[deployment-poller] ${new Date().toISOString()} - ` +
-          `${snapshot.services.length} services tracked`,
-      );
-    });
-  };
-
-  const runPoll = async () => {
-    try {
-      await poll();
-    } catch (error) {
-      console.error(
-        "Deployment poll failed",
-        error instanceof Error ? error.message : error,
-      );
-      throw error;
-    }
-  };
-
-  runPoll().catch(() => {
-    /* error logged above */
-  });
-  setInterval(() => {
-    runPoll().catch(() => {
-      /* error logged above */
-    });
-  }, pollIntervalMs);
-
-  return runPoll;
-};
-
-const startMirrordAgentPoller = (kubeConfig: KubeConfig) => {
   const coreApi = kubeConfig.makeApiClient(CoreV1Api);
 
-  /**
-   * Poll pods across the cluster, index container IDs, and resolve mirrord agents back to their
-   * targeted workloads using the agent `--container-id` flag.
-   */
-  const poll = async () => {
+  const pollNamespaces = async () => {
     try {
-      const pods = await coreApi.listPodForAllNamespaces();
-      const containerIdIndex = new Map<
-        string,
-        {
-          namespace: string;
-          podName: string;
-          workload: string;
-        }
-      >();
-      pods.items?.forEach((pod) => {
-        const namespace = pod.metadata?.namespace ?? "default";
-        const podName = pod.metadata?.name ?? "unknown-pod";
-        const ownerReferences = pod.metadata?.ownerReferences ?? [];
-        const ownerWorkload = ownerReferences.find((owner) =>
-          [
-            "Deployment",
-            "StatefulSet",
-            "DaemonSet",
-            "Job",
-            "CronJob",
-          ].includes(owner.kind ?? ""),
-        )?.name;
-        const replicaSetOwner = ownerReferences.find(
-          (owner) => owner.kind === "ReplicaSet",
-        )?.name;
-        const inferredWorkload = ownerWorkload ?? replicaSetOwner ?? podName;
-        const workloadId = `${namespace}/${inferredWorkload}`;
+      // List all namespaces to find targets
+      const nsList = await coreApi.listNamespace();
+      // @ts-ignore
+      const nsItems = nsList.body ? nsList.body.items : (nsList.items || []);
 
-        const containerStatuses = [
-          ...(pod.status?.containerStatuses ?? []),
-          ...(pod.status?.initContainerStatuses ?? []),
-        ];
-        containerStatuses.forEach((status) => {
-          const normalizedId = normalizeContainerId(status.containerID);
-          if (!normalizedId) {
-            return;
-          }
-          containerIdIndex.set(normalizedId, {
-            namespace,
-            podName,
-            workload: workloadId,
-          });
+      const demoNamespaces = nsItems
+        .map((ns: any) => ns.metadata?.name || "")
+        .filter((name: any) => typeof name === 'string' && name.startsWith("demo-"));
+
+      // For each demo namespace, poll deployments
+      await Promise.all(demoNamespaces.map(async (ns: string) => {
+        try {
+          // @ts-ignore - The types for this client library can be slightly misaligned with the actual method signature in some versions or usage contexts
+          const deployList = await appsApi.listNamespacedDeployment(ns);
+          // @ts-ignore
+          const items = deployList.body ? deployList.body.items : (deployList.items || []);
+
+          const services: ServiceStatus[] = items.map((d: any) => ({
+            id: d.metadata?.name || "",
+            name: d.metadata?.name || "",
+            description: "Managed by ArgoCD",
+            lastUpdated: new Date().toISOString(),
+            status: (d.status?.availableReplicas ?? 0) > 0 ? "available" : "degraded",
+            availableReplicas: d.status?.availableReplicas ?? 0,
+            namespace: ns
+          }));
+          snapshotStore.updateServices(ns, services);
+        } catch (e) {
+          console.error(`Failed to poll deployments in ${ns}`, e);
+        }
+      }));
+
+      // Poll mirrord sessions globally and partition by namespace
+      const podsResponse = await coreApi.listPodForAllNamespaces();
+      // @ts-ignore
+      const allPods = podsResponse.body ? podsResponse.body.items : (podsResponse.items || []);
+
+      const sessionsByNamespace = new Map<string, SessionStatus[]>();
+
+      // Index container IDs (Global)
+      const containerIdIndex = new Map<string, { namespace: string; workload: string }>();
+      allPods.forEach((pod: any) => {
+        const ns = pod.metadata?.namespace || "default";
+        const podName = pod.metadata?.name || "";
+        const owner = pod.metadata?.ownerReferences?.[0]?.name || podName;
+        const workloadId = `${ns}/${owner}`; // Simplified workload ID
+
+        pod.status?.containerStatuses?.forEach((status: any) => {
+          const normId = normalizeContainerId(status.containerID);
+          if (normId) containerIdIndex.set(normId, { namespace: ns, workload: workloadId });
         });
       });
 
-      const sessions: SessionStatus[] = [];
-      pods.items?.forEach((pod) => {
-        const containers = [
-          ...(pod.spec?.containers ?? []),
-          ...(pod.spec?.initContainers ?? []),
-        ];
-        const agentContainer = containers.find((container) =>
-          container.name.includes("mirrord-agent"),
-        );
-        if (!agentContainer) {
-          return;
-        }
+      // Find Agents
+      allPods.forEach((pod: any) => {
+        // Check if it's a mirrord agent
+        const agentContainer = pod.spec?.containers.find((c: any) => c.name.includes("mirrord-agent"));
+        if (!agentContainer) return;
 
-        const namespace = pod.metadata?.namespace ?? "default";
-        const podName = pod.metadata?.name ?? "unknown-pod";
-        const agentArgs = [
-          ...(agentContainer.command ?? []),
-          ...(agentContainer.args ?? []),
-        ];
-        const containerIdFlagIndex = agentArgs.findIndex(
-          (arg) => arg === "--container-id",
-        );
-        if (containerIdFlagIndex === -1) {
-          return;
-        }
-        const targetContainerId = agentArgs[containerIdFlagIndex + 1];
-        const normalizedTargetId = normalizeContainerId(targetContainerId);
-        if (!normalizedTargetId) {
-          return;
-        }
+        const args = agentContainer.args || [];
+        const idx = args.indexOf("--container-id");
+        if (idx === -1) return;
 
-        const targetInfo = containerIdIndex.get(normalizedTargetId);
-        if (!targetInfo) {
-          return;
-        }
+        const targetId = normalizeContainerId(args[idx + 1]);
+        if (!targetId || !containerIdIndex.has(targetId)) return;
 
-        const targetWorkload = targetInfo.workload;
-        sessions.push({
-          id: `${namespace}/${podName}`,
-          podName,
-          namespace,
-          targetWorkload,
-          lastUpdated: new Date().toISOString(),
-        });
+        const targetInfo = containerIdIndex.get(targetId)!;
+        const session: SessionStatus = {
+          id: pod.metadata?.name || "",
+          podName: pod.metadata?.name || "",
+          namespace: targetInfo.namespace,
+          targetWorkload: targetInfo.workload,
+          lastUpdated: new Date().toISOString()
+        };
+
+        if (!sessionsByNamespace.has(targetInfo.namespace)) {
+          sessionsByNamespace.set(targetInfo.namespace, []);
+        }
+        sessionsByNamespace.get(targetInfo.namespace)?.push(session);
       });
-      snapshotStore.setSessions(sessions);
-      console.log(
-        `[agent-poller] ${new Date().toISOString()} - ${sessions.length} mirrord agents detected`,
-      );
-    } catch (error) {
-      console.warn(
-        "Failed to poll mirrord agent pods",
-        error instanceof Error ? error.message : error,
-      );
-      throw error;
+
+      // Update store for all namespaces (clearing those with no sessions if needed)
+      demoNamespaces.forEach((ns: string) => {
+        snapshotStore.updateSessions(ns, sessionsByNamespace.get(ns) || []);
+      });
+
+    } catch (e) {
+      console.error("Poller error", e);
     }
   };
 
   const runPoll = async () => {
-    try {
-      await poll();
-    } catch (error) {
-      console.error(
-        "Mirrord agent poll failed",
-        error instanceof Error ? error.message : error,
-      );
-      throw error;
-    }
+    await pollNamespaces();
   };
 
-  runPoll().catch(() => {
-    /* error logged above */
-  });
-  setInterval(() => {
-    runPoll().catch(() => {
-      /* error logged above */
-    });
-  }, pollIntervalMs);
+  setInterval(runPoll, pollIntervalMs);
+  runPoll(); // Initial run
 
   return runPoll;
 };
 
 const kubeConfig = loadKubeConfiguration();
+let forcePoll: (() => Promise<void>) | null = null;
 if (kubeConfig) {
-  triggerDeploymentPoll = startDeploymentPoller(kubeConfig);
-  triggerAgentPoll = startMirrordAgentPoller(kubeConfig);
-} else {
-  console.warn(
-    "Kubernetes configuration unavailable; snapshot watchers are disabled.",
-  );
+  forcePoll = startPollers(kubeConfig);
 }
+
+app.get(["/snapshot", "/visualization/api/snapshot"], async (req, res) => {
+  const app = req.query.app as string;
+  const tier = req.query.tier as string;
+
+  if (!app || !tier) {
+    res.status(400).json({ error: "Missing 'app' or 'tier' query parameters." });
+    return;
+  }
+
+  const ns = resolveNamespace(app, tier);
+
+  if (req.query.refresh === "true" && forcePoll) {
+    await forcePoll();
+  }
+
+  res.json(snapshotStore.getSnapshot(ns));
+});
+
+app.get("/healthz", (_req, res) => {
+  res.json({ status: "ok" });
+});
 
 app.listen(port, () => {
   console.log(`Visualization backend listening on port ${port}`);

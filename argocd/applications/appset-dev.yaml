@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: playground-apps-dev
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+  - git:
+      repoURL: https://github.com/metalbear-co/playground.git
+      revision: gke-dev-playground
+      directories:
+      - path: apps/*
+  template:
+    metadata:
+      name: '{{.path.basename}}-dev'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/metalbear-co/playground.git
+        targetRevision: gke-dev-playground
+        path: '{{.path}}/k8s/overlays/dev'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'demo-{{.path.basename}}-dev'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true

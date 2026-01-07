@@ -12,3 +12,6 @@ resources:
   - ip-visit-sqs-consumer.yaml
   - kafka.yaml
   - redis.yaml
+  - external-secrets.yaml
+  - mirrord-operator.yaml
+

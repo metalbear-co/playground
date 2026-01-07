@@ -1,0 +1,141 @@
+name: Build and Push
+
+on:
+  push:
+    branches: [ "main", "gke-dev-playground" ]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'mirrord-test' }}
+  REGION: us-central1
+  GAR_REPO: playground-repo
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: ip-visit-counter
+            path: ip-visit-counter
+            context: .
+          - service: ip-visit-consumer
+            path: ip-visit-consumer
+            context: ip-visit-consumer
+          - service: ip-visit-frontend
+            path: ip-visit-frontend
+            context: ip-visit-frontend
+          - service: ip-visit-sqs-consumer
+            path: ip-visit-sqs-consumer
+            context: ip-visit-sqs-consumer
+          - service: visualization-backend
+            path: visualization-backend
+            context: visualization-backend
+          - service: visualization-frontend
+            path: visualization
+            context: visualization
+          - service: ip-info
+            path: ip-info
+            context: ip-info
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/895562686539/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
+          service_account: 'github-actions-sa@mirrord-test.iam.gserviceaccount.com'
+
+      - name: Docker Auth
+        id: docker-auth
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Build and Push
+        id: build-push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.path }}/Dockerfile
+          push: true
+          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
+
+      - name: Export Tag Info
+        run: |
+          echo "${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}" > ${{ matrix.service }}.tag
+
+      - name: Upload Tag Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tag-${{ matrix.service }}
+          path: ${{ matrix.service }}.tag
+
+  update-manifests:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Kustomize
+        run: |
+          curl -LO https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.3.0/kustomize_v5.3.0_linux_amd64.tar.gz
+          tar -xzf kustomize_v5.3.0_linux_amd64.tar.gz
+          sudo mv kustomize /usr/local/bin/
+          rm kustomize_v5.3.0_linux_amd64.tar.gz
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: tags
+          pattern: tag-*
+          merge-multiple: true
+
+      - name: Update Manifests
+        run: |
+          # Loop through all tag files
+          for tagfile in tags/*.tag; do
+            SERVICE_TAG=$(cat $tagfile)
+            SERVICE_NAME=${SERVICE_TAG%%=*}
+            NEW_IMAGE=${SERVICE_TAG#*=}
+            
+            echo "Updating $SERVICE_NAME to $NEW_IMAGE"
+            
+            # Determine correct kustomization directory
+            if [[ "$SERVICE_NAME" == "visualization-backend" ]] || [[ "$SERVICE_NAME" == "visualization-frontend" ]]; then
+              KUSTOMIZE_DIR="apps/visualization/k8s/overlays/dev"
+            else
+              KUSTOMIZE_DIR="apps/ipvc/k8s/overlays/dev"
+            fi
+            
+            # Update the image
+            (cd $KUSTOMIZE_DIR && kustomize edit set image $SERVICE_NAME=$NEW_IMAGE)
+          done
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore(ci): update image tags for ${{ github.sha }}"
+          git push origin ${{ github.ref_name }}

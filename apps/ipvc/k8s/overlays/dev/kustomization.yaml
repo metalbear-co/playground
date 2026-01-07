@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base
+
+patches:
+- path: ip-visit-counter-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ip-visit-counter
+    version: v1
+- path: ip-visit-sqs-consumer-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ip-visit-sqs-consumer
+    version: v1
+images:
+- name: ip-info
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-info
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319
+- name: ip-visit-consumer
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-consumer
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319
+- name: ip-visit-counter
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-counter
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319
+- name: ip-visit-frontend
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-frontend
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319
+- name: ip-visit-sqs-consumer
+  newName: us-central1-docker.pkg.dev/mirrord-test/playground-repo/ip-visit-sqs-consumer
+  newTag: d5db8756153f8f166a9e9c2f4fb81db1006b0319

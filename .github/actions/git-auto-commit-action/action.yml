@@ -1,0 +1,104 @@
+name: Git Auto Commit
+description: 'Automatically commits files which have been changed during the workflow run and push changes back to remote repository.'
+
+author: Stefan Zweifel <stefan@stefanzweifel.dev>
+
+inputs:
+  commit_message:
+    description: Commit message
+    required: false
+    default: Apply automatic changes
+  branch:
+    description: Git branch name, where changes should be pushed too. Required if Action is used on the `pull_request` event
+    required: false
+    default: ${{ github.head_ref }}
+  commit_options:
+    description: Commit options (eg. --no-verify)
+    required: false
+    default: ''
+  add_options:
+    description: Add options (eg. -u)
+    required: false
+    default: ''
+  status_options:
+    description: Status options (eg. --untracked-files=no)
+    required: false
+    default: ''
+  file_pattern:
+    description: File pattern used for `git add`. For example `src/*.js`
+    required: false
+    default: '.'
+  repository:
+    description: Local file path to the git repository. Defaults to the current directory (`.`)
+    required: false
+    default: '.'
+  commit_user_name:
+    description: Name used for the commit user
+    required: false
+    default: github-actions[bot]
+  commit_user_email:
+    description: Email address used for the commit user
+    required: false
+    default: 41898282+github-actions[bot]@users.noreply.github.com
+  commit_author:
+    description: Value used for the commit author. Defaults to the username of whoever triggered this workflow run.
+    required: false
+    default: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
+  tag_name:
+    description: Tag name used for creating a new git tag with the commit. Keep this empty, if no tag should be created.
+    required: false
+    default: ''
+  tagging_message:
+    description: Tagging message used for creating a new git tag with the commit. Keep this empty, if no tag should be created.
+    required: false
+    default: ''
+  push_options:
+    description: Push options (eg. --force)
+    required: false
+    default: ''
+  skip_dirty_check:
+    description: Skip the check if the git repository is dirty and always try to create a commit.
+    required: false
+    default: false
+  skip_fetch:
+    description: Skip the call to git-fetch.
+    required: false
+    default: false
+  skip_checkout:
+    description: Skip the call to git-checkout.
+    required: false
+    default: false
+  skip_push:
+    description: Skip the call to git-push.
+    required: false
+    default: false
+  disable_globbing:
+    description: Stop the shell from expanding filenames (https://www.gnu.org/software/bash/manual/html_node/Filename-Expansion.html)
+    default: false
+  create_branch:
+    description: Create new branch with the name of `branch`-input in local and remote repository, if it doesn't exist yet.
+    default: false
+  create_git_tag_only:
+    description: Perform a clean git tag and push, without commiting anything
+    required: false
+    default: false
+  internal_git_binary:
+    description: Internal use only! Path to git binary used to check if git is available. (Don't change this!)
+    default: git
+
+
+outputs:
+  changes_detected:
+    description: Value is "true", if the repository was dirty and file changes have been detected. Value is "false", if no changes have been detected.
+  commit_hash:
+    description: Full hash of the created commit. Only present if the "changes_detected" output is "true".
+  create_git_tag_only:
+    description: Value is "true", if a git tag was created using the `create_git_tag_only`-input.
+
+runs:
+  using: 'node24'
+  main: 'index.js'
+
+branding:
+  icon: 'git-commit'
+  color: orange

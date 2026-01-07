@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mirrord-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    chart: mirrord-operator
+    repoURL: https://metalbear-co.github.io/charts
+    targetRevision: 1.38.0 # Latest stable version found
+    helm:
+      parameters:
+        - name: license.keyRef
+          value: mirrord-operator-license
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mirrord
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

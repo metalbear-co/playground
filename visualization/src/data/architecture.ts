@@ -4,12 +4,12 @@ export type ArchitectureNode = {
   stack?: string;
   description: string;
   group:
-    | "entry"
-    | "infra"
-    | "service"
-    | "data"
-    | "queue"
-    | "mirrord";
+  | "entry"
+  | "infra"
+  | "service"
+  | "data"
+  | "queue"
+  | "mirrord";
   repoPath?: string;
   zone?: "cluster" | "external" | "local";
 };
@@ -30,9 +30,16 @@ export type ArchitectureZone = {
   border: string;
   background: string;
   accent: string;
+  group?: string;
 };
 
-export const architectureZones: ArchitectureZone[] = [
+export type ArchitectureDefinition = {
+  nodes: ArchitectureNode[];
+  edges: ArchitectureEdge[];
+  zones: ArchitectureZone[];
+};
+
+const commonZones: ArchitectureZone[] = [
   {
     id: "local",
     label: "Local Machine",
@@ -42,27 +49,9 @@ export const architectureZones: ArchitectureZone[] = [
     background: "rgba(191, 219, 254, 0.4)",
     accent: "#3B82F6",
   },
-  {
-    id: "cluster",
-    label: "GKE Cluster",
-    description: "Ingress, services, data stores, and mirrord operator running in-cluster.",
-    nodes: [
-      "ingress",
-      "ip-visit-counter",
-      "redis",
-      "kafka",
-      "ip-info-http",
-      "ip-visit-consumer",
-      "mirrord-operator",
-      "mirrord-agent",
-    ],
-    border: "#4F46E5",
-    background: "rgba(233, 228, 255, 0.4)",
-    accent: "#4F46E5",
-  },
 ];
 
-export const architectureNodes: ArchitectureNode[] = [
+const ipvcNodes: ArchitectureNode[] = [
   {
     id: "user",
     label: "External user",
@@ -156,7 +145,7 @@ export const architectureNodes: ArchitectureNode[] = [
   },
 ];
 
-export const architectureEdges: ArchitectureEdge[] = [
+const ipvcEdges: ArchitectureEdge[] = [
   {
     id: "user-direct-to-ingress",
     source: "user",
@@ -234,6 +223,48 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "mirrored",
   },
 ];
+
+const ipvcZone: ArchitectureZone = {
+  id: "cluster",
+  label: "GKE Cluster (IPVC)",
+  description: "Ingress, services, data stores, and mirrord operator running in-cluster.",
+  nodes: [
+    "ingress",
+    "ip-visit-counter",
+    "redis",
+    "kafka",
+    "ip-info-http",
+    "ip-visit-consumer",
+    "mirrord-operator",
+    "mirrord-agent",
+  ],
+  border: "#4F46E5",
+  background: "rgba(233, 228, 255, 0.4)",
+  accent: "#4F46E5",
+};
+
+export const ipvcArchitecture: ArchitectureDefinition = {
+  nodes: ipvcNodes,
+  edges: ipvcEdges,
+  zones: [...commonZones, ipvcZone],
+};
+
+// Placeholder for other architectures
+export const ecomArchitecture: ArchitectureDefinition = {
+  nodes: [],
+  edges: [],
+  zones: [],
+};
+
+const architectures: Record<string, ArchitectureDefinition> = {
+  ipvc: ipvcArchitecture,
+  ecom: ecomArchitecture,
+  saas: ecomArchitecture, // Reuse placeholder
+};
+
+export const getArchitecture = (appId: string): ArchitectureDefinition => {
+  return architectures[appId] || ipvcArchitecture;
+};
 
 export const groupPalette: Record<
   ArchitectureNode["group"],

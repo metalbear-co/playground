@@ -4,8 +4,8 @@ metadata:
   name: playground-metalbear-dev-ingress
   annotations:
     networking.gke.io/managed-certificates: playground-metalbear-dev-cert
-    kubernetes.io/ingress.class: "gce"
 spec:
+  ingressClassName: "gce"
   defaultBackend:
     service:
       name: ip-visit-frontend
