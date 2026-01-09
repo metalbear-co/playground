@@ -27,9 +27,9 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          file: ip-visit-frontend/Dockerfile
+          file: apps/ip-visit/ip-visit-frontend/Dockerfile
           platforms: linux/amd64
-          context: ip-visit-frontend/
+          context: apps/ip-visit/ip-visit-frontend/
           push: true
           tags: |
             ghcr.io/metalbear-co/playground-ip-visit-frontend:latest

@@ -4,7 +4,7 @@ WORKDIR /app
 COPY go.mod ./
 COPY go.sum ./
 RUN go mod download
-COPY ip-info-grpc ./ip-info-grpc
+COPY apps/ip-visit/ip-info-grpc ./ip-info-grpc
 COPY protogen ./protogen
 COPY proto ./proto
 
