@@ -32,8 +32,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          context: ./visualization
-          file: ./visualization/Dockerfile
+          context: ./apps/visualization/visualization-frontend
+          file: ./apps/visualization/visualization-frontend/Dockerfile
           platforms: linux/amd64
           build-args: |
             NEXT_BASE_PATH=/visualization

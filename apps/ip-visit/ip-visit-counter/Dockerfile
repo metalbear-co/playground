@@ -4,7 +4,7 @@ WORKDIR /app
 COPY go.mod ./
 COPY go.sum ./
 RUN go mod download
-COPY ip-visit-counter ./ip-visit-counter
+COPY apps/ip-visit/ip-visit-counter ./ip-visit-counter
 COPY protogen ./protogen
 COPY proto ./proto
 
@@ -13,7 +13,7 @@ RUN GOARCH=$TARGETARCH go build -o /main ./ip-visit-counter/main.go
 
 FROM  gcr.io/distroless/static-debian11
 
-COPY ./ip-visit-counter/response.txt /app/response.txt
+COPY ./apps/ip-visit/ip-visit-counter/response.txt /app/response.txt
 COPY --from=build-env /main /main
 
 CMD [ "/main" ]
