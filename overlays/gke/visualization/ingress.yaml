@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: playground-metalbear-dev-visualization-ingress
+  namespace: visualization
+  annotations:
+    networking.gke.io/managed-certificates: playground-metalbear-dev-cert
+    kubernetes.io/ingress.class: "gce"
+    ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /visualization/api
+        pathType: Prefix
+        backend:
+          service:
+            name: visualization-backend
+            port:
+              number: 80
+      - path: /visualization
+        pathType: Prefix
+        backend:
+          service:
+            name: visualization-frontend
+            port:
+              number: 80
