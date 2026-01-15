@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace injection - forces all resources into this namespace
+namespace: ip-visit-counter
+
+resources:
+  # Infrastructure first (redis, kafka) so they're available for app services
+  - ./base/infra/kafka
+  - ./base/infra/redis
+  # Then app services
+  - ./base/app/ip-info
+  - ./base/app/ip-info-grpc
+  - ./base/app/counter
+  - ./base/app/frontend
+  - ./base/app/consumer-kafka
+  - ./base/app/consumer-sqs
+
+commonLabels:
+  env: playground
+  team: ip-visit

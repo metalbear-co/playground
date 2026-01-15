@@ -2,28 +2,34 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ip-visit-consumer
+  name: ip-visit-counter
 spec:
   selector:
     matchLabels:
-      app: ip-visit-consumer
+      app: ip-visit-counter
   template:
     metadata:
       labels:
-        app: ip-visit-consumer
+        app: ip-visit-counter
     spec:
       containers:
       - env:
         - name: PORT
           value: "80"
+        - name: REDISADDRESS
+          value: redis-main:6379
+        - name: RESPONSEFILE
+          value: /app/response.txt
         - name: KAFKAADDRESS
-          value: kafka.default.svc.cluster.local:9092
+          value: kafka:9092
         - name: KAFKATOPIC
           value: ip-visit
-        - name: KAFKACONSUMERGROUP
-          value: ip-visit-consumer
-        image: ghcr.io/metalbear-co/playground-ip-visit-consumer:latest
-        imagePullPolicy: Always
+        - name: IPINFOADDRESS
+          value: http://ip-info
+        - name: IPINFOGRPCADDRESS
+          value: ip-info-grpc:5001
+        image: ghcr.io/metalbear-co/playground-ip-visit-counter:latest
+        imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
             path: /health

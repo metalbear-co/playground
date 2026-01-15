@@ -2,17 +2,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: ip-visit-frontend
+  name: visualization
   namespace: argocd
   finalizers:
-  - resources-finalizer.argocd.argoproj.io
+    - resources-finalizer.argoproj.io
 spec:
   destination:
-    namespace: default
+    namespace: visualization
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: base/ip-visit-frontend
+    path: manifests/visualization
     repoURL: https://github.com/metalbear-co/playground
     targetRevision: HEAD
   syncPolicy:
