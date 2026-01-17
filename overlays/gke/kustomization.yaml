@@ -4,6 +4,7 @@ resources:
   - argocd
   - argo-rollouts
   - shared-infra-application.yaml
+  - ip-visit-application.yaml
   - ip-visit
   - visualization-application.yaml
   - ingress.yaml
