@@ -3,7 +3,9 @@ kind: Kustomization
 resources:
   - argocd
   - argo-rollouts
-  - application.yaml
+  - shared-infra-application.yaml
+  - ip-visit
+  - visualization-application.yaml
   - ingress.yaml
   - namespace.yaml
   - certificate.yaml

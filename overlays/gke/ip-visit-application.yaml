@@ -2,17 +2,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: redis
+  name: ip-visit
   namespace: argocd
   finalizers:
-  - resources-finalizer.argocd.argoproj.io
+    - resources-finalizer.argocd.argoproj.io
 spec:
   destination:
-    namespace: default
+    namespace: ip-visit-counter
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: base/redis
+    path: manifests/ip-visit
     repoURL: https://github.com/metalbear-co/playground
     targetRevision: HEAD
   syncPolicy:

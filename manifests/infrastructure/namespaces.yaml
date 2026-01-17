@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ip-visit-counter
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: visualization
