@@ -6,7 +6,8 @@ metadata:
 spec:
   parentRefs:
     - name: playground-gateway
-      # Gateway namespace defaults to same as HTTPRoute if not specified
+      namespace: argocd
+      # Gateway is in argocd namespace, must explicitly specify for cross-namespace reference
   rules:
     # /visualization/api -> backend
     - matches:
