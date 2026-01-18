@@ -15,5 +15,9 @@ spec:
       protocol: HTTPS
       port: 443
       hostname: playground.metalbear.dev
+      allowedRoutes:
+        namespaces:
+          from: All
+          # Allow HTTPRoutes from any namespace (ip-visit-counter, visualization, etc.)
       # TLS termination is handled via the pre-shared-cert annotation above
       # When using pre-shared-certs annotation, do not include tls.certificateRefs
