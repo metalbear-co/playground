@@ -11,4 +11,3 @@ resources:
   - gateway.yaml
   - namespace.yaml
   - certificate.yaml
-  - secret.yaml
