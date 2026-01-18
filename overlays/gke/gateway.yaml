@@ -19,5 +19,8 @@ spec:
         namespaces:
           from: All
           # Allow HTTPRoutes from any namespace (ip-visit-counter, visualization, etc.)
-      # TLS termination is handled via the pre-shared-cert annotation above
-      # When using pre-shared-certs annotation, do not include tls.certificateRefs
+      tls:
+        mode: Terminate
+        # Certificate is specified via the pre-shared-certs annotation above
+        # The annotation networking.gke.io/pre-shared-certs references the SSL certificate
+        # No certificateRefs needed when using pre-shared-certs annotation
