@@ -2,6 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: playground-metalbear-dev-ingress
+  namespace: ip-visit-counter
   annotations:
     networking.gke.io/managed-certificates: playground-metalbear-dev-cert
     kubernetes.io/ingress.class: "gce"
