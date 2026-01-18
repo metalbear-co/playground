@@ -2,6 +2,7 @@ apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
   name: playground-metalbear-dev-cert
+  namespace: ip-visit-counter
 spec:
   domains:
     - playground.metalbear.dev
