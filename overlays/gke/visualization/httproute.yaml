@@ -1,0 +1,28 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: visualization-httproute
+  namespace: visualization
+spec:
+  parentRefs:
+    - name: playground-gateway
+      # Gateway namespace defaults to same as HTTPRoute if not specified
+  rules:
+    # /visualization/api -> backend
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /visualization/api
+      backendRefs:
+        - name: visualization-backend
+          namespace: visualization
+          port: 80
+    # /visualization -> frontend
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /visualization
+      backendRefs:
+        - name: visualization-frontend
+          namespace: visualization
+          port: 80

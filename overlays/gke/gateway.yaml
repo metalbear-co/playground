@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: playground-gateway
+  # Gateway can be in any namespace, placed at overlay root for shared access
+  # Note: ManagedCertificate is Ingress-specific and cannot be used directly with Gateway API.
+  # For GKE Gateway API, we use Google-managed SSL certificates via annotation.
+  # This references the active SSL certificate for playground.metalbear.dev found in GCP.
+  annotations:
+    networking.gke.io/pre-shared-certs: mcrt-97fb7ff5-a06b-48d7-9bf3-4d519bdd93ef
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: playground.metalbear.dev
+      # TLS termination is handled via the pre-shared-cert annotation above
+      # When using pre-shared-certs annotation, do not include tls.certificateRefs

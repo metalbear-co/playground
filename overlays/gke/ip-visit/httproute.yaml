@@ -1,0 +1,37 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ip-visit-httproute
+  namespace: ip-visit-counter
+spec:
+  parentRefs:
+    - name: playground-gateway
+      # Gateway namespace defaults to same as HTTPRoute if not specified
+  rules:
+    # Default route (/) -> frontend
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ip-visit-frontend
+          namespace: ip-visit-counter
+          port: 3000
+    # /count -> counter service
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /count
+      backendRefs:
+        - name: ip-visit-counter
+          namespace: ip-visit-counter
+          port: 80
+    # /health -> counter service
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /health
+      backendRefs:
+        - name: ip-visit-counter
+          namespace: ip-visit-counter
+          port: 80

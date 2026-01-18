@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - patches/counter-patch.yaml
   - patches/sqs-consumer-patch.yaml
+  - httproute.yaml
