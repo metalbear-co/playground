@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - httproute.yaml
+  - healthcheckpolicy.yaml
