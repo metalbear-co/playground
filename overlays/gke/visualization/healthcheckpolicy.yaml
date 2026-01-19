@@ -18,3 +18,24 @@ spec:
     group: ""
     kind: Service
     name: visualization-frontend
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: visualization-backend-healthcheck
+  namespace: visualization
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 5
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /healthz
+        port: 8080
+  targetRef:
+    group: ""
+    kind: Service
+    name: visualization-backend
