@@ -27,14 +27,16 @@ spec:
             failureThreshold: 10
             periodSeconds: 30
             httpGet:
-              path: /visualization
+              path: /visualization/
               port: 3000
+              scheme: HTTP
           livenessProbe:
             failureThreshold: 10
             periodSeconds: 30
             httpGet:
-              path: /visualization
+              path: /visualization/
               port: 3000
+              scheme: HTTP
           resources:
             requests:
               cpu: 100m
