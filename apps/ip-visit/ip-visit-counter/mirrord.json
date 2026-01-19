@@ -2,6 +2,7 @@
 {
     "accept_invalid_certificates": false,
     "target": {
+        "namespace": "ip-visit-counter",
         "path": {
             "deployment": "ip-visit-counter"
         }
@@ -11,7 +12,7 @@
             "incoming": {
                 "mode": "steal",
                 "http_filter": {
-                    "header_filter": "X-PG-Tenant: Aviram"
+                    "header_filter": "X-PG-Tenant: Ari"
                 }
             },
             "outgoing": true
