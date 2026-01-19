@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: ip-visit-counter-healthcheck
+  namespace: ip-visit-counter
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /health
+        port: 80
+  targetRef:
+    group: ""
+    kind: Service
+    name: ip-visit-counter
