@@ -5,7 +5,7 @@ metadata:
 spec:
   healthCheck:
     type: HTTP
-    requestPath: /visualization/
+    requestPath: /visualization
     port: 3000
     checkIntervalSec: 10
     timeoutSec: 5
