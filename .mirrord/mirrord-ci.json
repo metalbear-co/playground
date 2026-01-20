@@ -1,0 +1,25 @@
+{
+  "target": {
+    "namespace": "ip-visit-counter",
+    "path": {
+      "deployment": "ip-visit-counter"
+    }
+  },
+  "ci": {
+    "output_dir": "/tmp/mirrord"
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "X-PG-Tenant: mirrord-ci-demo"
+        }
+      },
+      "outgoing": true
+    },
+    "fs": {
+      "mode": "read"
+    }
+  }
+}

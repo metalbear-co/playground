@@ -1,0 +1,200 @@
+name: CI Demo - mirrord vs Baseline
+
+on:
+  push:
+    branches:
+      - demo/ci-mirrord
+  workflow_dispatch:
+
+concurrency:
+  group: ci-demo-mirrord-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-kind:
+    name: Baseline (kind - Slow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install kind, kubectl, jq
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create kind cluster
+        run: |
+          cat <<EOF | kind create cluster --config=- --name ci-demo-${{ github.sha }}
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+            extraPortMappings:
+            - containerPort: 30080
+              hostPort: 30080
+              protocol: TCP
+          EOF
+          
+          kubectl cluster-info
+
+      - name: Build Docker images
+        run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+          
+          # Build ip-visit-counter
+          docker build -t ip-visit-counter:${IMAGE_TAG} -f apps/ip-visit/ip-visit-counter/Dockerfile .
+          
+          # Build ip-info
+          docker build -t ip-info:${IMAGE_TAG} -f apps/ip-visit/ip-info/Dockerfile .
+          
+          # Build ip-info-grpc
+          docker build -t ip-info-grpc:${IMAGE_TAG} -f apps/ip-visit/ip-info-grpc/Dockerfile .
+          
+          # Note: Redis and Kafka use pre-built images from registry
+
+      - name: Load images into kind
+        run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+          export CLUSTER_NAME="ci-demo-${{ github.sha }}"
+          
+          kind load docker-image ip-visit-counter:${IMAGE_TAG} --name ${CLUSTER_NAME}
+          kind load docker-image ip-info:${IMAGE_TAG} --name ${CLUSTER_NAME}
+          kind load docker-image ip-info-grpc:${IMAGE_TAG} --name ${CLUSTER_NAME}
+
+      - name: Deploy Redis
+        run: |
+          kubectl apply -k manifests/ip-visit/base/infra/redis
+          kubectl rollout status deployment/redis-main --namespace=ip-visit-counter --timeout=5m
+
+      - name: Deploy Kafka
+        run: |
+          kubectl apply -k manifests/ip-visit/base/infra/kafka
+          kubectl rollout status statefulset/kafka --namespace=ip-visit-counter --timeout=10m
+          # Kafka may need extra time to initialize
+          sleep 10
+
+      - name: Deploy ip-info
+        run: |
+          kubectl apply -k manifests/ip-visit/base/app/ip-info
+          kubectl set image deployment/ip-info main=ip-info:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
+          kubectl rollout status deployment/ip-info --namespace=ip-visit-counter --timeout=5m
+
+      - name: Deploy ip-info-grpc
+        run: |
+          kubectl apply -k manifests/ip-visit/base/app/ip-info-grpc
+          kubectl set image deployment/ip-info-grpc main=ip-info-grpc:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
+          kubectl rollout status deployment/ip-info-grpc --namespace=ip-visit-counter --timeout=5m
+
+      - name: Deploy ip-visit-counter
+        run: |
+          # Apply kind overlay (includes patches for imagePullPolicy and NodePort)
+          kubectl apply -k overlays/kind
+          
+          # Set image tag
+          kubectl set image deployment/ip-visit-counter main=ip-visit-counter:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
+          
+          # Wait for rollout
+          kubectl rollout status deployment/ip-visit-counter --namespace=ip-visit-counter --timeout=5m
+
+      - name: Verify service is accessible
+        run: |
+          kubectl get svc ip-visit-counter --namespace=ip-visit-counter
+          # Wait a moment for service to be ready
+          sleep 5
+
+      - name: Run E2E test
+        env:
+          PLAYGROUND_URL: http://localhost:30080
+          DEMO_TENANT: mirrord-ci-demo
+        run: |
+          chmod +x apps/ip-visit/ip-visit-counter/ci/demo_e2e.sh
+          ./apps/ip-visit/ip-visit-counter/ci/demo_e2e.sh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-logs
+          path: |
+            /tmp/kind-*.log
+
+      - name: Delete kind cluster
+        if: always()
+        run: |
+          kind delete cluster --name ci-demo-${{ github.sha }} || true
+
+  mirrord-ci:
+    name: mirrord CI (GKE - Fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install jq
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl get ns ip-visit-counter >/dev/null
+
+      - name: Install mirrord
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+          # Verify version >= 3.181.0
+
+      - name: Start mirrord CI
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+        run: |
+          mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
+            go run apps/ip-visit/ip-visit-counter/main.go
+          
+          # Give the local server a moment to boot
+          sleep 10
+
+      - name: Run E2E test
+        env:
+          PLAYGROUND_URL: https://playground.metalbear.dev
+          DEMO_TENANT: mirrord-ci-demo
+        run: |
+          chmod +x apps/ip-visit/ip-visit-counter/ci/demo_e2e.sh
+          ./apps/ip-visit/ip-visit-counter/ci/demo_e2e.sh
+
+      - name: Stop mirrord CI session
+        if: always()
+        run: |
+          mirrord ci stop || true
+
+      - name: Upload mirrord logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirrord-logs
+          path: /tmp/mirrord
