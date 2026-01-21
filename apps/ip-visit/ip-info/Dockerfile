@@ -1,11 +1,12 @@
 FROM --platform=$BUILDPLATFORM golang:1.23-alpine as build-env
 
 WORKDIR /app
-COPY go.mod ./
-COPY go.sum ./
+COPY apps/ip-visit/ip-info/go.mod ./
+COPY apps/ip-visit/ip-info/go.sum ./
 RUN go mod download
-COPY *.go ./
+COPY apps/ip-visit/ip-info/*.go ./
 
+ARG TARGETARCH
 RUN GOARCH=$TARGETARCH go build -o /main
 
 FROM gcr.io/distroless/static-debian11
