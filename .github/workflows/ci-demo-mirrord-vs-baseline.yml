@@ -181,9 +181,6 @@ jobs:
         run: |
           mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
             go run apps/ip-visit/ip-visit-counter/main.go
-          
-          # Give the local server a moment to boot
-          sleep 10
 
       - name: Run E2E test
         env:
