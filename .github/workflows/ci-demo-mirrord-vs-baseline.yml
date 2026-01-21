@@ -156,25 +156,17 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Install kubectl and gke-gcloud-auth-plugin
+      - name: Install kubectl
         run: |
-          # Install kubectl
           curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
-          
-          # Install gke-gcloud-auth-plugin
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl-gke-gcloud-auth-plugin"
-          chmod +x kubectl-gke-gcloud-auth-plugin
-          sudo mv kubectl-gke-gcloud-auth-plugin /usr/local/bin/kubectl-gke-gcloud-auth-plugin
 
       - name: Configure kubeconfig
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
-          # Update auth plugin path in kubeconfig to use installed plugin
-          sed -i 's|/opt/homebrew/share/google-cloud-sdk/bin/gke-gcloud-auth-plugin|/usr/local/bin/kubectl-gke-gcloud-auth-plugin|g' $HOME/.kube/config
           kubectl get ns ip-visit-counter >/dev/null
 
       - name: Install mirrord
