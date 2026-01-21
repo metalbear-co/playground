@@ -1,10 +1,10 @@
 FROM --platform=$BUILDPLATFORM golang:1.23-alpine as build-env
 
 WORKDIR /app
-COPY apps/ip-visit/ip-info/go.mod ./
-COPY apps/ip-visit/ip-info/go.sum ./
+COPY go.mod ./
+COPY go.sum ./
 RUN go mod download
-COPY apps/ip-visit/ip-info/*.go ./
+COPY *.go ./
 
 ARG TARGETARCH
 RUN GOARCH=$TARGETARCH go build -o /main
