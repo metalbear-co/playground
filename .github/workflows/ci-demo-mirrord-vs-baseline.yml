@@ -186,6 +186,28 @@ jobs:
         run: |
           mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
             go run apps/ip-visit/ip-visit-counter/main.go
+          
+          # Wait a moment for process to start
+          sleep 3
+          
+          echo "=== Checking running processes ==="
+          ps aux | grep -E "(mirrord|go)" | grep -v grep || echo "No mirrord/go processes found"
+          
+          echo ""
+          echo "=== Checking mirrord output directory ==="
+          if [ -d /tmp/mirrord ]; then
+            echo "Directory exists. Contents:"
+            find /tmp/mirrord -type f 2>/dev/null | head -10
+            echo ""
+            echo "=== Application logs (last 50 lines) ==="
+            find /tmp/mirrord -type f 2>/dev/null | head -3 | while read file; do
+              echo "--- $file ---"
+              tail -50 "$file" 2>/dev/null || echo "Could not read $file"
+              echo ""
+            done
+          else
+            echo "Directory /tmp/mirrord does not exist"
+          fi
 
       - name: Run E2E test
         env:
