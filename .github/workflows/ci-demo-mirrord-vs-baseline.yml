@@ -98,10 +98,21 @@ jobs:
 
       - name: Deploy ip-info
         run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+          export CLUSTER_NAME="ci-demo-${{ github.sha }}"
+          
+          # Verify image is loaded in kind
+          echo "=== Verifying image is loaded in kind ==="
+          docker exec ${CLUSTER_NAME}-control-plane crictl images | grep "ip-info:${IMAGE_TAG}" || {
+            echo "❌ ERROR: Image ip-info:${IMAGE_TAG} not found in kind cluster"
+            echo "Attempting to reload..."
+            kind load docker-image ip-info:${IMAGE_TAG} --name ${CLUSTER_NAME}
+          }
+          
           kubectl apply -k manifests/ip-visit/base/app/ip-info -n ip-visit-counter
           # Wait a moment for the deployment object to be available
           sleep 2
-          kubectl set image deployment/ip-info main=ip-info:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
+          kubectl set image deployment/ip-info main=ip-info:${IMAGE_TAG} --namespace=ip-visit-counter
           
           # Check pod status before waiting for rollout
           echo "=== Pod status before rollout ==="
