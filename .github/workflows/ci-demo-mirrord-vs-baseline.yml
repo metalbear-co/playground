@@ -102,7 +102,23 @@ jobs:
           # Wait a moment for the deployment object to be available
           sleep 2
           kubectl set image deployment/ip-info main=ip-info:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
-          kubectl rollout status deployment/ip-info --namespace=ip-visit-counter --timeout=5m
+          
+          # Check pod status before waiting for rollout
+          echo "=== Pod status before rollout ==="
+          kubectl get pods -n ip-visit-counter -l app=ip-info || true
+          
+          # Try rollout status with timeout
+          if ! kubectl rollout status deployment/ip-info --namespace=ip-visit-counter --timeout=5m; then
+            echo "=== Rollout failed, checking pod status ==="
+            kubectl get pods -n ip-visit-counter -l app=ip-info || true
+            echo ""
+            echo "=== Pod events ==="
+            kubectl get events -n ip-visit-counter --sort-by='.lastTimestamp' | grep ip-info | tail -10 || true
+            echo ""
+            echo "=== Pod describe ==="
+            kubectl describe pods -n ip-visit-counter -l app=ip-info | tail -30 || true
+            exit 1
+          fi
 
       - name: Deploy ip-info-grpc
         run: |
