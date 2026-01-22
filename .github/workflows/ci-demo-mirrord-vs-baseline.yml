@@ -249,8 +249,36 @@ jobs:
                     fi
                   fi
                 else
-                  echo "Could not find go run process"
+                  echo "Could not find ip-visit-counter process"
                 fi
+                
+                echo ""
+                echo "=== Printing mirrord CI output ==="
+                if [ -d /tmp/mirrord ]; then
+                  echo "Contents of /tmp/mirrord:"
+                  find /tmp/mirrord -type f 2>/dev/null | head -10
+                  echo ""
+                  echo "=== Application stdout ==="
+                  find /tmp/mirrord -name "stdout" -type f 2>/dev/null | while read file; do
+                    echo "--- $file ---"
+                    cat "$file" 2>/dev/null || echo "Could not read $file"
+                    echo ""
+                  done
+                  echo "=== Application stderr ==="
+                  find /tmp/mirrord -name "stderr" -type f 2>/dev/null | while read file; do
+                    echo "--- $file ---"
+                    cat "$file" 2>/dev/null || echo "Could not read $file"
+                    echo ""
+                  done
+                else
+                  echo "Directory /tmp/mirrord does not exist"
+                fi
+                
+                echo ""
+                echo "=== Waiting 10 seconds for application to fully start ==="
+                sleep 10
+                echo "✅ Ready to run E2E test"
+                
                 break
               fi
             fi
