@@ -152,6 +152,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc build-essential
+
       - name: Install jq
         run: |
           sudo apt-get update && sudo apt-get install -y jq
@@ -178,6 +182,7 @@ jobs:
       - name: Start mirrord CI
         env:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+          CGO_ENABLED: "1"
         run: |
           mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
             go run apps/ip-visit/ip-visit-counter/main.go
