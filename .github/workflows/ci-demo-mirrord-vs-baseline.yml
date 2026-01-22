@@ -82,7 +82,9 @@ jobs:
 
       - name: Deploy Redis
         run: |
-          kubectl apply -k manifests/ip-visit/base/infra/redis
+          kubectl apply -k manifests/ip-visit/base/infra/redis -n ip-visit-counter
+          # Wait a moment for the deployment object to be available
+          sleep 2
           kubectl rollout status deployment/redis-main --namespace=ip-visit-counter --timeout=5m
 
       - name: Deploy Kafka
