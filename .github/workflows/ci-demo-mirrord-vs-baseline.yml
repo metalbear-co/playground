@@ -59,8 +59,8 @@ jobs:
           # Build ip-visit-counter
           docker build -t ip-visit-counter:${IMAGE_TAG} -f apps/ip-visit/ip-visit-counter/Dockerfile .
           
-          # Build ip-info
-          docker build -t ip-info:${IMAGE_TAG} -f apps/ip-visit/ip-info/Dockerfile .
+          # Build ip-info (use ip-info directory as build context to match Dockerfile expectations)
+          docker build -t ip-info:${IMAGE_TAG} -f apps/ip-visit/ip-info/Dockerfile apps/ip-visit/ip-info/
           
           # Build ip-info-grpc
           docker build -t ip-info-grpc:${IMAGE_TAG} -f apps/ip-visit/ip-info-grpc/Dockerfile .
