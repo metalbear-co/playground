@@ -114,6 +114,11 @@ jobs:
           sleep 2
           kubectl set image deployment/ip-info main=ip-info:${IMAGE_TAG} --namespace=ip-visit-counter
           
+          # Delete old pods to force clean rollout (old pods may be stuck terminating)
+          echo "=== Deleting old pods to force clean rollout ==="
+          kubectl delete pods -n ip-visit-counter -l app=ip-info --grace-period=0 --force || true
+          sleep 3
+          
           # Check pod status before waiting for rollout
           echo "=== Pod status before rollout ==="
           kubectl get pods -n ip-visit-counter -l app=ip-info || true
