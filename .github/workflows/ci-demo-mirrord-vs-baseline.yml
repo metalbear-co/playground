@@ -76,6 +76,10 @@ jobs:
           kind load docker-image ip-info:${IMAGE_TAG} --name ${CLUSTER_NAME}
           kind load docker-image ip-info-grpc:${IMAGE_TAG} --name ${CLUSTER_NAME}
 
+      - name: Create namespace
+        run: |
+          kubectl apply -f manifests/infrastructure/namespaces.yaml
+
       - name: Deploy Redis
         run: |
           kubectl apply -k manifests/ip-visit/base/infra/redis
