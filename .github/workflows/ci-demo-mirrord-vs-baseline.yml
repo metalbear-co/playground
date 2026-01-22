@@ -98,20 +98,27 @@ jobs:
 
       - name: Deploy ip-info
         run: |
-          kubectl apply -k manifests/ip-visit/base/app/ip-info
+          kubectl apply -k manifests/ip-visit/base/app/ip-info -n ip-visit-counter
+          # Wait a moment for the deployment object to be available
+          sleep 2
           kubectl set image deployment/ip-info main=ip-info:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
           kubectl rollout status deployment/ip-info --namespace=ip-visit-counter --timeout=5m
 
       - name: Deploy ip-info-grpc
         run: |
-          kubectl apply -k manifests/ip-visit/base/app/ip-info-grpc
+          kubectl apply -k manifests/ip-visit/base/app/ip-info-grpc -n ip-visit-counter
+          # Wait a moment for the deployment object to be available
+          sleep 2
           kubectl set image deployment/ip-info-grpc main=ip-info-grpc:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
           kubectl rollout status deployment/ip-info-grpc --namespace=ip-visit-counter --timeout=5m
 
       - name: Deploy ip-visit-counter
         run: |
           # Apply kind overlay (includes patches for imagePullPolicy and NodePort)
-          kubectl apply -k overlays/kind
+          kubectl apply -k overlays/kind -n ip-visit-counter
+          
+          # Wait a moment for the deployment object to be available
+          sleep 2
           
           # Set image tag
           kubectl set image deployment/ip-visit-counter main=ip-visit-counter:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
