@@ -89,7 +89,9 @@ jobs:
 
       - name: Deploy Kafka
         run: |
-          kubectl apply -k manifests/ip-visit/base/infra/kafka
+          kubectl apply -k manifests/ip-visit/base/infra/kafka -n ip-visit-counter
+          # Wait a moment for the statefulset object to be available
+          sleep 2
           kubectl rollout status statefulset/kafka --namespace=ip-visit-counter --timeout=10m
           # Kafka may need extra time to initialize
           sleep 10
