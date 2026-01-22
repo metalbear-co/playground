@@ -184,6 +184,15 @@ jobs:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
           CGO_ENABLED: "1"
         run: |
+          echo "=== Verifying CGO and build configuration ==="
+          echo "CGO_ENABLED: $CGO_ENABLED"
+          go env CGO_ENABLED || echo "go env failed"
+          echo ""
+          echo "=== Checking if gcc is available ==="
+          which gcc || echo "gcc not found"
+          gcc --version | head -1 || echo "gcc version check failed"
+          echo ""
+          
           mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
             go run apps/ip-visit/ip-visit-counter/main.go
           
@@ -196,6 +205,29 @@ jobs:
               # Check if "loaded" appears in stdout
               if find /tmp/mirrord -name "stdout" -type f -exec grep -q "loaded" {} \; 2>/dev/null; then
                 echo "✅ Application is ready!"
+                echo ""
+                echo "=== Checking if process is dynamically linked ==="
+                # Find the go run process
+                GO_PID=$(pgrep -f "go run apps/ip-visit/ip-visit-counter/main.go" | head -1)
+                if [ -n "$GO_PID" ]; then
+                  echo "Go process PID: $GO_PID"
+                  echo "Checking linked libraries:"
+                  # Check if process has dynamic libraries (non-static)
+                  if [ -f "/proc/$GO_PID/maps" ]; then
+                    # Count dynamic library mappings (should be > 0 for dynamic binary)
+                    DYNAMIC_COUNT=$(grep -c "\.so" /proc/$GO_PID/maps 2>/dev/null || echo "0")
+                    echo "Dynamic library mappings found: $DYNAMIC_COUNT"
+                    if [ "$DYNAMIC_COUNT" -gt 0 ]; then
+                      echo "✅ Process appears to be dynamically linked"
+                      echo "Sample libraries:"
+                      grep "\.so" /proc/$GO_PID/maps 2>/dev/null | head -5
+                    else
+                      echo "❌ WARNING: Process appears to be statically linked (no .so files found)"
+                    fi
+                  fi
+                else
+                  echo "Could not find go run process"
+                fi
                 break
               fi
             fi
