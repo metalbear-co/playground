@@ -193,8 +193,31 @@ jobs:
           gcc --version | head -1 || echo "gcc version check failed"
           echo ""
           
+          # Build the binary with dynamic linking flags
+          # Use -linkmode=external to force external linking (dynamic)
+          echo "=== Building binary with dynamic linking ==="
+          go build -ldflags="-linkmode=external" -o /tmp/ip-visit-counter \
+            apps/ip-visit/ip-visit-counter/main.go
+          
+          # Verify the binary is dynamically linked
+          echo "=== Verifying binary linking ==="
+          if command -v ldd >/dev/null 2>&1; then
+            echo "Checking binary with ldd:"
+            ldd /tmp/ip-visit-counter 2>&1 | head -10
+            if ldd /tmp/ip-visit-counter 2>&1 | grep -q "not a dynamic"; then
+              echo "❌ Binary is statically linked"
+            else
+              echo "✅ Binary appears to be dynamically linked"
+            fi
+          else
+            echo "ldd not available, checking file type:"
+            file /tmp/ip-visit-counter
+          fi
+          echo ""
+          
+          # Run with mirrord
           mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
-            go run apps/ip-visit/ip-visit-counter/main.go
+            /tmp/ip-visit-counter
           
           # Wait for the application to be ready (it prints "loaded" when ready)
           echo "Waiting for application to start..."
@@ -207,8 +230,8 @@ jobs:
                 echo "✅ Application is ready!"
                 echo ""
                 echo "=== Checking if process is dynamically linked ==="
-                # Find the go run process
-                GO_PID=$(pgrep -f "go run apps/ip-visit/ip-visit-counter/main.go" | head -1)
+                # Find the ip-visit-counter process
+                GO_PID=$(pgrep -f "ip-visit-counter" | head -1)
                 if [ -n "$GO_PID" ]; then
                   echo "Go process PID: $GO_PID"
                   echo "Checking linked libraries:"
