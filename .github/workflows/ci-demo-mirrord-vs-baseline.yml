@@ -187,26 +187,33 @@ jobs:
           mirrord ci start --config-file .mirrord/mirrord-ci.json -- \
             go run apps/ip-visit/ip-visit-counter/main.go
           
-          # Wait a moment for process to start
-          sleep 3
+          # Wait for the application to be ready (it prints "loaded" when ready)
+          echo "Waiting for application to start..."
+          timeout=60
+          elapsed=0
+          while [ $elapsed -lt $timeout ]; do
+            if [ -d /tmp/mirrord ]; then
+              # Check if "loaded" appears in stdout
+              if find /tmp/mirrord -name "stdout" -type f -exec grep -q "loaded" {} \; 2>/dev/null; then
+                echo "✅ Application is ready!"
+                break
+              fi
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+            if [ $((elapsed % 5)) -eq 0 ]; then
+              echo "Still waiting... (${elapsed}s)"
+            fi
+          done
           
-          echo "=== Checking running processes ==="
-          ps aux | grep -E "(mirrord|go)" | grep -v grep || echo "No mirrord/go processes found"
-          
-          echo ""
-          echo "=== Checking mirrord output directory ==="
-          if [ -d /tmp/mirrord ]; then
-            echo "Directory exists. Contents:"
-            find /tmp/mirrord -type f 2>/dev/null | head -10
-            echo ""
-            echo "=== Application logs (last 50 lines) ==="
-            find /tmp/mirrord -type f 2>/dev/null | head -3 | while read file; do
-              echo "--- $file ---"
-              tail -50 "$file" 2>/dev/null || echo "Could not read $file"
-              echo ""
+          if [ $elapsed -ge $timeout ]; then
+            echo "❌ ERROR: Application did not start within ${timeout} seconds"
+            echo "=== Checking logs ==="
+            find /tmp/mirrord -type f -name "stdout" -o -name "stderr" 2>/dev/null | while read file; do
+              echo "--- $file (last 20 lines) ---"
+              tail -20 "$file" 2>/dev/null || echo "Could not read $file"
             done
-          else
-            echo "Directory /tmp/mirrord does not exist"
+            exit 1
           fi
 
       - name: Run E2E test
