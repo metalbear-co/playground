@@ -217,6 +217,7 @@ func getCount(c *gin.Context) {
 
 	count, err := RedisClient.Incr(c, key).Result()
 	if err != nil {
+		log.Printf("ERROR: Redis Incr failed: %v", err)
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -242,12 +243,14 @@ func getCount(c *gin.Context) {
 	})
 
 	if err != nil {
+		log.Printf("ERROR: Kafka WriteMessages failed: %v", err)
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	ipInfo2, err := getIpInfoGrpc(ip, c)
 	if err != nil {
+		log.Printf("ERROR: getIpInfoGrpc failed: %v", err)
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -270,21 +273,30 @@ func getCount(c *gin.Context) {
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
+		log.Printf("ERROR: HTTP request to ip-info failed: %v", err)
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode != http.StatusOK {
+		log.Printf("ERROR: ip-info returned status %d", res.StatusCode)
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+
 	ipInfo := &IpInfo{}
 
 	err = json.NewDecoder(res.Body).Decode(&ipInfo)
 	if err != nil {
+		log.Printf("ERROR: Failed to decode ip-info response: %v", err)
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	uniqueIPCount, err := countUniqueIPs(c.Request.Context(), RedisKey)
 	if err != nil {
+		log.Printf("ERROR: countUniqueIPs failed: %v", err)
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}

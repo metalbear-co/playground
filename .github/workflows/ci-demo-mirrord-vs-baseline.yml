@@ -245,23 +245,44 @@ jobs:
           echo ""
           
           echo "=== Checking if response.txt file exists in pod ==="
-          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- ls -la /app/response.txt || echo "Could not check response.txt"
+          POD_NAME=$(kubectl get pod -n ip-visit-counter -l app=ip-visit-counter -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$POD_NAME" ]; then
+            kubectl exec -n ip-visit-counter $POD_NAME -- ls -la /app/response.txt || echo "Could not check response.txt"
+          else
+            echo "Could not find ip-visit-counter pod"
+          fi
           echo ""
           
           echo "=== Testing Redis connectivity from pod ==="
-          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv redis-main 6379" || echo "Redis connectivity test failed"
+          if [ -n "$POD_NAME" ]; then
+            kubectl exec -n ip-visit-counter $POD_NAME -- sh -c "nc -zv redis-main 6379" || echo "Redis connectivity test failed"
+          else
+            echo "Could not find ip-visit-counter pod"
+          fi
           echo ""
           
           echo "=== Testing Kafka connectivity from pod ==="
-          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv kafka 9092" || echo "Kafka connectivity test failed"
+          if [ -n "$POD_NAME" ]; then
+            kubectl exec -n ip-visit-counter $POD_NAME -- sh -c "nc -zv kafka 9092" || echo "Kafka connectivity test failed"
+          else
+            echo "Could not find ip-visit-counter pod"
+          fi
           echo ""
           
           echo "=== Testing ip-info connectivity from pod ==="
-          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv ip-info 80" || echo "ip-info connectivity test failed"
+          if [ -n "$POD_NAME" ]; then
+            kubectl exec -n ip-visit-counter $POD_NAME -- sh -c "nc -zv ip-info 80" || echo "ip-info connectivity test failed"
+          else
+            echo "Could not find ip-visit-counter pod"
+          fi
           echo ""
           
           echo "=== Testing ip-info-grpc connectivity from pod ==="
-          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv ip-info-grpc 5001" || echo "ip-info-grpc connectivity test failed"
+          if [ -n "$POD_NAME" ]; then
+            kubectl exec -n ip-visit-counter $POD_NAME -- sh -c "nc -zv ip-info-grpc 5001" || echo "ip-info-grpc connectivity test failed"
+          else
+            echo "Could not find ip-visit-counter pod"
+          fi
           echo ""
 
       - name: Run E2E test
