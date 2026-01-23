@@ -165,8 +165,15 @@ jobs:
         run: |
           export IMAGE_TAG="ci-demo-${{ github.sha }}"
           
-          # Apply kind overlay (includes patches for imagePullPolicy and NodePort)
-          kubectl apply -k overlays/kind -n ip-visit-counter
+          # Apply ip-visit-counter deployment and service from base manifests
+          kubectl apply -k manifests/ip-visit/base/app/counter -n ip-visit-counter
+          
+          # Apply kind-specific patches
+          # 1. Set imagePullPolicy to Never
+          kubectl patch deployment ip-visit-counter -n ip-visit-counter -p '{"spec":{"template":{"spec":{"containers":[{"name":"main","imagePullPolicy":"Never"}]}}}}'
+          
+          # 2. Patch service to NodePort
+          kubectl patch service ip-visit-counter -n ip-visit-counter -p '{"spec":{"type":"NodePort","ports":[{"port":80,"targetPort":80,"nodePort":30080,"protocol":"TCP"}]}}'
           
           # Wait a moment for the deployment object to be available
           sleep 2
