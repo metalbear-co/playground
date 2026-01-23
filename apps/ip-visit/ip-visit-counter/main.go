@@ -302,12 +302,13 @@ func getCount(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"count":       count,
-		"unique_ips":  uniqueIPCount,
-		"text":        ResponseString + "hi",
-		"info":        ipInfo,
-		"info2":       ipInfo2,
-		"demo_marker": "mirrord-ci-demo",
+		"count":         count,
+		"unique_ips":    uniqueIPCount,
+		"total_requests": count + uniqueIPCount,
+		"text":          ResponseString + "hi",
+		"info":          ipInfo,
+		"info2":         ipInfo2,
+		"demo_marker":   "mirrord-ci-demo",
 	})
 }
 
