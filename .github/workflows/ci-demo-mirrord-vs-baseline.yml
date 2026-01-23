@@ -237,7 +237,31 @@ jobs:
           echo ""
           
           echo "=== Testing service connectivity ==="
-          kubectl run -it --rm --restart=Never test-curl --image=curlimages/curl:latest --namespace=ip-visit-counter -- curl -s http://ip-visit-counter/count || echo "curl test failed"
+          kubectl run -it --rm --restart=Never test-curl --image=curlimages/curl:latest --namespace=ip-visit-counter -- curl -s -H "X-PG-Tenant: mirrord-ci-demo" http://ip-visit-counter/count || echo "curl test failed"
+          echo ""
+          
+          echo "=== Pod logs after test request ==="
+          kubectl logs -n ip-visit-counter -l app=ip-visit-counter --tail=50 || true
+          echo ""
+          
+          echo "=== Checking if response.txt file exists in pod ==="
+          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- ls -la /app/response.txt || echo "Could not check response.txt"
+          echo ""
+          
+          echo "=== Testing Redis connectivity from pod ==="
+          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv redis-main 6379" || echo "Redis connectivity test failed"
+          echo ""
+          
+          echo "=== Testing Kafka connectivity from pod ==="
+          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv kafka 9092" || echo "Kafka connectivity test failed"
+          echo ""
+          
+          echo "=== Testing ip-info connectivity from pod ==="
+          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv ip-info 80" || echo "ip-info connectivity test failed"
+          echo ""
+          
+          echo "=== Testing ip-info-grpc connectivity from pod ==="
+          kubectl exec -n ip-visit-counter -l app=ip-visit-counter -- sh -c "nc -zv ip-info-grpc 5001" || echo "ip-info-grpc connectivity test failed"
           echo ""
 
       - name: Run E2E test
