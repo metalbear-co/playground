@@ -96,6 +96,38 @@ jobs:
           # Kafka may need extra time to initialize
           sleep 10
 
+      - name: Create Kafka topic
+        run: |
+          echo "=== Creating Kafka topic ip-visit ==="
+          # Wait for Kafka to be fully ready
+          kubectl wait --for=condition=ready pod/kafka-0 -n ip-visit-counter --timeout=2m || true
+          sleep 5
+          
+          # Check if topic already exists
+          if kubectl exec -n ip-visit-counter kafka-0 -- /opt/kafka/bin/kafka-topics.sh \
+            --list \
+            --bootstrap-server localhost:9092 | grep -q "^ip-visit$"; then
+            echo "Topic ip-visit already exists, skipping creation"
+          else
+            # Create the topic
+            kubectl exec -n ip-visit-counter kafka-0 -- /opt/kafka/bin/kafka-topics.sh \
+              --create \
+              --bootstrap-server localhost:9092 \
+              --topic ip-visit \
+              --partitions 1 \
+              --replication-factor 1
+            echo "✅ Topic ip-visit created successfully"
+          fi
+          
+          # Verify topic exists
+          echo "=== Verifying topic exists ==="
+          kubectl exec -n ip-visit-counter kafka-0 -- /opt/kafka/bin/kafka-topics.sh \
+            --list \
+            --bootstrap-server localhost:9092 | grep "^ip-visit$" || {
+            echo "❌ ERROR: Topic ip-visit not found"
+            exit 1
+          }
+
       - name: Deploy ip-info
         run: |
           export IMAGE_TAG="ci-demo-${{ github.sha }}"
