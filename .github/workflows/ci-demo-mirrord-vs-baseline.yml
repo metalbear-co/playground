@@ -195,6 +195,51 @@ jobs:
           # Wait a moment for service to be ready
           sleep 5
 
+      - name: Debug service status before E2E test
+        run: |
+          echo "=== All pods in namespace ==="
+          kubectl get pods -n ip-visit-counter -o wide || true
+          echo ""
+          
+          echo "=== ip-visit-counter pod status ==="
+          kubectl get pods -n ip-visit-counter -l app=ip-visit-counter || true
+          echo ""
+          
+          echo "=== ip-visit-counter pod logs (last 100 lines) ==="
+          kubectl logs -n ip-visit-counter -l app=ip-visit-counter --tail=100 || true
+          echo ""
+          
+          echo "=== Service endpoints ==="
+          kubectl get endpoints -n ip-visit-counter || true
+          echo ""
+          
+          echo "=== Service details ==="
+          kubectl get svc ip-visit-counter -n ip-visit-counter -o yaml || true
+          echo ""
+          
+          echo "=== Recent events (last 20) ==="
+          kubectl get events -n ip-visit-counter --sort-by='.lastTimestamp' | tail -20 || true
+          echo ""
+          
+          echo "=== ip-visit-counter pod describe ==="
+          kubectl describe pods -n ip-visit-counter -l app=ip-visit-counter || true
+          echo ""
+          
+          echo "=== Dependencies status ==="
+          echo "Redis:"
+          kubectl get pods -n ip-visit-counter -l app=redis || true
+          echo "Kafka:"
+          kubectl get pods -n ip-visit-counter -l app=kafka || true
+          echo "ip-info:"
+          kubectl get pods -n ip-visit-counter -l app=ip-info || true
+          echo "ip-info-grpc:"
+          kubectl get pods -n ip-visit-counter -l app=ip-info-grpc || true
+          echo ""
+          
+          echo "=== Testing service connectivity ==="
+          kubectl run -it --rm --restart=Never test-curl --image=curlimages/curl:latest --namespace=ip-visit-counter -- curl -s http://ip-visit-counter/count || echo "curl test failed"
+          echo ""
+
       - name: Run E2E test
         env:
           PLAYGROUND_URL: http://localhost:30080
