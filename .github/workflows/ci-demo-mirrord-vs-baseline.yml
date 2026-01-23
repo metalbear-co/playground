@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   baseline-kind:
-    name: Baseline (kind - Slow)
+    name: Baseline
     runs-on: ubuntu-latest
     timeout-minutes: 45
     
@@ -339,7 +339,7 @@ jobs:
           kind delete cluster --name ci-demo-${{ github.sha }} || true
 
   mirrord-ci:
-    name: mirrord CI (GKE - Fast)
+    name: mirrord CI
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
