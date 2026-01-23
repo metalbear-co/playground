@@ -182,30 +182,6 @@ func getIpInfoGrpc(ip string, c *gin.Context) (*IpInfo, error) {
 
 }
 
-// countUniqueIPs counts the number of unique IP addresses stored in Redis
-// by scanning keys matching the RedisKey prefix pattern
-func countUniqueIPs(ctx context.Context, redisKeyPrefix string) (int64, error) {
-	var (
-		cursor uint64
-		total  int64
-	)
-	pattern := redisKeyPrefix + "*"
-
-	for {
-		keys, nextCursor, err := RedisClient.Scan(ctx, cursor, pattern, 1000).Result()
-		if err != nil {
-			return 0, err
-		}
-		total += int64(len(keys))
-		cursor = nextCursor
-		if cursor == 0 {
-			break
-		}
-	}
-
-	return total, nil
-}
-
 func getCount(c *gin.Context) {
 	ip := c.ClientIP()
 	key := RedisKey + ip
@@ -294,21 +270,12 @@ func getCount(c *gin.Context) {
 		return
 	}
 
-	uniqueIPCount, err := countUniqueIPs(c.Request.Context(), RedisKey)
-	if err != nil {
-		log.Printf("ERROR: countUniqueIPs failed: %v", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
-		return
-	}
-
 	c.JSON(200, gin.H{
-		"count":         count,
-		"unique_ips":    uniqueIPCount,
-		"total_requests": count + uniqueIPCount,
-		"text":          ResponseString + "hi",
-		"info":          ipInfo,
-		"info2":         ipInfo2,
-		"demo_marker":   "mirrord-ci-demo",
+		"count":       count,
+		"info":        ipInfo,
+		"info2":       ipInfo2,
+		"text":        ResponseString + "hi",
+		"demo_marker": "mirrord-ci-demo",
 	})
 }
 
