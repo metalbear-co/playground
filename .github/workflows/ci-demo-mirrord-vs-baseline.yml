@@ -112,6 +112,10 @@ jobs:
           kubectl apply -k manifests/ip-visit/base/app/ip-info -n ip-visit-counter
           # Wait a moment for the deployment object to be available
           sleep 2
+          
+          # Set imagePullPolicy to Never so kind uses local images
+          kubectl patch deployment ip-info -n ip-visit-counter -p '{"spec":{"template":{"spec":{"containers":[{"name":"main","imagePullPolicy":"Never"}]}}}}'
+          
           kubectl set image deployment/ip-info main=ip-info:${IMAGE_TAG} --namespace=ip-visit-counter
           
           # Delete old pods to force clean rollout (old pods may be stuck terminating)
