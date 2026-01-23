@@ -142,14 +142,29 @@ jobs:
 
       - name: Deploy ip-info-grpc
         run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+          export CLUSTER_NAME="ci-demo-${{ github.sha }}"
+          
           kubectl apply -k manifests/ip-visit/base/app/ip-info-grpc -n ip-visit-counter
           # Wait a moment for the deployment object to be available
           sleep 2
-          kubectl set image deployment/ip-info-grpc main=ip-info-grpc:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
+          
+          # Set imagePullPolicy to Never so kind uses local images
+          kubectl patch deployment ip-info-grpc -n ip-visit-counter -p '{"spec":{"template":{"spec":{"containers":[{"name":"main","imagePullPolicy":"Never"}]}}}}'
+          
+          kubectl set image deployment/ip-info-grpc main=ip-info-grpc:${IMAGE_TAG} --namespace=ip-visit-counter
+          
+          # Delete old pods to force clean rollout
+          echo "=== Deleting old pods to force clean rollout ==="
+          kubectl delete pods -n ip-visit-counter -l app=ip-info-grpc --grace-period=0 --force || true
+          sleep 3
+          
           kubectl rollout status deployment/ip-info-grpc --namespace=ip-visit-counter --timeout=5m
 
       - name: Deploy ip-visit-counter
         run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+          
           # Apply kind overlay (includes patches for imagePullPolicy and NodePort)
           kubectl apply -k overlays/kind -n ip-visit-counter
           
@@ -157,7 +172,12 @@ jobs:
           sleep 2
           
           # Set image tag
-          kubectl set image deployment/ip-visit-counter main=ip-visit-counter:ci-demo-${{ github.sha }} --namespace=ip-visit-counter
+          kubectl set image deployment/ip-visit-counter main=ip-visit-counter:${IMAGE_TAG} --namespace=ip-visit-counter
+          
+          # Delete old pods to force clean rollout
+          echo "=== Deleting old pods to force clean rollout ==="
+          kubectl delete pods -n ip-visit-counter -l app=ip-visit-counter --grace-period=0 --force || true
+          sleep 3
           
           # Wait for rollout
           kubectl rollout status deployment/ip-visit-counter --namespace=ip-visit-counter --timeout=5m
