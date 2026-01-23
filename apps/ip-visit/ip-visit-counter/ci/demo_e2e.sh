@@ -15,4 +15,10 @@ echo "$resp" | jq -e '.demo_marker == "mirrord-ci-demo"' >/dev/null || {
 	exit 1
 }
 
+# Assert: unique_ips exists and is a number
+echo "$resp" | jq -e '.unique_ips | type == "number"' >/dev/null || {
+	echo "❌ ERROR: unique_ips field missing or not a number"
+	exit 1
+}
+
 echo "✅ demo_e2e passed"
