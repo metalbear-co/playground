@@ -3,7 +3,7 @@ name: CI Demo - mirrord vs Baseline
 on:
   push:
     branches:
-      - demo/ci-mirrord
+      - 'demo/ci-*'
   workflow_dispatch:
 
 concurrency:
