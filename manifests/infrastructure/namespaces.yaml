@@ -7,4 +7,9 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: shop
+---
+apiVersion: v1
+kind: Namespace
+metadata:
   name: visualization

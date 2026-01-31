@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metal-mart-frontend
+spec:
+  selector:
+    matchLabels:
+      app: metal-mart-frontend
+  template:
+    metadata:
+      labels:
+        app: metal-mart-frontend
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-metal-mart-frontend:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NEXT_BASE_PATH
+              value: "/shop"
+            - name: INVENTORY_SERVICE_URL
+              value: "http://inventory-service:80"
+            - name: ORDER_SERVICE_URL
+              value: "http://order-service:80"
+            - name: DELIVERY_SERVICE_URL
+              value: "http://delivery-service:80"
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /shop
+              port: 3000
+              scheme: HTTP
+          livenessProbe:
+            httpGet:
+              path: /shop
+              port: 3000
+              scheme: HTTP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi

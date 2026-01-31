@@ -18,3 +18,4 @@ base/charts
 
 # Generated TypeScript output (server build)
 apps/visualization/visualization-backend/dist/
+apps/shop/*/dist/

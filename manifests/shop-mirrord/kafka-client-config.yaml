@@ -1,0 +1,11 @@
+apiVersion: queues.mirrord.metalbear.co/v1alpha
+kind: MirrordKafkaClientConfig
+metadata:
+  name: shop-kafka-config
+  namespace: mirrord
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.shop.svc.cluster.local:9092
+    - name: client.id
+      value: mirrord-operator-shop

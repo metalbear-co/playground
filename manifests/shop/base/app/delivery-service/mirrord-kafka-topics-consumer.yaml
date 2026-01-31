@@ -1,0 +1,19 @@
+apiVersion: queues.mirrord.metalbear.co/v1alpha
+kind: MirrordKafkaTopicsConsumer
+metadata:
+  name: delivery-service-topics
+spec:
+  consumerApiVersion: apps/v1
+  consumerKind: Deployment
+  consumerName: delivery-service
+  topics:
+    - id: orders
+      clientConfig: shop-kafka-config
+      groupIdSources:
+        - directEnvVar:
+            container: main
+            variable: KAFKA_CONSUMER_GROUP
+      nameSources:
+        - directEnvVar:
+            container: main
+            variable: KAFKA_TOPIC

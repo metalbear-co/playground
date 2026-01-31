@@ -6,6 +6,9 @@ resources:
   - shared-infra-application.yaml
   - ip-visit-application.yaml
   - ip-visit
+  - shop-application.yaml
+  - shop-mirrord-application.yaml
+  - shop
   - visualization-application.yaml
   - visualization
   - gateway.yaml

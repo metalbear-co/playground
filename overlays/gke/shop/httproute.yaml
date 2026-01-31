@@ -1,0 +1,18 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shop-httproute
+  namespace: shop
+spec:
+  parentRefs:
+    - name: playground-gateway
+      namespace: argocd
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /shop
+      backendRefs:
+        - name: metal-mart-frontend
+          namespace: shop
+          port: 80

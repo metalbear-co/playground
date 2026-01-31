@@ -1,0 +1,21 @@
+{
+  "target": {
+    "path": {
+      "deployment": "delivery-service"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": "steal",
+      "outgoing": true
+    },
+    "split_queues": {
+      "orders": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "x-pg-tenant": "dev"
+        }
+      }
+    }
+  }
+}
