@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-order-service:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: DATABASE_URL
+              value: "postgresql://postgres:postgres@postgres:5432/orders"
+            - name: INVENTORY_SERVICE_URL
+              value: "http://inventory-service:80"
+            - name: PAYMENT_SERVICE_URL
+              value: "http://payment-service:80"
+            - name: KAFKA_ADDRESS
+              value: "kafka:9092"
+            - name: KAFKA_TOPIC
+              value: "orders"
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 100Mi
