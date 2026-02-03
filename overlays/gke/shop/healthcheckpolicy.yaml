@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: metal-mart-frontend-healthcheck
+  namespace: shop
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /shop
+        port: 3000
+  targetRef:
+    group: ""
+    kind: Service
+    name: metal-mart-frontend
