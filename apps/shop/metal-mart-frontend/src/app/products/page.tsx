@@ -19,7 +19,7 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(basePath ? `${basePath}/api/products` : "/api/products")
+    fetch(`${basePath}/api/products`)
       .then((r) => r.json())
       .then(setProducts)
       .catch((e) => setError(e.message))
@@ -32,14 +32,14 @@ export default function ProductsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-700 px-6 py-4">
-        <Link href={basePath || "/"} className="text-xl font-bold text-amber-400">
+        <Link href="/" className="text-xl font-bold text-amber-400">
           MetalMart
         </Link>
         <div className="mt-2 flex gap-4">
-          <Link href={basePath ? `${basePath}/products` : "/products"} className="text-slate-300 hover:text-white">
+          <Link href="/products" className="text-slate-300 hover:text-white">
             Products
           </Link>
-          <Link href={basePath ? `${basePath}/cart` : "/cart"} className="text-slate-300 hover:text-white">
+          <Link href="/cart" className="text-slate-300 hover:text-white">
             Cart
           </Link>
         </div>
@@ -57,7 +57,7 @@ export default function ProductsPage() {
               <p className="mt-2 text-amber-400">${(p.price_cents / 100).toFixed(2)}</p>
               <p className="text-xs text-slate-500">In stock: {p.stock}</p>
               <Link
-                href={basePath ? `${basePath}/cart?add=${p.id}` : `/cart?add=${p.id}`}
+                href={`/cart?add=${p.id}`}
                 className="mt-3 inline-block rounded bg-amber-500 px-3 py-1 text-sm font-medium text-slate-900 hover:bg-amber-400"
               >
                 Add to cart
