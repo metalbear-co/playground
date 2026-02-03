@@ -6,6 +6,6 @@ metadata:
 spec:
   properties:
     - name: bootstrap.servers
-      value: kafka.shop.svc.cluster.local:9092
+      value: kafka.infra.svc.cluster.local:9092
     - name: client.id
       value: mirrord-operator-shop
