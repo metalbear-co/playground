@@ -17,8 +17,8 @@ export default function OrderPage() {
     if (!id) return;
     const load = async () => {
       const [orderRes, deliveryRes] = await Promise.all([
-        fetch(basePath ? `${basePath}/api/orders/${id}` : `/api/orders/${id}`),
-        fetch(basePath ? `${basePath}/api/deliveries/order/${id}` : `/api/deliveries/order/${id}`),
+        fetch(`${basePath}/api/orders/${id}`),
+        fetch(`${basePath}/api/deliveries/order/${id}`),
       ]);
       const ord = await orderRes.json();
       const del = await deliveryRes.json();
@@ -34,7 +34,7 @@ export default function OrderPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-700 px-6 py-4">
-        <Link href={basePath || "/"} className="text-xl font-bold text-amber-400">
+        <Link href="/" className="text-xl font-bold text-amber-400">
           MetalMart
         </Link>
       </header>

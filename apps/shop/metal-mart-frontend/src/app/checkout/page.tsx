@@ -22,7 +22,7 @@ export default function CheckoutPage() {
     const items: { productId: number; quantity: number }[] = raw ? JSON.parse(raw) : [];
     Promise.all(
       items.map(async (i) => {
-        const r = await fetch(basePath ? `${basePath}/api/products/${i.productId}` : `/api/products/${i.productId}`);
+        const r = await fetch(`${basePath}/api/products/${i.productId}`);
         const p = await r.json();
         return { ...i, product: p };
       })
@@ -35,7 +35,7 @@ export default function CheckoutPage() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const r = await fetch(basePath ? `${basePath}/api/orders` : "/api/orders", {
+      const r = await fetch(`${basePath}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: orderItems, total_cents: totalCents }),
@@ -60,7 +60,7 @@ export default function CheckoutPage() {
     return (
       <div className="flex min-h-screen flex-col">
         <header className="border-b border-slate-700 px-6 py-4">
-          <Link href={basePath || "/"} className="text-xl font-bold text-amber-400">
+          <Link href="/" className="text-xl font-bold text-amber-400">
             MetalMart
           </Link>
         </header>
@@ -68,7 +68,7 @@ export default function CheckoutPage() {
           <h1 className="text-2xl font-bold text-green-400">Order placed!</h1>
           <p className="text-slate-400">Order ID: {orderId}</p>
           <Link
-            href={basePath ? `${basePath}/orders/${orderId}` : `/orders/${orderId}`}
+            href={`/orders/${orderId}`}
             className="rounded-lg bg-amber-500 px-6 py-2 font-medium text-slate-900 hover:bg-amber-400"
           >
             Track order
@@ -82,7 +82,7 @@ export default function CheckoutPage() {
     return (
       <div className="flex min-h-screen flex-col">
         <header className="border-b border-slate-700 px-6 py-4">
-          <Link href={basePath || "/"} className="text-xl font-bold text-amber-400">
+          <Link href="/" className="text-xl font-bold text-amber-400">
             MetalMart
           </Link>
         </header>
@@ -96,7 +96,7 @@ export default function CheckoutPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-700 px-6 py-4">
-        <Link href={basePath || "/"} className="text-xl font-bold text-amber-400">
+        <Link href="/" className="text-xl font-bold text-amber-400">
           MetalMart
         </Link>
       </header>

@@ -25,11 +25,11 @@ export default function CartPage() {
       if (existing) existing.quantity++;
       else items.push({ productId: id, quantity: 1 });
       localStorage.setItem("metal-mart-cart", JSON.stringify(items));
-      window.history.replaceState({}, "", basePath ? `${basePath}/cart` : "/cart");
+      window.history.replaceState({}, "", `${basePath}/cart`);
     }
     Promise.all(
       items.map(async (i) => {
-        const r = await fetch(basePath ? `${basePath}/api/products/${i.productId}` : `/api/products/${i.productId}`);
+        const r = await fetch(`${basePath}/api/products/${i.productId}`);
         const p = await r.json();
         return { ...i, product: p };
       })
@@ -57,14 +57,14 @@ export default function CartPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-700 px-6 py-4">
-        <Link href={basePath || "/"} className="text-xl font-bold text-amber-400">
+        <Link href="/" className="text-xl font-bold text-amber-400">
           MetalMart
         </Link>
         <div className="mt-2 flex gap-4">
-          <Link href={basePath ? `${basePath}/products` : "/products"} className="text-slate-300 hover:text-white">
+          <Link href="/products" className="text-slate-300 hover:text-white">
             Products
           </Link>
-          <Link href={basePath ? `${basePath}/cart` : "/cart"} className="text-slate-300 hover:text-white">
+          <Link href="/cart" className="text-slate-300 hover:text-white">
             Cart
           </Link>
         </div>
@@ -100,7 +100,7 @@ export default function CartPage() {
             </ul>
             <p className="mt-6 text-xl font-semibold">Total: ${(totalCents / 100).toFixed(2)}</p>
             <Link
-              href={basePath ? `${basePath}/checkout` : "/checkout"}
+              href="/checkout"
               className="mt-4 inline-block rounded-lg bg-amber-500 px-6 py-2 font-medium text-slate-900 hover:bg-amber-400"
             >
               Checkout
