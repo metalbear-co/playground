@@ -8,7 +8,7 @@ metadata:
     - resources-finalizer.argoproj.io
 spec:
   destination:
-    namespace: default
+    namespace: infra
     server: https://kubernetes.default.svc
   project: default
   source:
