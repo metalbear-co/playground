@@ -19,13 +19,13 @@ spec:
             - name: PORT
               value: "80"
             - name: KAFKA_ADDRESS
-              value: "kafka:9092"
+              value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "orders"
             - name: KAFKA_CONSUMER_GROUP
               value: "delivery-service"
             - name: DATABASE_URL
-              value: "postgresql://postgres:postgres@postgres:5432/deliveries"
+              value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/deliveries"
           ports:
             - containerPort: 80
               protocol: TCP

@@ -19,13 +19,13 @@ spec:
             - name: PORT
               value: "80"
             - name: DATABASE_URL
-              value: "postgresql://postgres:postgres@postgres:5432/orders"
+              value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/orders"
             - name: INVENTORY_SERVICE_URL
               value: "http://inventory-service:80"
             - name: PAYMENT_SERVICE_URL
               value: "http://payment-service:80"
             - name: KAFKA_ADDRESS
-              value: "kafka:9092"
+              value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "orders"
           ports:

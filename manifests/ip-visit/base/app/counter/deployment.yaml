@@ -17,11 +17,11 @@ spec:
         - name: PORT
           value: "80"
         - name: REDISADDRESS
-          value: redis-main:6379
+          value: redis-main.infra.svc.cluster.local:6379
         - name: RESPONSEFILE
           value: /app/response.txt
         - name: KAFKAADDRESS
-          value: kafka:9092
+          value: kafka.infra.svc.cluster.local:9092
         - name: KAFKATOPIC
           value: ip-visit
         - name: IPINFOADDRESS
