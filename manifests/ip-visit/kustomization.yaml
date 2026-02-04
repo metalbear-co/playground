@@ -5,12 +5,9 @@ kind: Kustomization
 namespace: ip-visit-counter
 
 resources:
-  # Infrastructure first (redis, kafka) so they're available for app services
-  - ./base/infra/kafka
-  - ./base/infra/redis
   # AWS credentials secret (required by counter and sqs-consumer deployments)
   - ./secret.yaml
-  # Then app services
+  # App services (Redis, Kafka in shared infra namespace)
   - ./base/app/ip-info
   - ./base/app/ip-info-grpc
   - ./base/app/counter

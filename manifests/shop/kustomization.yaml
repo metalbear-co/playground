@@ -4,8 +4,6 @@ kind: Kustomization
 namespace: shop
 
 resources:
-  - ./base/infra/postgres
-  - ./base/infra/kafka
   - ./base/app/inventory-service
   - ./base/app/order-service
   - ./base/app/payment-service
