@@ -5,7 +5,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const res = await fetch(`${base}/orders/${id}`);
-  const data = await res.json();
-  return Response.json(data, { status: res.status });
+  try {
+    const res = await fetch(`${base}/orders/${id}`);
+    const data = await res.json().catch(() => ({ error: "Invalid response from order service" }));
+    return Response.json(data, { status: res.status });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Order service unreachable";
+    return Response.json({ error: message }, { status: 502 });
+  }
 }

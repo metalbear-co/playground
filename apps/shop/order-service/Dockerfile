@@ -2,7 +2,7 @@
 FROM node:20-bookworm AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=optional
+RUN npm ci
 COPY tsconfig.json .
 COPY src src
 RUN npm run build
