@@ -2,6 +2,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import { Connection, Client } from "@temporalio/client";
 import { orderMode } from "./config.js";
@@ -36,6 +37,13 @@ async function initDb() {
 
 app.use(express.json());
 
+const orderReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
@@ -46,6 +54,35 @@ type OrderInput = {
   total_cents: number;
   tenant?: string;
 };
+
+const MAX_PRODUCT_ID = 2 ** 31 - 1; // safe integer, prevents URL injection
+
+/**
+ * Validate and normalize order items at the boundary. Ensures productId and
+ * quantity are safe integers so they can be used in URLs and downstream.
+ */
+function validateOrderItems(raw: unknown): { items: Array<{ productId: number; quantity: number }> } | { error: string; productId?: number } {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { error: "Items required" };
+  }
+  const items: Array<{ productId: number; quantity: number }> = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = raw[i];
+    if (entry === null || typeof entry !== "object") {
+      return { error: "Invalid item" };
+    }
+    const productId = Number(entry.productId);
+    const quantity = Number(entry.quantity);
+    if (!Number.isInteger(productId) || productId < 1 || productId > MAX_PRODUCT_ID) {
+      return { error: "Invalid productId", productId: productId };
+    }
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      return { error: "Invalid quantity" };
+    }
+    items.push({ productId, quantity });
+  }
+  return { items };
+}
 
 /** Thrown by createOrderDirect to preserve HTTP status and response body. */
 class OrderError extends Error {
@@ -155,14 +192,18 @@ async function createOrderDirect(
 
 app.post("/orders", async (req, res) => {
   const tenant = req.headers["x-pg-tenant"] as string | undefined;
-  const { items = [], total_cents = 0 } = req.body as {
-    items: Array<{ productId: number; quantity: number }>;
-    total_cents?: number;
-  };
+  const body = req.body as { items?: unknown; total_cents?: number };
+  const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
 
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: "Items required" });
+  const validated = validateOrderItems(body.items);
+  if ("error" in validated) {
+    return res.status(400).json(
+      validated.productId !== undefined
+        ? { error: validated.error, productId: validated.productId }
+        : { error: validated.error }
+    );
   }
+  const { items } = validated;
 
   const input: OrderInput = { items, total_cents, tenant };
 
@@ -188,8 +229,9 @@ app.post("/orders", async (req, res) => {
   }
 });
 
-app.get("/orders/:id", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+app.get("/orders/:id", orderReadLimiter, async (req, res) => {
+  const rawId = req.params.id;
+  const id = parseInt(Array.isArray(rawId) ? rawId[0] : rawId, 10);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
   try {
     const { rows } = await pool.query(
