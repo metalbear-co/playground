@@ -17,4 +17,9 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: temporal
+---
+apiVersion: v1
+kind: Namespace
+metadata:
   name: visualization
