@@ -4,12 +4,18 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run build:workflows",
+    "build:workflows": "tsx src/scripts/build-workflow-bundle.ts",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
     "kafkajs": "^2.2.4",
     "pg": "^8.13.0"
   },

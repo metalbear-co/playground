@@ -10,4 +10,6 @@ data:
         CREATE DATABASE inventory;
         CREATE DATABASE orders;
         CREATE DATABASE deliveries;
+        CREATE DATABASE temporal;
+        CREATE DATABASE temporal_visibility;
     EOSQL

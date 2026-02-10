@@ -28,6 +28,12 @@ spec:
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "orders"
+            - name: USE_TEMPORAL
+              value: "false"
+            - name: TEMPORAL_ADDRESS
+              value: "temporal-frontend.temporal.svc.cluster.local:7233"
+            - name: TEMPORAL_NAMESPACE
+              value: "temporal"
           ports:
             - containerPort: 80
               protocol: TCP

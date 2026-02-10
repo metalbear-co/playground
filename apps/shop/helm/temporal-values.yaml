@@ -1,0 +1,49 @@
+# Minimal Temporal Helm values for the shop demo.
+# Uses the existing Postgres in namespace `infra`. Create the secret in namespace `temporal` before installing.
+#
+# 1. Create namespace temporal (or: kubectl apply -k manifests/infrastructure)
+# 2. Create secret with Postgres password:
+#      kubectl create secret generic temporal-db-secret -n temporal --from-literal=password=postgres
+# 3. Install: helm install temporal temporal/temporal -n temporal -f apps/shop/helm/temporal-values.yaml --timeout 900s
+#
+# Order-service expects: temporal-frontend.temporal.svc.cluster.local:7233 and namespace "temporal".
+
+server:
+  config:
+    persistence:
+      defaultStore: default
+      visibilityStore: visibility
+      numHistoryShards: 4
+      datastores:
+        default:
+          sql:
+            createDatabase: true
+            manageSchema: true
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal
+            connectAddr: "postgres.infra.svc.cluster.local:5432"
+            connectProtocol: tcp
+            user: postgres
+            existingSecret: temporal-db-secret
+            secretKey: password
+        visibility:
+          sql:
+            createDatabase: true
+            manageSchema: true
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal_visibility
+            connectAddr: "postgres.infra.svc.cluster.local:5432"
+            connectProtocol: tcp
+            user: postgres
+            existingSecret: temporal-db-secret
+            secretKey: password
+    # Create the "temporal" logical namespace so order-service can use TEMPORAL_NAMESPACE=temporal
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 72h
+        - name: temporal
+          retention: 72h
