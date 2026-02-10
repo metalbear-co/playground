@@ -133,8 +133,9 @@ async function createOrderDirect(
   const { items, total_cents: totalCents, tenant } = input;
 
   for (const item of items) {
+    const productId = encodeURIComponent(String(item.productId));
     const checkRes = await fetch(
-      `${inventoryUrl}/products/${item.productId}/check-stock`,
+      `${inventoryUrl}/products/${productId}/check-stock`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
