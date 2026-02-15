@@ -1,0 +1,44 @@
+"use client";
+
+import Link from "next/link";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+type HeaderProps = {
+  /** Show "Official MetalBear Swag" subtitle (home page only) */
+  showSubtitle?: boolean;
+};
+
+export default function Header({ showSubtitle = false }: HeaderProps) {
+  return (
+    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <Link
+          href={basePath || "/"}
+          className="text-xl font-bold tracking-tight text-[#6a4ff5] hover:text-[#5a3fe5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2 rounded"
+        >
+          MetalMart
+        </Link>
+        <div className="flex items-center gap-8">
+          {showSubtitle && (
+            <p className="hidden text-sm text-slate-600 sm:block">Official MetalBear Swag</p>
+          )}
+          <nav className="flex gap-6" aria-label="Main navigation">
+            <Link
+              href={`${basePath}/products`}
+              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              Products
+            </Link>
+            <Link
+              href={`${basePath}/cart`}
+              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              Cart
+            </Link>
+          </nav>
+        </div>
+      </div>
+    </header>
+  );
+}
