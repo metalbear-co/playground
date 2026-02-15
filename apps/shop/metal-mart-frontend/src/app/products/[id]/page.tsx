@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Header from "@/components/Header";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -35,14 +36,28 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="p-8">Loading...</div>;
-  if (error || !product) {
+  if (loading) {
     return (
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col bg-white">
         <Header />
         <main className="flex-1 p-8">
-          <p className="text-red-400">{error || "Product not found"}</p>
-          <Link href={`${basePath}/products`} className="mt-4 inline-block text-amber-400 hover:underline">
+          <LoadingSpinner />
+        </main>
+      </div>
+    );
+  }
+  if (error || !product) {
+    return (
+      <div className="flex min-h-screen flex-col bg-white">
+        <Header />
+        <main className="flex-1 p-8">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
+            {error || "Product not found"}
+          </p>
+          <Link
+            href={`${basePath}/products`}
+            className="mt-4 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"
+          >
             ← Back to products
           </Link>
         </main>
@@ -51,12 +66,12 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-white">
       <Header />
-      <main className="flex-1 p-8">
+      <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-5xl">
-          <div className="grid gap-8 md:grid-cols-2">
-            <div className="aspect-square overflow-hidden rounded-lg bg-slate-800">
+          <div className="grid gap-10 md:grid-cols-2">
+            <div className="aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg">
               {product.image_url ? (
                 <img
                   src={product.image_url}
@@ -64,30 +79,34 @@ export default function ProductDetailPage() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-500">
+                <div className="flex h-full w-full items-center justify-center text-slate-400">
                   No image
                 </div>
               )}
             </div>
             <div className="flex flex-col">
-              <h1 className="text-2xl font-bold text-slate-100">{product.name}</h1>
-              <p className="mt-2 text-xl text-amber-400">${(product.price_cents / 100).toFixed(2)}</p>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">{product.name}</h1>
+              <p className="mt-3 text-2xl font-semibold text-[#6a4ff5]">
+                ${(product.price_cents / 100).toFixed(2)}
+              </p>
               {product.description && (
-                <p className="mt-4 text-slate-300 leading-relaxed">{product.description}</p>
+                <p className="mt-6 text-slate-600 leading-relaxed">{product.description}</p>
               )}
-              <p className="mt-2 text-sm text-slate-500">In stock: {product.stock}</p>
-              <Link
-                href={`${basePath}/cart?add=${product.id}`}
-                className="mt-8 inline-block w-fit rounded-lg bg-amber-500 px-6 py-3 font-medium text-slate-900 hover:bg-amber-400"
-              >
-                Add to cart
-              </Link>
-              <Link
-                href={`${basePath}/products`}
-                className="mt-4 text-slate-400 hover:text-white"
-              >
-                ← Back to products
-              </Link>
+              <p className="mt-4 text-sm text-slate-500">In stock: {product.stock}</p>
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+                <Link
+                  href={`${basePath}/cart?add=${product.id}`}
+                  className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3.5 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+                >
+                  Add to cart
+                </Link>
+                <Link
+                  href={`${basePath}/products`}
+                  className="btn-secondary inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:ring-offset-2"
+                >
+                  ← Back to products
+                </Link>
+              </div>
             </div>
           </div>
         </div>
