@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Header from "@/components/Header";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -32,19 +33,7 @@ export default function ProductsPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-slate-700 px-6 py-4">
-        <Link href="/" className="text-xl font-bold text-amber-400">
-          MetalMart
-        </Link>
-        <div className="mt-2 flex gap-4">
-          <Link href="/products" className="text-slate-300 hover:text-white">
-            Products
-          </Link>
-          <Link href="/cart" className="text-slate-300 hover:text-white">
-            Cart
-          </Link>
-        </div>
-      </header>
+      <Header />
       <main className="flex-1 p-8">
         <h1 className="mb-6 text-2xl font-bold">Products</h1>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">

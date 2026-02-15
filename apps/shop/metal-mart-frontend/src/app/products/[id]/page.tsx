@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import Header from "@/components/Header";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -38,11 +39,7 @@ export default function ProductDetailPage() {
   if (error || !product) {
     return (
       <div className="flex min-h-screen flex-col">
-        <header className="border-b border-slate-700 px-6 py-4">
-          <Link href={`${basePath}/products`} className="text-xl font-bold text-amber-400">
-            MetalMart
-          </Link>
-        </header>
+        <Header />
         <main className="flex-1 p-8">
           <p className="text-red-400">{error || "Product not found"}</p>
           <Link href={`${basePath}/products`} className="mt-4 inline-block text-amber-400 hover:underline">
@@ -55,19 +52,7 @@ export default function ProductDetailPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-slate-700 px-6 py-4">
-        <Link href={`${basePath}`} className="text-xl font-bold text-amber-400">
-          MetalMart
-        </Link>
-        <div className="mt-2 flex gap-4">
-          <Link href={`${basePath}/products`} className="text-slate-300 hover:text-white">
-            Products
-          </Link>
-          <Link href={`${basePath}/cart`} className="text-slate-300 hover:text-white">
-            Cart
-          </Link>
-        </div>
-      </header>
+      <Header />
       <main className="flex-1 p-8">
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-8 md:grid-cols-2">

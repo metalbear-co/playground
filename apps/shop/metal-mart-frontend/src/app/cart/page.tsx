@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Header from "@/components/Header";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -9,6 +10,7 @@ type Product = {
   id: number;
   name: string;
   price_cents: number;
+  image_url: string | null;
 };
 
 export default function CartPage() {
@@ -56,19 +58,7 @@ export default function CartPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-slate-700 px-6 py-4">
-        <Link href="/" className="text-xl font-bold text-amber-400">
-          MetalMart
-        </Link>
-        <div className="mt-2 flex gap-4">
-          <Link href="/products" className="text-slate-300 hover:text-white">
-            Products
-          </Link>
-          <Link href="/cart" className="text-slate-300 hover:text-white">
-            Cart
-          </Link>
-        </div>
-      </header>
+      <Header />
       <main className="flex-1 p-8">
         <h1 className="mb-6 text-2xl font-bold">Cart</h1>
         {cart.length === 0 ? (
@@ -77,10 +67,25 @@ export default function CartPage() {
           <>
             <ul className="space-y-4">
               {cart.map((i) => (
-                <li key={i.productId} className="flex items-center justify-between rounded-lg border border-slate-700 p-4">
-                  <span className="font-medium">{i.product?.name ?? `Product ${i.productId}`}</span>
-                  <span className="text-amber-400">${(((i.product?.price_cents ?? 0) * i.quantity) / 100).toFixed(2)}</span>
-                  <div className="flex items-center gap-2">
+                <li key={i.productId} className="flex items-center gap-4 rounded-lg border border-slate-700 p-4">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-slate-700">
+                    {i.product?.image_url ? (
+                      <img
+                        src={i.product.image_url}
+                        alt={i.product.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-slate-500 text-xs">
+                        —
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium">{i.product?.name ?? `Product ${i.productId}`}</span>
+                  </div>
+                  <span className="text-amber-400 shrink-0">${(((i.product?.price_cents ?? 0) * i.quantity) / 100).toFixed(2)}</span>
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
                       onClick={() => updateQty(i.productId, -1)}
                       className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
@@ -100,7 +105,7 @@ export default function CartPage() {
             </ul>
             <p className="mt-6 text-xl font-semibold">Total: ${(totalCents / 100).toFixed(2)}</p>
             <Link
-              href="/checkout"
+              href={`${basePath}/checkout`}
               className="mt-4 inline-block rounded-lg bg-amber-500 px-6 py-2 font-medium text-slate-900 hover:bg-amber-400"
             >
               Checkout
