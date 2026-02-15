@@ -1,32 +1,11 @@
 {
-  "target": {
-    "path": {
-      "deployment": "order-service"
-    }
-  },
+  "target": {"namespace": "shop", "path": {"deployment": "order-service"}},
   "feature": {
+    "fs": "read",
+    "env": true,
     "network": {
-      "incoming": {
-        "mode": "steal",
-        "http_filter": {
-          "header_filter": "X-PG-Tenant: dev"
-        }
-      },
+      "incoming": {"mode": "mirror", "http_filter": {"header_filter": "X-PG-Tenant: dev"}},
       "outgoing": true
-    },
-    "db_branches": [
-      {
-        "id": "metal-mart-dev",
-        "type": "postgres",
-        "version": "16",
-        "name": "orders",
-        "connection": {
-          "url": {
-            "type": "env",
-            "variable": "DATABASE_URL"
-          }
-        }
-      }
-    ]
+    }
   }
 }

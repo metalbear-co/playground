@@ -18,17 +18,23 @@ async function initDb() {
         description TEXT,
         price_cents INTEGER NOT NULL,
         stock INTEGER NOT NULL DEFAULT 0,
+        image_url VARCHAR(512),
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    try {
+      await client.query("ALTER TABLE products ADD COLUMN image_url VARCHAR(512)");
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== "42701") throw err;
+    }
     const { rows } = await client.query("SELECT COUNT(*) FROM products");
     if (parseInt(rows[0].count, 10) === 0) {
       await client.query(`
-        INSERT INTO products (name, description, price_cents, stock) VALUES
-        ('MetalBear T-Shirt', 'Official MetalBear bear logo tee', 2499, 50),
-        ('MetalBear Hoodie', 'Cozy MetalBear hoodie', 4999, 30),
-        ('MetalBear Mug', 'Start your day with mirrord', 1299, 100),
-        ('MetalBear Stickers', 'Pack of 5 awesome stickers', 499, 200)
+        INSERT INTO products (name, description, price_cents, stock, image_url) VALUES
+        ('MetalBear T-Shirt', 'Official MetalBear bear logo tee', 2499, 50, 'https://placehold.co/400x400/1e293b/94a3b8?text=T-Shirt'),
+        ('MetalBear Hoodie', 'Cozy MetalBear hoodie', 4999, 30, 'https://placehold.co/400x400/1e293b/94a3b8?text=Hoodie'),
+        ('MetalBear Mug', 'Start your day with mirrord', 1299, 100, 'https://placehold.co/400x400/1e293b/94a3b8?text=Mug'),
+        ('MetalBear Stickers', 'Pack of 5 awesome stickers', 499, 200, 'https://placehold.co/400x400/1e293b/94a3b8?text=Stickers')
       `);
     }
   } finally {
@@ -43,8 +49,9 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/products", async (_req, res) => {
+  // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
-    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock FROM products ORDER BY id");
+    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url FROM products ORDER BY id");
     res.json(rows);
   } catch (err) {
     console.error("Error fetching products:", err);
@@ -59,7 +66,7 @@ app.get("/products/:id", async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, description, price_cents, stock FROM products WHERE id = $1",
+      "SELECT id, name, description, price_cents, stock, image_url FROM products WHERE id = $1",
       [id]
     );
     if (rows.length === 0) {

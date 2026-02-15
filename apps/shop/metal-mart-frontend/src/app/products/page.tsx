@@ -11,6 +11,7 @@ type Product = {
   description: string | null;
   price_cents: number;
   stock: number;
+  image_url: string | null;
 };
 
 export default function ProductsPage() {
@@ -48,21 +49,30 @@ export default function ProductsPage() {
         <h1 className="mb-6 text-2xl font-bold">Products</h1>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {products.map((p) => (
-            <div
+            <Link
               key={p.id}
-              className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 transition hover:border-amber-500/50"
+              href={`${basePath}/products/${p.id}`}
+              className="rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden transition hover:border-amber-500/50 flex flex-col"
             >
-              <h2 className="font-semibold text-slate-100">{p.name}</h2>
-              <p className="mt-1 text-sm text-slate-400">{p.description}</p>
-              <p className="mt-2 text-amber-400">${(p.price_cents / 100).toFixed(2)}</p>
-              <p className="text-xs text-slate-500">In stock: {p.stock}</p>
-              <Link
-                href={`/cart?add=${p.id}`}
-                className="mt-3 inline-block rounded bg-amber-500 px-3 py-1 text-sm font-medium text-slate-900 hover:bg-amber-400"
-              >
-                Add to cart
-              </Link>
-            </div>
+              <div className="aspect-square bg-slate-700 relative">
+                {p.image_url ? (
+                  <img
+                    src={p.image_url}
+                    alt={p.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">
+                    No image
+                  </div>
+                )}
+              </div>
+              <div className="p-4 flex-1 flex flex-col">
+                <h2 className="font-semibold text-slate-100">{p.name}</h2>
+                <p className="mt-2 text-amber-400 font-medium">${(p.price_cents / 100).toFixed(2)}</p>
+                <p className="mt-auto pt-2 text-xs text-slate-500">In stock: {p.stock}</p>
+              </div>
+            </Link>
           ))}
         </div>
       </main>

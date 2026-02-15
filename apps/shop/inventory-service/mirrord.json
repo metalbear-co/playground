@@ -1,8 +1,7 @@
 {
   "target": {
-    "path": {
-      "deployment": "inventory-service"
-    }
+    "path": "deploy/inventory-service",
+    "namespace": "shop"
   },
   "feature": {
     "network": {
@@ -17,7 +16,7 @@
     "db_branches": [
       {
         "id": "metal-mart-dev",
-        "type": "postgres",
+        "type": "pg",
         "version": "16",
         "name": "inventory",
         "connection": {
