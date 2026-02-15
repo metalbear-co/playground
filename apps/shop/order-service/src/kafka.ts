@@ -21,6 +21,8 @@ export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void>
   };
   const kafkaHeaders: Record<string, string> = {};
   if (tenant) kafkaHeaders["x-pg-tenant"] = tenant;
+  if (process.env.KAFKA_MSG_AUTHOR) kafkaHeaders["author"] = process.env.KAFKA_MSG_AUTHOR;
+  if (process.env.KAFKA_MSG_SOURCE) kafkaHeaders["source"] = process.env.KAFKA_MSG_SOURCE;
 
   await producer.send({
     topic: process.env.KAFKA_TOPIC || "orders",
