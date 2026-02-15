@@ -62,9 +62,17 @@ async function startConsumer() {
   await consumer.run({
     eachMessage: async ({ topic: t, partition, message }) => {
       try {
+        console.log(`[${t}] Raw message received`, {
+          partition,
+          offset: message.offset,
+          headers: message.headers ? Object.fromEntries(
+            Object.entries(message.headers).map(([k, v]) => [k, v?.toString()])
+          ) : null,
+          value: message.value?.toString(),
+        });
         const body = JSON.parse(message.value?.toString() || "{}");
         const orderId = body.orderId;
-        console.log(`[${t}] Received order ${orderId}`, { headers: message.headers });
+        console.log(`[${t}] Received order ${orderId}`);
 
         const client = await pool.connect();
         try {
