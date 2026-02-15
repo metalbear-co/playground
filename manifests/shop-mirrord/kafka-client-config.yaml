@@ -9,3 +9,5 @@ spec:
       value: kafka.infra.svc.cluster.local:9092
     - name: client.id
       value: mirrord-operator-shop
+    - name: partition.assignment.strategy
+      value: roundrobin
