@@ -1,5 +1,5 @@
 import express from "express";
-import { Kafka } from "kafkajs";
+import { Kafka, PartitionAssigners, AssignerProtocol } from "kafkajs";
 import { Pool } from "pg";
 
 const app = express();
@@ -8,6 +8,26 @@ const port = parseInt(process.env.PORT || "80", 10);
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/deliveries",
 });
+
+const roundRobinCompat: Parameters<typeof Kafka.prototype.consumer>[0]["partitionAssigners"] = [
+  ({ cluster, groupId, logger }) => {
+    const base = PartitionAssigners.roundRobin({ cluster, groupId, logger });
+    return {
+      ...base,
+      name: "roundrobin",
+      protocol({ topics }: { topics: string[] }) {
+        return {
+          name: "roundrobin",
+          metadata: AssignerProtocol.MemberMetadata.encode({
+            version: base.version,
+            topics,
+            userData: Buffer.alloc(0),
+          }),
+        };
+      },
+    };
+  },
+];
 
 const kafka = new Kafka({
   clientId: "delivery-service",
@@ -33,6 +53,7 @@ async function initDb() {
 async function startConsumer() {
   const consumer = kafka.consumer({
     groupId: process.env.KAFKA_CONSUMER_GROUP || "delivery-service",
+    partitionAssigners: roundRobinCompat,
   });
   await consumer.connect();
   const topic = process.env.KAFKA_TOPIC || "orders";
