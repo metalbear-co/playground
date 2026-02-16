@@ -4,17 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import ProductImage from "@/components/ProductImage";
+import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-type Product = {
-  id: number;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  stock: number;
-  image_url: string | null;
-};
 
 function ProductTile({
   product,
@@ -36,11 +29,13 @@ function ProductTile({
         style={{ animationDelay: `${delay}s` }}
       >
         <div className="absolute inset-0">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
+          {getPrimaryImageUrl(product) ? (
+            <ProductImage
+              src={getPrimaryImageUrl(product)!}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-slate-200 text-slate-400">
@@ -69,12 +64,14 @@ function ProductTile({
         className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row"
         style={{ animationDelay: `${delay}s` }}
       >
-        <div className="aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
+        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
+          {getPrimaryImageUrl(product) ? (
+            <ProductImage
+              src={getPrimaryImageUrl(product)!}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 100vw, 256px"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-400">
@@ -104,12 +101,14 @@ function ProductTile({
       className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
       style={{ animationDelay: `${delay}s` }}
     >
-      <div className="aspect-square overflow-hidden bg-slate-100">
-        {product.image_url ? (
-          <img
-            src={product.image_url}
+      <div className="relative aspect-square overflow-hidden bg-slate-100">
+        {getPrimaryImageUrl(product) ? (
+          <ProductImage
+            src={getPrimaryImageUrl(product)!}
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fill
+            sizes="(max-width: 640px) 50vw, 25vw"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-slate-400">
@@ -268,9 +267,26 @@ export default function Home() {
 
         {/* MetalBear-style purple banner */}
         <section className="bg-[#6a4ff5] px-6 py-8">
-          <p className="text-center text-sm font-medium text-white/90">
-            Official MetalBear swag — gear up for faster development
-          </p>
+          <div className="mx-auto flex max-w-md flex-col items-center gap-3">
+            <p className="text-center text-sm font-medium text-white/90">
+              Official MetalBear swag — gear up for faster development
+            </p>
+            <a
+              href="https://metalbear.co"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
+            >
+              <ProductImage
+                src="mirrord_logo_srsyxc"
+                alt="mirrord"
+                width={24}
+                height={24}
+                className="shrink-0 opacity-90"
+              />
+              <span className="text-xs font-medium">Powered by mirrord</span>
+            </a>
+          </div>
         </section>
       </main>
     </div>

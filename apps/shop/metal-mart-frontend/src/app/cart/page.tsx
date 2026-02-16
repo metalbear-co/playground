@@ -4,15 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import ProductImage from "@/components/ProductImage";
+import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-type Product = {
-  id: number;
-  name: string;
-  price_cents: number;
-  image_url: string | null;
-};
 
 export default function CartPage() {
   const [cart, setCart] = useState<{ productId: number; quantity: number; product?: Product }[]>([]);
@@ -90,12 +85,14 @@ export default function CartPage() {
                     key={i.productId}
                     className="flex items-center gap-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#6a4ff5]/20"
                   >
-                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100">
-                      {i.product?.image_url ? (
-                        <img
-                          src={i.product.image_url}
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                      {i.product && getPrimaryImageUrl(i.product) ? (
+                        <ProductImage
+                          src={getPrimaryImageUrl(i.product)!}
                           alt={i.product.name}
                           className="h-full w-full object-cover"
+                          width={80}
+                          height={80}
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">

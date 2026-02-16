@@ -4,17 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import ProductImage from "@/components/ProductImage";
+import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-type Product = {
-  id: number;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  stock: number;
-  image_url: string | null;
-};
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -66,12 +59,14 @@ export default function ProductsPage() {
                 className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
-                <div className="aspect-square overflow-hidden bg-slate-100">
-                  {p.image_url ? (
-                    <img
-                      src={p.image_url}
+                <div className="relative aspect-square overflow-hidden bg-slate-100">
+                  {getPrimaryImageUrl(p) ? (
+                    <ProductImage
+                      src={getPrimaryImageUrl(p)!}
                       alt={p.name}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      fill
+                      sizes="(max-width: 640px) 50vw, 25vw"
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">

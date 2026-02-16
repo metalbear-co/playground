@@ -11,7 +11,8 @@ type Product = {
   id: number;
   name: string;
   price_cents: number;
-  image_url: string | null;
+  image_url?: string | null;
+  image_urls?: string[] | null;
 };
 
 export default function CheckoutPage() {
