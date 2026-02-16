@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import Footer from "@/components/Footer";
+import MascotPositioned from "@/components/MascotPositioned";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -21,7 +22,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={dmSans.variable}>
       <body className="min-h-screen antialiased font-sans">
-        <div className="flex min-h-screen flex-col">
+        <div className="relative min-h-screen flex flex-col">
+          <MascotPositioned />
           <div className="flex-1">{children}</div>
           <Footer />
         </div>

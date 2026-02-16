@@ -13,19 +13,24 @@ function ProductTile({
   product,
   variant,
   delay = 0,
+  elevated = false,
 }: {
   product: Product;
   variant: "featured" | "standard" | "wide";
   delay?: number;
+  /** Above mascot on home page so card stays opaque */
+  elevated?: boolean;
 }) {
   const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
+
+  const elevatedClass = elevated ? "relative z-30" : "";
 
   if (variant === "featured") {
     return (
       <Link
         href={href}
-        className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal"
+        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         <div className="absolute inset-0">
@@ -61,7 +66,7 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className="group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row"
+        className={`group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
@@ -98,7 +103,7 @@ function ProductTile({
   return (
     <Link
       href={href}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+      className={`group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
       <div className="relative aspect-square overflow-hidden bg-slate-100">
@@ -198,7 +203,7 @@ export default function Home() {
                           : ""
                       }
                     >
-                      <ProductTile product={featured} variant="featured" delay={0} />
+                      <ProductTile product={featured} variant="featured" delay={0} elevated />
                     </div>
                   )}
                   {/* Side tiles - products 2 and 3 stacked on the right (or single tile spans 2 rows) */}
@@ -206,18 +211,18 @@ export default function Home() {
                     <div
                       className={`md:col-span-2 ${rest[1] ? "md:row-span-1" : "md:row-span-2"}`}
                     >
-                      <ProductTile product={rest[0]} variant="standard" delay={0.06} />
+                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated />
                     </div>
                   )}
                   {rest[1] && (
                     <div className="md:col-span-2 md:row-span-1">
-                      <ProductTile product={rest[1]} variant="standard" delay={0.12} />
+                      <ProductTile product={rest[1]} variant="standard" delay={0.12} elevated />
                     </div>
                   )}
                   {/* Bottom row - product 4 as wide horizontal tile */}
                   {rest[2] && (
                     <div className="md:col-span-4">
-                      <ProductTile product={rest[2]} variant="wide" delay={0.18} />
+                      <ProductTile product={rest[2]} variant="wide" delay={0.18} elevated />
                     </div>
                   )}
                   {/* Products 5+ in a grid */}
@@ -229,6 +234,7 @@ export default function Home() {
                           product={p}
                           variant="standard"
                           delay={0.24 + i * 0.06}
+                          elevated
                         />
                       ))}
                     </div>
