@@ -17,7 +17,7 @@ export default function Mascot({ position = "corner" }: { position?: MascotPosit
       className={`pointer-events-none absolute z-20 hidden opacity-60 md:block ${
         isHero
           ? "top-20 right-0 w-[min(360px,40vw)]"
-          : "bottom-56 right-0 w-[min(280px,30vw)]"
+          : "bottom-[24rem] right-0 w-[min(280px,30vw)]"
       }`}
       aria-hidden
     >

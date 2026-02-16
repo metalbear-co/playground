@@ -108,3 +108,10 @@ a, button {
   transform: rotate(-0.5deg);
   opacity: 0.9;
 }
+
+/* Decorative wave above footer */
+.footer-wave {
+  display: block;
+  width: 100%;
+  height: 32px;
+}
