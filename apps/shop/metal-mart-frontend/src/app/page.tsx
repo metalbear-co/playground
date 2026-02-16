@@ -4,43 +4,45 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NewBadge from "@/components/NewBadge";
+import ProductImage from "@/components/ProductImage";
+import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-type Product = {
-  id: number;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  stock: number;
-  image_url: string | null;
-};
 
 function ProductTile({
   product,
   variant,
   delay = 0,
+  elevated = false,
 }: {
   product: Product;
   variant: "featured" | "standard" | "wide";
   delay?: number;
+  /** Above mascot on home page so card stays opaque */
+  elevated?: boolean;
 }) {
   const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
+
+  const elevatedClass = elevated ? "relative z-30" : "";
 
   if (variant === "featured") {
     return (
       <Link
         href={href}
-        className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 animate-card-reveal"
+        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
+        {product.is_new && <NewBadge size="default" />}
         <div className="absolute inset-0">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
+          {getPrimaryImageUrl(product) ? (
+            <ProductImage
+              src={getPrimaryImageUrl(product)!}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-slate-200 text-slate-400">
@@ -66,15 +68,18 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row"
+        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
-        <div className="aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
+        {product.is_new && <NewBadge size="default" />}
+        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
+          {getPrimaryImageUrl(product) ? (
+            <ProductImage
+              src={getPrimaryImageUrl(product)!}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 100vw, 256px"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-400">
@@ -101,15 +106,18 @@ function ProductTile({
   return (
     <Link
       href={href}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
-      <div className="aspect-square overflow-hidden bg-slate-100">
-        {product.image_url ? (
-          <img
-            src={product.image_url}
+      {product.is_new && <NewBadge size="default" />}
+      <div className="relative aspect-square overflow-hidden bg-slate-100">
+        {getPrimaryImageUrl(product) ? (
+          <ProductImage
+            src={getPrimaryImageUrl(product)!}
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fill
+            sizes="(max-width: 640px) 50vw, 25vw"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-slate-400">
@@ -172,21 +180,14 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-white">
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
-        {/* Hero strip */}
-        <section className="border-b border-slate-100 px-6 py-8">
-          <div className="mx-auto max-w-6xl">
-            <h1 className="animate-fade-in-up text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              MetalMart
-            </h1>
-            <p className="animate-fade-in-up animate-fade-in-up-delay-1 mt-1 text-slate-600">
-              Official MetalBear merchandise — gear up for faster development
-            </p>
-          </div>
-        </section>
-
         {/* Bento product grid */}
         <section className="flex-1 px-6 py-12">
           <div className="mx-auto max-w-6xl">
+            {hasProducts && (
+              <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
+                Featured products
+              </h1>
+            )}
             {hasProducts ? (
               <>
                 {/* Bento grid: featured large (2x2), 2 stacked side tiles, wide bottom row */}
@@ -206,7 +207,7 @@ export default function Home() {
                           : ""
                       }
                     >
-                      <ProductTile product={featured} variant="featured" delay={0} />
+                      <ProductTile product={featured} variant="featured" delay={0} elevated />
                     </div>
                   )}
                   {/* Side tiles - products 2 and 3 stacked on the right (or single tile spans 2 rows) */}
@@ -214,18 +215,18 @@ export default function Home() {
                     <div
                       className={`md:col-span-2 ${rest[1] ? "md:row-span-1" : "md:row-span-2"}`}
                     >
-                      <ProductTile product={rest[0]} variant="standard" delay={0.06} />
+                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated />
                     </div>
                   )}
                   {rest[1] && (
                     <div className="md:col-span-2 md:row-span-1">
-                      <ProductTile product={rest[1]} variant="standard" delay={0.12} />
+                      <ProductTile product={rest[1]} variant="standard" delay={0.12} elevated />
                     </div>
                   )}
                   {/* Bottom row - product 4 as wide horizontal tile */}
                   {rest[2] && (
                     <div className="md:col-span-4">
-                      <ProductTile product={rest[2]} variant="wide" delay={0.18} />
+                      <ProductTile product={rest[2]} variant="wide" delay={0.18} elevated />
                     </div>
                   )}
                   {/* Products 5+ in a grid */}
@@ -237,6 +238,7 @@ export default function Home() {
                           product={p}
                           variant="standard"
                           delay={0.24 + i * 0.06}
+                          elevated
                         />
                       ))}
                     </div>
@@ -253,7 +255,7 @@ export default function Home() {
                 </div>
               </>
             ) : (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
                 <p className="text-slate-600">No products yet.</p>
                 <Link
                   href="/products"
@@ -264,13 +266,6 @@ export default function Home() {
               </div>
             )}
           </div>
-        </section>
-
-        {/* MetalBear-style purple banner */}
-        <section className="bg-[#6a4ff5] px-6 py-8">
-          <p className="text-center text-sm font-medium text-white/90">
-            Official MetalBear swag — gear up for faster development
-          </p>
         </section>
       </main>
     </div>

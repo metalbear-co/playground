@@ -10,6 +10,10 @@ base/charts
 .idea
 .vscode
 
+# Local env (secrets, API keys)
+**/.env.local
+**/.env*.local
+
 # Node dependencies
 **/node_modules
 

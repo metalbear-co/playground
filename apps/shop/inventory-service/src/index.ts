@@ -19,6 +19,8 @@ async function initDb() {
         price_cents INTEGER NOT NULL,
         stock INTEGER NOT NULL DEFAULT 0,
         image_url VARCHAR(512),
+        image_urls JSONB DEFAULT '[]'::jsonb,
+        is_new BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
@@ -27,14 +29,36 @@ async function initDb() {
     } catch (err: unknown) {
       if ((err as { code?: string }).code !== "42701") throw err;
     }
+    try {
+      await client.query("ALTER TABLE products ADD COLUMN image_urls JSONB DEFAULT '[]'::jsonb");
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== "42701") throw err;
+    }
+    try {
+      await client.query("ALTER TABLE products ADD COLUMN is_new BOOLEAN DEFAULT false");
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== "42701") throw err;
+    }
+    // Mark first two products as "new" for existing DBs
+    await client.query("UPDATE products SET is_new = true WHERE id IN (1, 2)");
+    // Migrate image_url to image_urls for existing rows
+    await client.query(`
+      UPDATE products SET image_urls = jsonb_build_array(image_url)
+      WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
+    `);
     const { rows } = await client.query("SELECT COUNT(*) FROM products");
     if (parseInt(rows[0].count, 10) === 0) {
+      // image_urls: Cloudinary public IDs. T-shirts have [front, back]; stickers have [single].
       await client.query(`
-        INSERT INTO products (name, description, price_cents, stock, image_url) VALUES
-        ('MetalBear T-Shirt', 'Official MetalBear bear logo tee', 2499, 50, 'https://placehold.co/400x400/1e293b/94a3b8?text=T-Shirt'),
-        ('MetalBear Hoodie', 'Cozy MetalBear hoodie', 4999, 30, 'https://placehold.co/400x400/1e293b/94a3b8?text=Hoodie'),
-        ('MetalBear Mug', 'Start your day with mirrord', 1299, 100, 'https://placehold.co/400x400/1e293b/94a3b8?text=Mug'),
-        ('MetalBear Stickers', 'Pack of 5 awesome stickers', 499, 200, 'https://placehold.co/400x400/1e293b/94a3b8?text=Stickers')
+        INSERT INTO products (name, description, price_cents, stock, image_urls, is_new) VALUES
+        ('Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 200, '["team_work_makes_the_Dream_work_ljp4we"]', true),
+        ('Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 50, '["team_Work_makes_the_Dream_Work_-_front_w5qdnb", "team_work_makes_the_dream_work_-_back_onanux"]', true),
+        ('Mind The Gap Sticker', 'MetalBear Mind The Gap sticker', 499, 200, '["Mind_the_Gap_pkyuc6"]', false),
+        ('Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2499, 50, '["Mind_the_gap_-_Front_anazkh", "Mind_the_gap_-_Back_oh9jyf"]', false),
+        ('Increase Velocity Sticker', 'MetalBear Increase Velocity sticker', 499, 200, '["Increase_velocity_mfsov2"]', false),
+        ('Increase Velocity T-Shirt', 'MetalBear Increase Velocity tee — front and back designs', 2499, 50, '["Increase_Velocity_-_Front_c2dgw6", "Increase_Velocity_-_Back_ywhxi6"]', false),
+        ('Cloudboat Willie T-Shirt', 'MetalBear Cloudboat Willie tee — front and back designs', 2499, 50, '["Cloudboat_Willie_-_Front_wpgqi2", "Cloudboat_Willie_-_Back_z05dna"]', false),
+        ('A mirrord Is Born T-Shirt', 'MetalBear A mirrord Is Born tee — front and back designs', 2499, 50, '["A_mirrord_is_born_-_Front_xy8l8p", "A_mirrord_is_born_-_Back_bytwh2"]', false)
       `);
     }
   } finally {
@@ -51,7 +75,7 @@ app.get("/health", (_req, res) => {
 app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
-    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url FROM products ORDER BY id");
+    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
     res.json(rows);
   } catch (err) {
     console.error("Error fetching products:", err);
@@ -66,7 +90,7 @@ app.get("/products/:id", async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, description, price_cents, stock, image_url FROM products WHERE id = $1",
+      "SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products WHERE id = $1",
       [id]
     );
     if (rows.length === 0) {

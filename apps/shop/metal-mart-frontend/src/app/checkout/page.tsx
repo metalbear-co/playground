@@ -11,7 +11,8 @@ type Product = {
   id: number;
   name: string;
   price_cents: number;
-  image_url: string | null;
+  image_url?: string | null;
+  image_urls?: string[] | null;
 };
 
 export default function CheckoutPage() {
@@ -104,7 +105,7 @@ export default function CheckoutPage() {
       <div className="flex min-h-screen flex-col bg-white">
         <Header />
         <main className="flex flex-1 items-center justify-center px-6 py-16">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
+          <div className="rounded-xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
             <p className="text-lg text-slate-600">Cart is empty. Add items first.</p>
             <Link
               href="/products"
@@ -123,8 +124,10 @@ export default function CheckoutPage() {
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-2xl">
-          <h1 className="mb-8 text-2xl font-bold tracking-tight text-slate-900">Checkout</h1>
-          <ul className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
+          <h1 className="hand-drawn-underline mb-8 inline-block text-2xl font-bold tracking-tight text-slate-900">
+            Checkout
+          </h1>
+          <ul className="mb-6 space-y-3 rounded-xl border border-slate-300 bg-slate-50 p-5">
             {cart.map((i) => (
               <li key={i.productId} className="flex items-center justify-between">
                 <span className="text-slate-700">

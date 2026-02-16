@@ -5,17 +5,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NewBadge from "@/components/NewBadge";
+import ProductImage from "@/components/ProductImage";
+import { getImageUrls, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-type Product = {
-  id: number;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  stock: number;
-  image_url: string | null;
-};
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -23,6 +17,7 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -35,6 +30,10 @@ export default function ProductDetailPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [product?.id]);
 
   if (loading) {
     return (
@@ -65,22 +64,55 @@ export default function ProductDetailPage() {
     );
   }
 
+  const imageUrls = getImageUrls(product);
+  const labels = imageUrls.length === 2 ? ["Front", "Back"] : undefined;
+
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-10 md:grid-cols-2">
-            <div className="aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg">
-              {product.image_url ? (
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-400">
-                  No image
+            <div className="space-y-3">
+              <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg">
+                {product.is_new && <NewBadge size="lg" />}
+                {imageUrls.length > 0 ? (
+                  <ProductImage
+                    src={imageUrls[selectedIndex]}
+                    alt={labels ? `${product.name} — ${labels[selectedIndex]}` : product.name}
+                    className="h-full w-full object-cover"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-slate-400">
+                    No image
+                  </div>
+                )}
+              </div>
+              {imageUrls.length > 1 && (
+                <div className="flex gap-2">
+                  {imageUrls.map((url, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedIndex(i)}
+                      className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
+                        selectedIndex === i
+                          ? "border-[#6a4ff5] ring-2 ring-[#6a4ff5]/30"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                      aria-label={labels ? labels[i] : `Image ${i + 1}`}
+                    >
+                      <ProductImage
+                        src={url}
+                        alt=""
+                        width={64}
+                        height={64}
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
