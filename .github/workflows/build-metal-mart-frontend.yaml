@@ -1,4 +1,5 @@
 name: Release metal mart frontend
+# Requires repo secret: CLOUDINARY_CLOUD_NAME
 on:
   push:
     branches: [main]
@@ -32,6 +33,8 @@ jobs:
           file: ./apps/shop/metal-mart-frontend/Dockerfile
           platforms: linux/amd64
           push: true
+          build-args: |
+            NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
           tags: |
             ghcr.io/metalbear-co/playground-metal-mart-frontend:latest
             ghcr.io/metalbear-co/playground-metal-mart-frontend:${{ github.sha }}

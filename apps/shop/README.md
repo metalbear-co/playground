@@ -169,6 +169,16 @@ docker build -t ghcr.io/metalbear-co/playground-metal-mart-frontend:latest apps/
 
 Or build and push a multi-arch image so both amd64 and arm64 clusters can pull it.
 
+### Cloudinary (production deploy)
+
+The `Release metal mart frontend` workflow bakes Cloudinary env vars at build time. Add these **repository secrets** in GitHub (Settings → Secrets and variables → Actions):
+
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `CLOUDINARY_CLOUD_NAME` | Yes | Cloud name from [Cloudinary console](https://cloudinary.com/console) |
+
+Without `CLOUDINARY_CLOUD_NAME`, the header logo, product images, and mascot will not load.
+
 ## URLs
 
 - Shop: `https://playground.metalbear.dev/shop`
