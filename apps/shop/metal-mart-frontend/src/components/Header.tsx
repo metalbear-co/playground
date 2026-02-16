@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
 type HeaderProps = {
   /** Show "Official MetalBear Swag" subtitle (home page only) */
   showSubtitle?: boolean;
@@ -14,7 +12,7 @@ export default function Header({ showSubtitle = false }: HeaderProps) {
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link
-          href={basePath || "/"}
+          href="/"
           className="text-xl font-bold tracking-tight text-[#6a4ff5] hover:text-[#5a3fe5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2 rounded"
         >
           MetalMart
@@ -25,13 +23,13 @@ export default function Header({ showSubtitle = false }: HeaderProps) {
           )}
           <nav className="flex gap-6" aria-label="Main navigation">
             <Link
-              href={`${basePath}/products`}
+              href="/products"
               className="text-sm font-medium text-slate-600 hover:text-slate-900"
             >
               Products
             </Link>
             <Link
-              href={`${basePath}/cart`}
+              href="/cart"
               className="text-sm font-medium text-slate-600 hover:text-slate-900"
             >
               Cart

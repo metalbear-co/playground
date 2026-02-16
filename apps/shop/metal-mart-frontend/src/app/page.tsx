@@ -25,7 +25,7 @@ function ProductTile({
   variant: "featured" | "standard" | "wide";
   delay?: number;
 }) {
-  const href = `${basePath}/products/${product.id}`;
+  const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
 
   if (variant === "featured") {
@@ -245,7 +245,7 @@ export default function Home() {
 
                 <div className="mt-10 flex justify-center">
                   <Link
-                    href={`${basePath}/products`}
+                    href="/products"
                     className="text-sm font-medium text-[#6a4ff5] hover:text-[#5a3fe5] hover:underline"
                   >
                     View all products →
@@ -256,7 +256,7 @@ export default function Home() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
                 <p className="text-slate-600">No products yet.</p>
                 <Link
-                  href={`${basePath}/products`}
+                  href="/products"
                   className="btn-primary mt-4 inline-block rounded-xl px-6 py-2.5 text-sm font-medium"
                 >
                   Browse products

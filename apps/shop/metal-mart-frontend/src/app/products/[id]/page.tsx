@@ -55,7 +55,7 @@ export default function ProductDetailPage() {
             {error || "Product not found"}
           </p>
           <Link
-            href={`${basePath}/products`}
+            href="/products"
             className="mt-4 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"
           >
             ← Back to products
@@ -95,13 +95,13 @@ export default function ProductDetailPage() {
               <p className="mt-4 text-sm text-slate-500">In stock: {product.stock}</p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link
-                  href={`${basePath}/cart?add=${product.id}`}
+                  href={`/cart?add=${product.id}`}
                   className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3.5 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
                 >
                   Add to cart
                 </Link>
                 <Link
-                  href={`${basePath}/products`}
+                  href="/products"
                   className="btn-secondary inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:ring-offset-2"
                 >
                   ← Back to products
