@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NewBadge from "@/components/NewBadge";
 import ProductImage from "@/components/ProductImage";
 import { getImageUrls, type Product } from "@/lib/product";
 
@@ -74,6 +75,7 @@ export default function ProductDetailPage() {
           <div className="grid gap-10 md:grid-cols-2">
             <div className="space-y-3">
               <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg">
+                {product.is_new && <NewBadge size="lg" />}
                 {imageUrls.length > 0 ? (
                   <ProductImage
                     src={imageUrls[selectedIndex]}

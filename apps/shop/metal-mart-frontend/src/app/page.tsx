@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NewBadge from "@/components/NewBadge";
 import ProductImage from "@/components/ProductImage";
 import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
@@ -33,6 +34,7 @@ function ProductTile({
         className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
+        {product.is_new && <NewBadge size="default" />}
         <div className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -66,9 +68,10 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className={`group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
+        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
+        {product.is_new && <NewBadge size="default" />}
         <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -103,9 +106,10 @@ function ProductTile({
   return (
     <Link
       href={href}
-      className={`group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
+      {product.is_new && <NewBadge size="default" />}
       <div className="relative aspect-square overflow-hidden bg-slate-100">
         {getPrimaryImageUrl(product) ? (
           <ProductImage

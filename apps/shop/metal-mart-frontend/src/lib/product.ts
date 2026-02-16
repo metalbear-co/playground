@@ -7,6 +7,7 @@ export type Product = {
   stock: number;
   image_url?: string | null;
   image_urls?: string[] | null;
+  is_new?: boolean;
 };
 
 /** Primary image for thumbnails (first in array, or legacy image_url). */

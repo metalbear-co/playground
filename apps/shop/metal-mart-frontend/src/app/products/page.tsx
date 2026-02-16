@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NewBadge from "@/components/NewBadge";
 import ProductImage from "@/components/ProductImage";
 import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
@@ -58,9 +59,10 @@ export default function ProductsPage() {
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
-                className="group flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
+                {p.is_new && <NewBadge size="default" />}
                 <div className="relative aspect-square overflow-hidden bg-slate-100">
                   {getPrimaryImageUrl(p) ? (
                     <ProductImage
