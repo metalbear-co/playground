@@ -129,7 +129,7 @@ export default function OrderPage() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
               <p className="text-slate-600">Order not found</p>
               <Link
-                href={`${basePath}/products`}
+                href="/products"
                 className="mt-6 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"
               >
                 ← Back to products

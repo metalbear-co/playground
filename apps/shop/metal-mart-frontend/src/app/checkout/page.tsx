@@ -89,7 +89,7 @@ export default function CheckoutPage() {
           <h1 className="text-2xl font-bold text-green-600">Order placed!</h1>
           <p className="text-slate-600">Order ID: {orderId}</p>
           <Link
-            href={`${basePath}/orders/${orderId}`}
+            href={`/orders/${orderId}`}
             className="btn-primary rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
           >
             Track order
@@ -107,7 +107,7 @@ export default function CheckoutPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
             <p className="text-lg text-slate-600">Cart is empty. Add items first.</p>
             <Link
-              href={`${basePath}/products`}
+              href="/products"
               className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
             >
               Browse products

@@ -76,7 +76,7 @@ export default function CartPage() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
               <p className="text-lg text-slate-600">Your cart is empty.</p>
               <Link
-                href={`${basePath}/products`}
+                href="/products"
                 className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
               >
                 Browse products
@@ -134,7 +134,7 @@ export default function CartPage() {
                   Total: ${(totalCents / 100).toFixed(2)}
                 </p>
                 <Link
-                  href={`${basePath}/checkout`}
+                  href="/checkout"
                   className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
                 >
                   Checkout

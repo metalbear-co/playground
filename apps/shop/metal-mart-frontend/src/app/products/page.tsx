@@ -62,7 +62,7 @@ export default function ProductsPage() {
             {products.map((p, i) => (
               <Link
                 key={p.id}
-                href={`${basePath}/products/${p.id}`}
+                href={`/products/${p.id}`}
                 className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
