@@ -25,7 +25,7 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 animate-card-reveal"
+        className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal"
         style={{ animationDelay: `${delay}s` }}
       >
         <div className="absolute inset-0">
@@ -61,7 +61,7 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row"
+        className="group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row"
         style={{ animationDelay: `${delay}s` }}
       >
         <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
@@ -98,7 +98,7 @@ function ProductTile({
   return (
     <Link
       href={href}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
       style={{ animationDelay: `${delay}s` }}
     >
       <div className="relative aspect-square overflow-hidden bg-slate-100">
@@ -171,21 +171,14 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-white">
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
-        {/* Hero strip */}
-        <section className="border-b border-slate-100 px-6 py-8">
-          <div className="mx-auto max-w-6xl">
-            <h1 className="animate-fade-in-up text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              MetalMart
-            </h1>
-            <p className="animate-fade-in-up animate-fade-in-up-delay-1 mt-1 text-slate-600">
-              Official MetalBear merchandise — gear up for faster development
-            </p>
-          </div>
-        </section>
-
         {/* Bento product grid */}
         <section className="flex-1 px-6 py-12">
           <div className="mx-auto max-w-6xl">
+            {hasProducts && (
+              <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
+                Featured products
+              </h1>
+            )}
             {hasProducts ? (
               <>
                 {/* Bento grid: featured large (2x2), 2 stacked side tiles, wide bottom row */}
@@ -252,7 +245,7 @@ export default function Home() {
                 </div>
               </>
             ) : (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
                 <p className="text-slate-600">No products yet.</p>
                 <Link
                   href="/products"
@@ -262,30 +255,6 @@ export default function Home() {
                 </Link>
               </div>
             )}
-          </div>
-        </section>
-
-        {/* MetalBear-style purple banner */}
-        <section className="bg-[#6a4ff5] px-6 py-8">
-          <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-            <p className="text-center text-sm font-medium text-white/90">
-              Official MetalBear swag — gear up for faster development
-            </p>
-            <a
-              href="https://metalbear.co"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
-            >
-              <ProductImage
-                src="mirrord_logo_srsyxc"
-                alt="mirrord"
-                width={24}
-                height={24}
-                className="shrink-0 opacity-90"
-              />
-              <span className="text-xs font-medium">Powered by mirrord</span>
-            </a>
           </div>
         </section>
       </main>

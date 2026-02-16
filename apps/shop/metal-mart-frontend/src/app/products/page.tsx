@@ -50,13 +50,15 @@ export default function ProductsPage() {
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-6xl">
-          <h1 className="mb-8 text-2xl font-bold tracking-tight text-slate-900">Products</h1>
+          <h1 className="hand-drawn-underline mb-10 inline-block text-2xl font-bold tracking-tight text-slate-900">
+            Products
+          </h1>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {products.map((p, i) => (
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
-                className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+                className="group flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
                 <div className="relative aspect-square overflow-hidden bg-slate-100">

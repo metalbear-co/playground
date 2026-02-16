@@ -66,9 +66,11 @@ export default function CartPage() {
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-3xl">
-          <h1 className="mb-8 text-2xl font-bold tracking-tight text-slate-900">Cart</h1>
+          <h1 className="hand-drawn-underline mb-8 inline-block text-2xl font-bold tracking-tight text-slate-900">
+            Cart
+          </h1>
           {cart.length === 0 ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
+            <div className="rounded-xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
               <p className="text-lg text-slate-600">Your cart is empty.</p>
               <Link
                 href="/products"
@@ -83,7 +85,7 @@ export default function CartPage() {
                 {cart.map((i) => (
                   <li
                     key={i.productId}
-                    className="flex items-center gap-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#6a4ff5]/20"
+                    className="flex items-center gap-5 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#6a4ff5]/20"
                   >
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100">
                       {i.product && getPrimaryImageUrl(i.product) ? (
