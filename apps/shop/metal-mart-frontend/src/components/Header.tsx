@@ -18,14 +18,14 @@ export default function Header({ showSubtitle = false }: HeaderProps) {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link
           href="/"
-          className="flex items-center gap-2 text-xl font-bold tracking-tight text-[#6a4ff5] hover:text-[#5a3fe5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2 rounded"
+          className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2 rounded"
         >
           {cloudName && (
             <CldImage
               src={resolveCloudinaryId(METALBEAR_LOGO_ID)}
               alt="MetalBear"
-              width={36}
-              height={36}
+              width={72}
+              height={72}
               className="shrink-0"
             />
           )}
