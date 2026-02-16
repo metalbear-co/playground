@@ -53,6 +53,8 @@ async function initDb() {
 async function startConsumer() {
   const consumer = kafka.consumer({
     groupId: process.env.KAFKA_CONSUMER_GROUP || "delivery-service",
+    heartbeatInterval: 3000,
+    sessionTimeout: 60000,
     partitionAssigners: roundRobinCompat,
   });
   await consumer.connect();
