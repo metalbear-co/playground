@@ -10,4 +10,4 @@ spec:
     - name: client.id
       value: mirrord-operator-shop
     - name: partition.assignment.strategy
-      value: cooperative-sticky
+      value: roundrobin
