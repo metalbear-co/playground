@@ -1,6 +1,7 @@
 import express from "express";
 import { Kafka } from "kafkajs";
 import { Pool } from "pg";
+import { range }  from "./range_assigner"
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -33,7 +34,7 @@ async function initDb() {
 async function startConsumer() {
   const consumer = kafka.consumer({
     groupId: process.env.KAFKA_CONSUMER_GROUP || "delivery-service",
-
+    partitionAssigners: [range]
   });
   await consumer.connect();
   const topic = process.env.KAFKA_TOPIC || "orders";
