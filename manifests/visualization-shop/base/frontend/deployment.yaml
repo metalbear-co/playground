@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visualization-shop-frontend
+spec:
+  selector:
+    matchLabels:
+      app: visualization-shop-frontend
+  template:
+    metadata:
+      labels:
+        app: visualization-shop-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: visualization-shop-frontend:local
+          imagePullPolicy: Never
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NEXT_BASE_PATH
+              value: "/visualization-shop"
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 10
+            periodSeconds: 30
+            httpGet:
+              path: /visualization-shop
+              port: 3000
+              scheme: HTTP
+          livenessProbe:
+            failureThreshold: 10
+            periodSeconds: 30
+            httpGet:
+              path: /visualization-shop
+              port: 3000
+              scheme: HTTP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
