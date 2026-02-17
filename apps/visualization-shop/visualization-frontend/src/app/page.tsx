@@ -344,33 +344,6 @@ const LOCAL_ZONE_DEFAULT_OFFSET = { x: 520, y: 520 };
 const LOCAL_ZONE_ADJUSTMENT = { x: -400, y: 0 };
 const LOCAL_ZONE_GAP_Y = 220;
 
-const clusterBounds = computeBounds(layoutedNodes, (node) => {
-  const zone = nodeZoneIndex.get(node.id);
-  return zone === "cluster";
-});
-
-const localBounds = computeBounds(layoutedNodes, (node) => {
-  const zone = nodeZoneIndex.get(node.id);
-  return zone === "local";
-});
-
-/**
- * Final offset applied to local nodes, taking into account cluster bounds and desired gaps.
- */
-const LOCAL_ZONE_OFFSET = (() => {
-  if (!clusterBounds || !localBounds) {
-    return LOCAL_ZONE_DEFAULT_OFFSET;
-  }
-  const clusterCenterX = (clusterBounds.minX + clusterBounds.maxX) / 2;
-  const localCenterX = (localBounds.minX + localBounds.maxX) / 2;
-  const offsetX = clusterCenterX - localCenterX;
-  const offsetY = clusterBounds.maxY + LOCAL_ZONE_GAP_Y - localBounds.minY;
-  return {
-    x: offsetX + LOCAL_ZONE_ADJUSTMENT.x,
-    y: offsetY + LOCAL_ZONE_ADJUSTMENT.y,
-  };
-})();
-
 const EXTERNAL_USER_OFFSET_X = 240;
 const INGRESS_LEFT_SHIFT_X = 90;
 const EXTERNAL_USER_SHIFT_Y = 100;
@@ -380,16 +353,12 @@ const MIRRORD_OPERATOR_SHIFT_Y = 100;
 const MIRRORD_AGENT_SHIFT_X = 200;
 const MIRRORD_AGENT_SHIFT_Y = 100;
 
-const adjustedNodes = layoutedNodes.map((node) => {
-  const zone = nodeZoneIndex.get(node.id);
+/**
+ * Apply per-node position shifts to non-local nodes first so that cluster bounds
+ * reflect the actual rendered positions (e.g. mirrord-operator / agent shifts).
+ */
+const clusterAdjustedNodes = layoutedNodes.map((node) => {
   let position = { ...node.position };
-
-  if (zone === "local") {
-    position = {
-      x: position.x + LOCAL_ZONE_OFFSET.x,
-      y: position.y + LOCAL_ZONE_OFFSET.y,
-    };
-  }
 
   if (node.id === "user") {
     position = {
@@ -423,10 +392,51 @@ const adjustedNodes = layoutedNodes.map((node) => {
     };
   }
 
+  return { ...node, position };
+});
+
+const clusterBounds = computeBounds(clusterAdjustedNodes, (node) => {
+  const zone = nodeZoneIndex.get(node.id);
+  return zone === "cluster";
+});
+
+const localBounds = computeBounds(layoutedNodes, (node) => {
+  const zone = nodeZoneIndex.get(node.id);
+  return zone === "local";
+});
+
+/**
+ * Final offset applied to local nodes, taking into account cluster bounds and desired gaps.
+ */
+const LOCAL_ZONE_OFFSET = (() => {
+  if (!clusterBounds || !localBounds) {
+    return LOCAL_ZONE_DEFAULT_OFFSET;
+  }
+  const clusterCenterX = (clusterBounds.minX + clusterBounds.maxX) / 2;
+  const localCenterX = (localBounds.minX + localBounds.maxX) / 2;
+  const offsetX = clusterCenterX - localCenterX;
+  const offsetY = clusterBounds.maxY + LOCAL_ZONE_GAP_Y - localBounds.minY;
   return {
-    ...node,
-    position,
+    x: offsetX + LOCAL_ZONE_ADJUSTMENT.x,
+    y: offsetY + LOCAL_ZONE_ADJUSTMENT.y,
   };
+})();
+
+/**
+ * Apply local-zone offsets now that we have correct bounds from the cluster-adjusted nodes.
+ */
+const adjustedNodes = clusterAdjustedNodes.map((node) => {
+  const zone = nodeZoneIndex.get(node.id);
+  if (zone === "local") {
+    return {
+      ...node,
+      position: {
+        x: node.position.x + LOCAL_ZONE_OFFSET.x,
+        y: node.position.y + LOCAL_ZONE_OFFSET.y,
+      },
+    };
+  }
+  return node;
 });
 
 const initialZoneNodes = buildZoneNodes(adjustedNodes);
