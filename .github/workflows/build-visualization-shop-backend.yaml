@@ -36,6 +36,7 @@ jobs:
           file: ./apps/visualization-shop/visualization-backend/Dockerfile
           platforms: linux/amd64
           push: true
+          no-cache: true
           tags: |
             ghcr.io/metalbear-co/visualization-shop-backend:latest
             ghcr.io/metalbear-co/visualization-shop-backend:${{ github.sha }}
