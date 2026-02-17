@@ -20,7 +20,7 @@ const port = parseInt(process.env.PORT || "80", 10);
 
 async function initDb() {
 
-  readFile(process.env.RESPONSEFILE || "dummy.txt");
+  readFile(process.env.BANNERFILE || "dummy.txt");
 
   const client = await pool.connect();
   try {
@@ -61,6 +61,11 @@ const orderReadLimiter = rateLimit({
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
+});
+
+app.get("/banner", (_req, res) => {
+  const text = readFile(process.env.BANNERFILE || "dummy.txt");
+  res.json({ text });
 });
 
 /** Checkout input from POST /orders */

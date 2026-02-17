@@ -1,9 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import ProductImage from "@/components/ProductImage";
 import DecorativeIcons from "@/components/DecorativeIcons";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export default function Footer() {
+  const [bannerText, setBannerText] = useState(
+    "Official MetalBear swag — gear up for faster development"
+  );
+
+  useEffect(() => {
+    fetch(`${basePath}/api/banner`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.text) setBannerText(data.text);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <footer className="bg-[#6a4ff5] px-6 py-8">
       {/* Decorative wave divider - soft transition into footer */}
@@ -13,7 +29,7 @@ export default function Footer() {
       <DecorativeIcons variant="footer" />
       <div className="mx-auto flex max-w-lg flex-col items-center gap-4">
         <p className="text-center text-sm font-medium text-white/90">
-          Official MetalBear swag — gear up for faster development
+          {bannerText}
         </p>
         <a
           href="https://metalbear.co"
