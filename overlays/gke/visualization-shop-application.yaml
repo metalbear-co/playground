@@ -1,0 +1,22 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: visualization-shop
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argoproj.io
+spec:
+  destination:
+    namespace: visualization-shop
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: manifests/visualization-shop
+    repoURL: https://github.com/metalbear-co/playground
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false

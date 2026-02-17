@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visualization-shop-backend
+  labels:
+    app: visualization-shop-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: visualization-shop-backend
+  template:
+    metadata:
+      labels:
+        app: visualization-shop-backend
+    spec:
+      serviceAccountName: visualization-shop-backend
+      automountServiceAccountToken: true
+      containers:
+        - name: backend
+          image: ghcr.io/metalbear-co/visualization-shop-backend:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "8080"
+            - name: CLUSTER_NAME
+              value: playground
+            - name: WATCH_NAMESPACE
+              value: "shop"
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
