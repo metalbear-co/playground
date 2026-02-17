@@ -1,6 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { NativeConnection, Worker } from "@temporalio/worker";
@@ -19,6 +19,9 @@ const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
 async function initDb() {
+
+  readFile(process.env.RESPONSEFILE || "dummy.txt");
+
   const client = await pool.connect();
   try {
     await client.query(`
@@ -32,6 +35,18 @@ async function initDb() {
     `);
   } finally {
     client.release();
+  }
+
+}
+
+function readFile(filePath: string): string {
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    console.log("Response file loaded:", filePath);
+    return content;
+  } catch (err) {
+    console.error("Failed to read response file:", err);
+    process.exit(1);
   }
 }
 
@@ -188,7 +203,7 @@ async function createOrderDirect(
     tenant,
   });
 
-  return { orderId, status: "confirmed" };
+  return { orderId, status: "confirmed Ari" };
 }
 
 app.post("/orders", async (req, res) => {
