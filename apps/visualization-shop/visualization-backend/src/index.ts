@@ -1,6 +1,11 @@
 import express from "express";
 import cors from "cors";
-import { AppsV1Api, CoreV1Api, KubeConfig } from "@kubernetes/client-node";
+import {
+  AppsV1Api,
+  CoreV1Api,
+  CustomObjectsApi,
+  KubeConfig,
+} from "@kubernetes/client-node";
 
 /**
  * Express application that exposes the cluster snapshot consumed by the React visualization.
@@ -140,6 +145,7 @@ const snapshotStore = new SnapshotStore(process.env.CLUSTER_NAME || "playground"
 
 let triggerDeploymentPoll: (() => Promise<void>) | null = null;
 let triggerAgentPoll: (() => Promise<void>) | null = null;
+let kubeConfigRef: KubeConfig | null = null;
 
 /**
  * Helper used by refresh endpoints/query params to run the pollers synchronously on demand.
@@ -166,6 +172,11 @@ const snapshotPostPaths = ["/snapshot", "/visualization-shop/api/snapshot"];
 const snapshotRefreshPaths = [
   "/snapshot/refresh",
   "/visualization-shop/api/snapshot/refresh",
+];
+
+const operatorStatusPaths = [
+  "/operator-status",
+  "/visualization-shop/api/operator-status",
 ];
 
 /**
@@ -219,6 +230,124 @@ app.post(snapshotRefreshPaths, async (_req, res) => {
         error instanceof Error
           ? error.message
           : "Failed to refresh snapshot. See server logs for details.",
+    });
+  }
+});
+
+/**
+ * Rich session data from the mirrord operator's MirrordClusterSession CRD.
+ */
+type OperatorSession = {
+  sessionId: string;
+  target: {
+    kind: string;
+    name: string;
+    container?: string | undefined;
+    apiVersion?: string | undefined;
+  };
+  namespace: string;
+  owner: {
+    username: string;
+    k8sUsername: string;
+    hostname: string;
+  };
+  branchName?: string | undefined;
+  createdAt: string;
+  connectedAt?: string | undefined;
+  durationSeconds?: number | undefined;
+};
+
+type OperatorStatusResponse = {
+  sessions: OperatorSession[];
+  sessionCount: number;
+  fetchedAt: string;
+};
+
+/**
+ * Query MirrordClusterSession custom resources from the operator CRD.
+ * Returns structured session data including user, target, and timing info.
+ */
+const fetchOperatorSessions = async (
+  kubeConfig: KubeConfig,
+): Promise<OperatorSession[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const result = await customApi.listClusterCustomObject({
+    group: "mirrord.metalbear.co",
+    version: "v1alpha",
+    plural: "mirrordclustersessions",
+  });
+
+  const body = result as { items?: Array<Record<string, unknown>> };
+  const items = body.items ?? [];
+  const now = Date.now();
+
+  return items.map((item) => {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const target = (spec.target ?? {}) as Record<string, unknown>;
+    const owner = (spec.owner ?? {}) as Record<string, unknown>;
+    const jiraMetrics = (spec.jiraMetrics ?? {}) as Record<string, unknown>;
+
+    const createdAt =
+      (metadata.creationTimestamp as string) ?? new Date().toISOString();
+    const connectedAt = status.connectedTimestamp as string | undefined;
+
+    const createdMs = new Date(createdAt).getTime();
+    const durationSeconds = Math.floor((now - createdMs) / 1000);
+
+    return {
+      sessionId: (metadata.name as string) ?? "unknown",
+      target: {
+        kind: (target.kind as string) ?? "Unknown",
+        name: (target.name as string) ?? "unknown",
+        container: target.container as string | undefined,
+        apiVersion: target.apiVersion as string | undefined,
+      },
+      namespace: (spec.namespace as string) ?? "default",
+      owner: {
+        username: (owner.username as string) ?? "unknown",
+        k8sUsername: (owner.k8sUsername as string) ?? "unknown",
+        hostname: (owner.hostname as string) ?? "unknown",
+      },
+      branchName: jiraMetrics.branchName as string | undefined,
+      createdAt,
+      connectedAt,
+      durationSeconds: Number.isFinite(durationSeconds)
+        ? durationSeconds
+        : undefined,
+    };
+  });
+};
+
+/**
+ * Return active mirrord operator sessions queried from the MirrordClusterSession CRD.
+ */
+app.get(operatorStatusPaths, async (_req, res) => {
+  if (!kubeConfigRef) {
+    res.status(503).json({
+      error: "Kubernetes configuration unavailable; cannot query operator sessions.",
+    });
+    return;
+  }
+  try {
+    const sessions = await fetchOperatorSessions(kubeConfigRef);
+    const response: OperatorStatusResponse = {
+      sessions,
+      sessionCount: sessions.length,
+      fetchedAt: new Date().toISOString(),
+    };
+    res.json(response);
+  } catch (error) {
+    console.error(
+      "Operator status fetch failed",
+      error instanceof Error ? error.message : error,
+    );
+    res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch operator sessions. See server logs for details.",
     });
   }
 });
@@ -515,10 +644,10 @@ const startMirrordAgentPoller = (kubeConfig: KubeConfig) => {
   return runPoll;
 };
 
-const kubeConfig = loadKubeConfiguration();
-if (kubeConfig) {
-  triggerDeploymentPoll = startDeploymentPoller(kubeConfig);
-  triggerAgentPoll = startMirrordAgentPoller(kubeConfig);
+kubeConfigRef = loadKubeConfiguration();
+if (kubeConfigRef) {
+  triggerDeploymentPoll = startDeploymentPoller(kubeConfigRef);
+  triggerAgentPoll = startMirrordAgentPoller(kubeConfigRef);
 } else {
   console.warn(
     "Kubernetes configuration unavailable; snapshot watchers are disabled.",
