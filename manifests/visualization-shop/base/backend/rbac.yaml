@@ -22,7 +22,6 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: visualization-shop-backend
-    namespace: visualization-shop
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

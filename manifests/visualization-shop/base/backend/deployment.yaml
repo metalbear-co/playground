@@ -18,8 +18,8 @@ spec:
       automountServiceAccountToken: true
       containers:
         - name: backend
-          image: visualization-shop-backend:local
-          imagePullPolicy: Never
+          image: ghcr.io/metalbear-co/visualization-shop-backend:latest
+          imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "8080"

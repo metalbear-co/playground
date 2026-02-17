@@ -1,0 +1,28 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: visualization-shop-httproute
+  namespace: visualization-shop
+spec:
+  parentRefs:
+    - name: playground-gateway
+      namespace: argocd
+  rules:
+    # /visualization-shop/api -> backend
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /visualization-shop/api
+      backendRefs:
+        - name: visualization-shop-backend
+          namespace: visualization-shop
+          port: 80
+    # /visualization-shop -> frontend
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /visualization-shop
+      backendRefs:
+        - name: visualization-shop-frontend
+          namespace: visualization-shop
+          port: 80

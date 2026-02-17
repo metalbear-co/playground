@@ -1,0 +1,41 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: visualization-shop-frontend-healthcheck
+  namespace: visualization-shop
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 5
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /visualization-shop
+        port: 3000
+  targetRef:
+    group: ""
+    kind: Service
+    name: visualization-shop-frontend
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: visualization-shop-backend-healthcheck
+  namespace: visualization-shop
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 5
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /healthz
+        port: 8080
+  targetRef:
+    group: ""
+    kind: Service
+    name: visualization-shop-backend

@@ -13,8 +13,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: visualization-shop-frontend:local
-          imagePullPolicy: Never
+          image: ghcr.io/metalbear-co/visualization-shop-frontend:latest
+          imagePullPolicy: Always
           env:
             - name: PORT
               value: "3000"
