@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-banner
+data:
+  banner.txt: |
+    Welcome to Metal Mart
