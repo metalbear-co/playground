@@ -208,7 +208,7 @@ async function createOrderDirect(
     tenant,
   });
 
-  return { orderId, status: "confirmed Ari" };
+  return { orderId, status: "confirmed" };
 }
 
 app.post("/orders", async (req, res) => {
