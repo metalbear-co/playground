@@ -35,7 +35,7 @@ spec:
             - name: TEMPORAL_NAMESPACE
               value: "temporal"
             - name: BANNERFILE
-              value: "/etc/order-service/banner.txt"
+              value: "/app/banner.txt"
           ports:
             - containerPort: 80
               protocol: TCP
@@ -49,10 +49,6 @@ spec:
               path: /health
               port: 80
               scheme: HTTP
-          volumeMounts:
-            - name: banner
-              mountPath: /etc/order-service
-              readOnly: true
           resources:
             limits:
               cpu: 200m
@@ -60,7 +56,3 @@ spec:
             requests:
               cpu: 100m
               memory: 100Mi
-      volumes:
-        - name: banner
-          configMap:
-            name: order-service-banner
