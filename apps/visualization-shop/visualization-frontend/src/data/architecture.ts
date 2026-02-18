@@ -57,7 +57,7 @@ export const architectureZones: ArchitectureZone[] = [
       "postgres-inventory",
       "postgres-orders",
       "postgres-deliveries",
-      "temporal",
+      // "temporal",
       "mirrord-operator",
       "mirrord-agent",
     ],
@@ -193,14 +193,14 @@ export const architectureNodes: ArchitectureNode[] = [
     group: "data",
     zone: "cluster",
   },
-  {
-    id: "temporal",
-    label: "Temporal",
-    stack: "Workflow engine",
-    description: "Durable workflow orchestration for the checkout flow.",
-    group: "infra",
-    zone: "cluster",
-  },
+  // {
+  //   id: "temporal",
+  //   label: "Temporal",
+  //   stack: "Workflow engine",
+  //   description: "Durable workflow orchestration for the checkout flow.",
+  //   group: "infra",
+  //   zone: "cluster",
+  // },
 ];
 
 export const architectureEdges: ArchitectureEdge[] = [
@@ -260,13 +260,13 @@ export const architectureEdges: ArchitectureEdge[] = [
     label: "Emit order event",
     intent: "data",
   },
-  {
-    id: "order-to-temporal",
-    source: "order-service",
-    target: "temporal",
-    label: "Checkout workflow",
-    intent: "control",
-  },
+  // {
+  //   id: "order-to-temporal",
+  //   source: "order-service",
+  //   target: "temporal",
+  //   label: "Checkout workflow",
+  //   intent: "control",
+  // },
   {
     id: "order-to-postgres",
     source: "order-service",
@@ -302,13 +302,6 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "mirrored",
   },
   {
-    id: "operator-to-agent",
-    source: "mirrord-operator",
-    target: "mirrord-agent",
-    label: "Inject & manage",
-    intent: "control",
-  },
-  {
     id: "operator-to-agent-mirrored",
     source: "mirrord-operator",
     target: "mirrord-agent",
@@ -335,10 +328,10 @@ export const groupPalette: Record<
   ArchitectureNode["group"],
   { background: string; border: string; text: string }
 > = {
-  entry: { background: "#F5F5F5", border: "#0F172A", text: "#111827" },
-  infra: { background: "#FFFFFF", border: "#D1D5DB", text: "#111827" },
-  service: { background: "#FFF6E6", border: "#F5B42A", text: "#7C2D12" },
-  data: { background: "#FDF0F2", border: "#E66479", text: "#7F1D1D" },
-  queue: { background: "#FFF8E8", border: "#F5B42A", text: "#7C2D12" },
-  mirrord: { background: "#E3E8FF", border: "#4F46E5", text: "#111827" },
+  entry: { background: "#FFFFFF", border: "#0F172A", text: "#111827" },
+  infra: { background: "#FFFFFF", border: "#6B7280", text: "#111827" },
+  service: { background: "#FBF8F2", border: "#EA580C", text: "#111827" },
+  data: { background: "#FFFFFF", border: "#DC2626", text: "#111827" },
+  queue: { background: "#FFFFFF", border: "#CA8A04", text: "#111827" },
+  mirrord: { background: "#EEF2FF", border: "#4F46E5", text: "#111827" },
 };

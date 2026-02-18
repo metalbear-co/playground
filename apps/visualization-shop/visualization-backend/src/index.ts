@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import {
   AppsV1Api,
-  CoreV1Api,
   CustomObjectsApi,
   KubeConfig,
 } from "@kubernetes/client-node";
@@ -30,43 +29,12 @@ type ServiceStatus = {
 };
 
 /**
- * Active mirrord agent session information captured from the agent poller.
- */
-type SessionStatus = {
-  id: string;
-  podName: string;
-  namespace: string;
-  targetWorkload?: string | undefined;
-  lastUpdated: string;
-};
-
-/**
- * Normalize container IDs reported by Kubernetes so the runtime prefix
- * (docker://, containerd://, ...) does not impact equality checks.
- */
-const normalizeContainerId = (rawId: string | undefined): string | null => {
-  if (!rawId) {
-    return null;
-  }
-  const trimmed = rawId.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  const delimiterIndex = trimmed.indexOf("//");
-  if (delimiterIndex !== -1) {
-    return trimmed.slice(delimiterIndex + 2);
-  }
-  return trimmed;
-};
-
-/**
  * Aggregated snapshot shared with the frontend.
  */
 type ClusterSnapshot = {
   clusterName: string;
   updatedAt: string;
   services: ServiceStatus[];
-  sessions: SessionStatus[];
 };
 
 /**
@@ -76,7 +44,6 @@ type ClusterSnapshot = {
 class SnapshotStore {
   private clusterName: string;
   private services = new Map<string, ServiceStatus>();
-  private sessions = new Map<string, SessionStatus>();
 
   constructor(clusterName: string) {
     this.clusterName = clusterName;
@@ -92,9 +59,6 @@ class SnapshotStore {
       updatedAt: new Date().toISOString(),
       services: Array.from(this.services.values()).sort((a, b) =>
         a.name.localeCompare(b.name),
-      ),
-      sessions: Array.from(this.sessions.values()).sort((a, b) =>
-        a.podName.localeCompare(b.podName),
       ),
     };
   }
@@ -112,17 +76,6 @@ class SnapshotStore {
       };
       this.services.set(status.id, status);
     });
-
-    if (partial.sessions) {
-      this.sessions.clear();
-      partial.sessions.forEach((session) => {
-        const status: SessionStatus = {
-          ...session,
-          lastUpdated: session.lastUpdated ?? new Date().toISOString(),
-        };
-        this.sessions.set(status.id, status);
-      });
-    }
   }
 
   public upsertService(service: ServiceStatus) {
@@ -132,30 +85,19 @@ class SnapshotStore {
   public removeService(id: string) {
     this.services.delete(id);
   }
-
-  public setSessions(nextSessions: SessionStatus[]) {
-    this.sessions.clear();
-    nextSessions.forEach((session) => {
-      this.sessions.set(session.id, session);
-    });
-  }
 }
 
 const snapshotStore = new SnapshotStore(process.env.CLUSTER_NAME || "playground");
 
 let triggerDeploymentPoll: (() => Promise<void>) | null = null;
-let triggerAgentPoll: (() => Promise<void>) | null = null;
 let kubeConfigRef: KubeConfig | null = null;
 
 /**
- * Helper used by refresh endpoints/query params to run the pollers synchronously on demand.
+ * Helper used by refresh endpoints/query params to run the deployment poller synchronously on demand.
  */
 const runRefreshPollers = async () => {
   if (triggerDeploymentPoll) {
     await triggerDeploymentPoll();
-  }
-  if (triggerAgentPoll) {
-    await triggerAgentPoll();
   }
 };
 
@@ -508,146 +450,9 @@ const startDeploymentPoller = (kubeConfig: KubeConfig) => {
   return runPoll;
 };
 
-const startMirrordAgentPoller = (kubeConfig: KubeConfig) => {
-  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
-
-  /**
-   * Poll pods across the cluster, index container IDs, and resolve mirrord agents back to their
-   * targeted workloads using the agent `--container-id` flag.
-   */
-  const poll = async () => {
-    try {
-      const pods = await coreApi.listPodForAllNamespaces();
-      const containerIdIndex = new Map<
-        string,
-        {
-          namespace: string;
-          podName: string;
-          workload: string;
-        }
-      >();
-      pods.items?.forEach((pod) => {
-        const namespace = pod.metadata?.namespace ?? "default";
-        const podName = pod.metadata?.name ?? "unknown-pod";
-        const ownerReferences = pod.metadata?.ownerReferences ?? [];
-        const ownerWorkload = ownerReferences.find((owner) =>
-          [
-            "Deployment",
-            "StatefulSet",
-            "DaemonSet",
-            "Job",
-            "CronJob",
-          ].includes(owner.kind ?? ""),
-        )?.name;
-        const replicaSetOwner = ownerReferences.find(
-          (owner) => owner.kind === "ReplicaSet",
-        )?.name;
-        const inferredWorkload = ownerWorkload ?? replicaSetOwner ?? podName;
-        const workloadId = `${namespace}/${inferredWorkload}`;
-
-        const containerStatuses = [
-          ...(pod.status?.containerStatuses ?? []),
-          ...(pod.status?.initContainerStatuses ?? []),
-        ];
-        containerStatuses.forEach((status) => {
-          const normalizedId = normalizeContainerId(status.containerID);
-          if (!normalizedId) {
-            return;
-          }
-          containerIdIndex.set(normalizedId, {
-            namespace,
-            podName,
-            workload: workloadId,
-          });
-        });
-      });
-
-      const sessions: SessionStatus[] = [];
-      pods.items?.forEach((pod) => {
-        const containers = [
-          ...(pod.spec?.containers ?? []),
-          ...(pod.spec?.initContainers ?? []),
-        ];
-        const agentContainer = containers.find((container) =>
-          container.name.includes("mirrord-agent"),
-        );
-        if (!agentContainer) {
-          return;
-        }
-
-        const namespace = pod.metadata?.namespace ?? "default";
-        const podName = pod.metadata?.name ?? "unknown-pod";
-        const agentArgs = [
-          ...(agentContainer.command ?? []),
-          ...(agentContainer.args ?? []),
-        ];
-        const containerIdFlagIndex = agentArgs.findIndex(
-          (arg) => arg === "--container-id",
-        );
-        if (containerIdFlagIndex === -1) {
-          return;
-        }
-        const targetContainerId = agentArgs[containerIdFlagIndex + 1];
-        const normalizedTargetId = normalizeContainerId(targetContainerId);
-        if (!normalizedTargetId) {
-          return;
-        }
-
-        const targetInfo = containerIdIndex.get(normalizedTargetId);
-        if (!targetInfo) {
-          return;
-        }
-
-        const targetWorkload = targetInfo.workload;
-        sessions.push({
-          id: `${namespace}/${podName}`,
-          podName,
-          namespace,
-          targetWorkload,
-          lastUpdated: new Date().toISOString(),
-        });
-      });
-      snapshotStore.setSessions(sessions);
-      console.log(
-        `[agent-poller] ${new Date().toISOString()} - ${sessions.length} mirrord agents detected`,
-      );
-    } catch (error) {
-      console.warn(
-        "Failed to poll mirrord agent pods",
-        error instanceof Error ? error.message : error,
-      );
-      throw error;
-    }
-  };
-
-  const runPoll = async () => {
-    try {
-      await poll();
-    } catch (error) {
-      console.error(
-        "Mirrord agent poll failed",
-        error instanceof Error ? error.message : error,
-      );
-      throw error;
-    }
-  };
-
-  runPoll().catch(() => {
-    /* error logged above */
-  });
-  setInterval(() => {
-    runPoll().catch(() => {
-      /* error logged above */
-    });
-  }, pollIntervalMs);
-
-  return runPoll;
-};
-
 kubeConfigRef = loadKubeConfiguration();
 if (kubeConfigRef) {
   triggerDeploymentPoll = startDeploymentPoller(kubeConfigRef);
-  triggerAgentPoll = startMirrordAgentPoller(kubeConfigRef);
 } else {
   console.warn(
     "Kubernetes configuration unavailable; snapshot watchers are disabled.",
