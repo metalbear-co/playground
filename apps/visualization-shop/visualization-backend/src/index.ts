@@ -11,6 +11,10 @@ import {
  */
 const app = express();
 const port = process.env.PORT || 8080;
+const useMockData = process.env.QUEUE_SPLITTING_MOCK_DATA === "true";
+const useDbBranchMockData = process.env.DB_BRANCH_MOCK_DATA === "true";
+console.log(`QUEUE_SPLITTING_MOCK_DATA env = "${process.env.QUEUE_SPLITTING_MOCK_DATA}", useMockData = ${useMockData}`);
+console.log(`DB_BRANCH_MOCK_DATA env = "${process.env.DB_BRANCH_MOCK_DATA}", useDbBranchMockData = ${useDbBranchMockData}`);
 
 app.use(cors());
 app.use(express.json());
@@ -125,6 +129,10 @@ const operatorStatusPaths = [
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
 app.get(snapshotPaths, async (req, res) => {
+  if (useMockData) {
+    res.json(mockSnapshot);
+    return;
+  }
   try {
     const wantsRefresh =
       req.query.refresh === "1" || req.query.refresh === "true";
@@ -199,9 +207,29 @@ type OperatorSession = {
   durationSeconds?: number | undefined;
 };
 
+type KafkaEphemeralTopic = {
+  topicName: string;
+  sessionId: string;
+  clientConfig: string;
+};
+
+type PgBranchDatabase = {
+  name: string;
+  namespace: string;
+  branchId: string;
+  targetDeployment: string;
+  copyMode: string;
+  postgresVersion: string;
+  phase: string;
+  expireTime?: string;
+  owners: { username: string; hostname: string }[];
+};
+
 type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
+  kafkaTopics: KafkaEphemeralTopic[];
+  pgBranches: PgBranchDatabase[];
   fetchedAt: string;
 };
 
@@ -263,9 +291,101 @@ const fetchOperatorSessions = async (
 };
 
 /**
- * Return active mirrord operator sessions queried from the MirrordClusterSession CRD.
+ * Query MirrordKafkaEphemeralTopic custom resources from the operator CRD.
+ * Returns topic names linked to sessions via the session-id label.
+ */
+const fetchKafkaEphemeralTopics = async (
+  kubeConfig: KubeConfig,
+): Promise<KafkaEphemeralTopic[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const result = await customApi.listClusterCustomObject({
+    group: "queues.mirrord.metalbear.co",
+    version: "v1alpha",
+    plural: "mirrordkafkaephemeraltopics",
+  });
+
+  const body = result as { items?: Array<Record<string, unknown>> };
+  const items = body.items ?? [];
+
+  return items.map((item) => {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const labels = (metadata.labels ?? {}) as Record<string, string>;
+
+    return {
+      topicName: (spec.name as string) ?? "unknown",
+      sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
+      clientConfig: (spec.clientConfig as string) ?? "unknown",
+    };
+  });
+};
+
+/**
+ * Query PgBranchDatabase custom resources from the operator CRD.
+ * Returns branch data including target deployment, phase, and owner info.
+ */
+const fetchPgBranchDatabases = async (
+  kubeConfig: KubeConfig,
+): Promise<PgBranchDatabase[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const result = await customApi.listNamespacedCustomObject({
+    group: "dbs.mirrord.metalbear.co",
+    version: "v1alpha1",
+    namespace: defaultNamespace,
+    plural: "pgbranchdatabases",
+  });
+
+  const body = result as { items?: Array<Record<string, unknown>> };
+  const items = body.items ?? [];
+
+  return items.map((item) => {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const target = (spec.target ?? {}) as Record<string, unknown>;
+    const sessionInfo = (status.sessionInfo ?? {}) as Record<string, Record<string, unknown>>;
+
+    const owners = Object.values(sessionInfo).map((session) => {
+      const owner = (session.owner ?? {}) as Record<string, unknown>;
+      return {
+        username: (owner.username as string) ?? "unknown",
+        hostname: (owner.hostname as string) ?? "unknown",
+      };
+    });
+
+    return {
+      name: (metadata.name as string) ?? "unknown",
+      namespace: (metadata.namespace as string) ?? defaultNamespace,
+      branchId: (spec.id as string) ?? "unknown",
+      targetDeployment: (target.deployment as string) ?? "unknown",
+      copyMode: ((spec.copy as Record<string, unknown>)?.mode as string) ?? "unknown",
+      postgresVersion: (spec.postgresVersion as string) ?? "unknown",
+      phase: (status.phase as string) ?? "unknown",
+      expireTime: (status.expireTime as string) ?? undefined,
+      owners,
+    };
+  });
+};
+
+/**
+ * Return active mirrord operator sessions and Kafka ephemeral topics.
  */
 app.get(operatorStatusPaths, async (_req, res) => {
+  if (useMockData) {
+    const response: OperatorStatusResponse = {
+      ...mockOperatorStatus,
+      pgBranches: useDbBranchMockData ? mockPgBranches : [],
+      sessions: useDbBranchMockData
+        ? [...mockOperatorStatus.sessions, mockDbBranchSession]
+        : mockOperatorStatus.sessions,
+      sessionCount: useDbBranchMockData
+        ? mockOperatorStatus.sessions.length + 1
+        : mockOperatorStatus.sessions.length,
+      fetchedAt: new Date().toISOString(),
+    };
+    res.json(response);
+    return;
+  }
   if (!kubeConfigRef) {
     res.status(503).json({
       error: "Kubernetes configuration unavailable; cannot query operator sessions.",
@@ -273,10 +393,30 @@ app.get(operatorStatusPaths, async (_req, res) => {
     return;
   }
   try {
-    const sessions = await fetchOperatorSessions(kubeConfigRef);
+    const [sessions, kafkaTopics, pgBranches] = await Promise.all([
+      fetchOperatorSessions(kubeConfigRef).catch((err) => {
+        console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
+        return [] as OperatorSession[];
+      }),
+      fetchKafkaEphemeralTopics(kubeConfigRef).catch((err) => {
+        console.warn("Failed to fetch kafka topics:", err instanceof Error ? err.message : err);
+        return [] as KafkaEphemeralTopic[];
+      }),
+      useDbBranchMockData
+        ? Promise.resolve(mockPgBranches)
+        : fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
+            console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
+            return [] as PgBranchDatabase[];
+          }),
+    ]);
+    const allSessions = useDbBranchMockData
+      ? [...sessions, mockDbBranchSession]
+      : sessions;
     const response: OperatorStatusResponse = {
-      sessions,
-      sessionCount: sessions.length,
+      sessions: allSessions,
+      sessionCount: allSessions.length,
+      kafkaTopics,
+      pgBranches,
       fetchedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -344,6 +484,127 @@ const knownDeployments: KnownDeployment[] = [
     deployment: "delivery-service",
   },
 ];
+
+/**
+ * Mock data used when QUEUE_SPLITTING_MOCK_DATA=true, so the backend can run without a real cluster.
+ */
+const mockSnapshot: ClusterSnapshot = {
+  clusterName: "mock-playground",
+  updatedAt: new Date().toISOString(),
+  services: knownDeployments.map((d) => ({
+    id: d.id,
+    name: d.name,
+    description: d.description,
+    lastUpdated: new Date().toISOString(),
+    status: "available" as const,
+    availableReplicas: 2,
+  })),
+};
+
+const mockOperatorStatus: OperatorStatusResponse = {
+  sessions: [
+    {
+      sessionId: "2f585742d0784ac0",
+      target: { kind: "Deployment", name: "ip-visit-counter", container: "main", apiVersion: "apps/v1" },
+      namespace: "ip-visit-counter",
+      owner: { username: "Aviram Hassan", k8sUsername: "aviram@metalbear.com", hostname: "Avirams-MacBook-Pro-2.local" },
+      createdAt: "2026-02-18T07:36:04Z",
+      connectedAt: "2026-02-18T07:56:13.864240Z",
+      durationSeconds: 1211,
+    },
+    {
+      sessionId: "504d016ef5980f1a",
+      target: { kind: "Deployment", name: "delivery-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:27:49Z",
+      connectedAt: "2026-02-18T07:56:14.217820Z",
+      durationSeconds: 1706,
+    },
+    {
+      sessionId: "786f862af51aa05f",
+      target: { kind: "Deployment", name: "order-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:27:27Z",
+      connectedAt: "2026-02-18T07:56:13.244857Z",
+      durationSeconds: 1728,
+    },
+    {
+      sessionId: "923b94707a8b122e",
+      target: { kind: "Deployment", name: "delivery-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Aviram Hassan", k8sUsername: "aviram@metalbear.com", hostname: "Avirams-MacBook-Pro-2.local" },
+      createdAt: "2026-02-18T07:51:48Z",
+      connectedAt: "2026-02-18T07:56:15.195898Z",
+      durationSeconds: 267,
+    },
+    {
+      sessionId: "bf386eb54ddcb9a1",
+      target: { kind: "Deployment", name: "visualization-shop-frontend", container: "frontend", apiVersion: "apps/v1" },
+      namespace: "visualization-shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:48:51Z",
+      connectedAt: "2026-02-18T07:56:15.322586Z",
+      durationSeconds: 444,
+    },
+    {
+      sessionId: "ed62c28e08c05a4b",
+      target: { kind: "Deployment", name: "visualization-shop-backend", container: "backend", apiVersion: "apps/v1" },
+      namespace: "visualization-shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:46:51Z",
+      connectedAt: "2026-02-18T07:56:15.398127Z",
+      durationSeconds: 564,
+    },
+  ],
+  sessionCount: 6,
+  kafkaTopics: [
+    {
+      topicName: "mirrord-tmp-kmhkbbzgki-orders",
+      sessionId: "504d016ef5980f1a",
+      clientConfig: "shop-kafka-config",
+    },
+    {
+      topicName: "mirrord-tmp-fferfrefrfdd-orders",
+      sessionId: "923b94707a8b122e",
+      clientConfig: "shop-kafka-config",
+    },
+  ],
+  pgBranches: [],
+  fetchedAt: new Date().toISOString(),
+};
+
+const mockPgBranches: PgBranchDatabase[] = [
+  {
+    name: "order-service-pg-branch-255bc",
+    namespace: "shop",
+    branchId: "ari-branch-db",
+    targetDeployment: "order-service",
+    copyMode: "empty",
+    postgresVersion: "16.0",
+    phase: "Ready",
+    expireTime: "2026-02-19T08:50:57.701063Z",
+    owners: [
+      { username: "Ari Sprung", hostname: "Aris-MacBook-Pro.local" },
+    ],
+  },
+];
+
+const mockDbBranchSession: OperatorSession = {
+  sessionId: "786f862af51aa05f",
+  target: { kind: "Deployment", name: "order-service", container: "main", apiVersion: "apps/v1" },
+  namespace: "shop",
+  owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+  branchName: "shop-visual",
+  createdAt: "2026-02-18T07:27:27Z",
+  connectedAt: "2026-02-18T07:56:13.244857Z",
+  durationSeconds: 1728,
+};
 
 const defaultNamespace = process.env.WATCH_NAMESPACE || "shop";
 const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
@@ -450,13 +711,17 @@ const startDeploymentPoller = (kubeConfig: KubeConfig) => {
   return runPoll;
 };
 
-kubeConfigRef = loadKubeConfiguration();
-if (kubeConfigRef) {
-  triggerDeploymentPoll = startDeploymentPoller(kubeConfigRef);
+if (useMockData) {
+  console.log("QUEUE_SPLITTING_MOCK_DATA=true — serving static mock data, Kubernetes polling disabled.");
 } else {
-  console.warn(
-    "Kubernetes configuration unavailable; snapshot watchers are disabled.",
-  );
+  kubeConfigRef = loadKubeConfiguration();
+  if (kubeConfigRef) {
+    triggerDeploymentPoll = startDeploymentPoller(kubeConfigRef);
+  } else {
+    console.warn(
+      "Kubernetes configuration unavailable; snapshot watchers are disabled.",
+    );
+  }
 }
 
 app.listen(port, () => {

@@ -20,7 +20,7 @@ const port = parseInt(process.env.PORT || "80", 10);
 
 async function initDb() {
 
-  readFile(process.env.RESPONSEFILE || "dummy.txt");
+  readFile(process.env.BANNERFILE || "dummy.txt");
 
   const client = await pool.connect();
   try {
