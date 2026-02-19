@@ -1639,8 +1639,19 @@ export default function Home() {
     return base.replace(/\/$/, "");
   }, []);
 
-  const useQueueSplittingMock = process.env.NEXT_PUBLIC_QUEUE_SPLITTING_MOCK_DATA === "true";
-  const useDbBranchMock = process.env.NEXT_PUBLIC_DB_BRANCH_MOCK_DATA === "true";
+  const [useQueueSplittingMock, setUseQueueSplittingMock] = useState(false);
+  const [useDbBranchMock, setUseDbBranchMock] = useState(false);
+
+  useEffect(() => {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    fetch(`${basePath}/api/mock-config`)
+      .then((res) => res.json())
+      .then((data: { queueSplittingMock: boolean; dbBranchMock: boolean }) => {
+        setUseQueueSplittingMock(data.queueSplittingMock);
+        setUseDbBranchMock(data.dbBranchMock);
+      })
+      .catch((err) => console.warn("Failed to fetch mock config:", err));
+  }, []);
 
   const mockQueryString = useMemo(() => {
     const params = new URLSearchParams();
