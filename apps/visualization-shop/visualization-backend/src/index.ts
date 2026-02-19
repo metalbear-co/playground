@@ -370,15 +370,17 @@ const fetchPgBranchDatabases = async (
 /**
  * Return active mirrord operator sessions and Kafka ephemeral topics.
  */
-app.get(operatorStatusPaths, async (_req, res) => {
-  if (useMockData) {
+app.get(operatorStatusPaths, async (req, res) => {
+  const requestUseMock = req.query.queueSplittingMock === "true" || useMockData;
+  const requestUseDbBranchMock = req.query.dbBranchMock === "true" || useDbBranchMockData;
+  if (requestUseMock) {
     const response: OperatorStatusResponse = {
       ...mockOperatorStatus,
-      pgBranches: useDbBranchMockData ? mockPgBranches : [],
-      sessions: useDbBranchMockData
+      pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
+      sessions: requestUseDbBranchMock
         ? [...mockOperatorStatus.sessions, mockDbBranchSession]
         : mockOperatorStatus.sessions,
-      sessionCount: useDbBranchMockData
+      sessionCount: requestUseDbBranchMock
         ? mockOperatorStatus.sessions.length + 1
         : mockOperatorStatus.sessions.length,
       fetchedAt: new Date().toISOString(),
@@ -402,14 +404,14 @@ app.get(operatorStatusPaths, async (_req, res) => {
         console.warn("Failed to fetch kafka topics:", err instanceof Error ? err.message : err);
         return [] as KafkaEphemeralTopic[];
       }),
-      useDbBranchMockData
+      requestUseDbBranchMock
         ? Promise.resolve(mockPgBranches)
         : fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
             console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
             return [] as PgBranchDatabase[];
           }),
     ]);
-    const allSessions = useDbBranchMockData
+    const allSessions = requestUseDbBranchMock
       ? [...sessions, mockDbBranchSession]
       : sessions;
     const response: OperatorStatusResponse = {
