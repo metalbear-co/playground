@@ -39,8 +39,12 @@ import {
  * Custom data payload carried by each React Flow node rendered in the visualization.
  */
 type NodeData = {
-  label: ReactNode;
+  label: string | React.ReactNode;
   group: ArchitectureNode["group"];
+  stack?: string;
+  description?: string;
+  repoPath?: string;
+  highlight?: boolean;
 };
 
 const nodeWidth = 260;
@@ -75,30 +79,17 @@ const buildFlowNodes = (): Node<NodeData>[] =>
       id: node.id,
       data: {
         group: node.group,
-        label: (
-          <div className="flex flex-col gap-1 text-left">
-            <span className="text-sm font-semibold text-slate-900">
-              {node.label}
-            </span>
-            {node.stack && (
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {node.stack}
-              </span>
-            )}
-            <p className="text-xs leading-snug text-slate-600">{node.description}</p>
-            {node.repoPath && (
-              <span className="text-[11px] text-slate-400">{node.repoPath}</span>
-            )}
-          </div>
-        ),
+        label: node.label,
+        stack: node.stack,
+        description: node.description,
+        repoPath: node.repoPath,
       },
       style: {
         padding: 14,
         borderRadius: 18,
-        border: `2px solid ${palette.border}`,
-        backgroundColor: palette.background,
+        backgroundColor: "transparent",
         color: palette.text,
-        boxShadow: "0px 20px 45px rgba(15, 23, 42, 0.15)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
         width: nodeWidth,
         zIndex: 10,
       },
@@ -113,7 +104,7 @@ const buildFlowNodes = (): Node<NodeData>[] =>
       draggable: true,
       selectable: true,
       position: { x: 0, y: 0 },
-      type: isMirrordNode ? "mirrord" : undefined,
+      type: isMirrordNode ? "mirrord" : "architecture",
     };
   });
 
@@ -130,7 +121,6 @@ const buildFlowEdges = (): Edge[] =>
 
     switch (edge.id) {
       case "layer-to-agent":
-        edgeType = "smoothstep";
         sourceHandle = "layer-source-top";
         targetHandle = undefined;
         break;
@@ -142,7 +132,6 @@ const buildFlowEdges = (): Edge[] =>
         break;
       case "operator-to-agent":
       case "operator-to-agent-mirrored":
-        edgeType = "smoothstep";
         sourceHandle = undefined;
         targetHandle = "agent-target-left";
         break;
@@ -161,9 +150,10 @@ const buildFlowEdges = (): Edge[] =>
       animated: Boolean(style.animated),
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
+        width: 24,
+        height: 24,
       },
+      markerStart: undefined,
       style: {
         stroke: style.color,
         strokeWidth: intent === "mirrored" ? 2.75 : 1.75,
@@ -225,6 +215,8 @@ type ZoneNodeData = {
   background: string;
   border: string;
   accent: string;
+  zoneWidth: number;
+  zoneHeight: number;
 };
 
 type ClusterZoneNode = Node<ZoneNodeData, "zone">;
@@ -243,18 +235,35 @@ type ClusterSnapshot = {
   clusterName: string;
   updatedAt: string;
   services: ServiceStatus[];
-  sessions: SessionStatus[];
 };
 
 /**
- * Snapshot session payload returned by the backend (mirrord agents resolved to workloads).
+ * Rich operator session returned by the /operator-status endpoint.
  */
-type SessionStatus = {
-  id: string;
-  podName: string;
+type OperatorSession = {
+  sessionId: string;
+  target: {
+    kind: string;
+    name: string;
+    container?: string;
+    apiVersion?: string;
+  };
   namespace: string;
-  targetWorkload?: string;
-  lastUpdated: string;
+  owner: {
+    username: string;
+    k8sUsername: string;
+    hostname: string;
+  };
+  branchName?: string;
+  createdAt: string;
+  connectedAt?: string;
+  durationSeconds?: number;
+};
+
+type AgentGroup = {
+  targetName: string;
+  owners: { username: string; hostname: string }[];
+  sessions: OperatorSession[];
 };
 
 /**
@@ -276,6 +285,9 @@ const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
     const maxX = memberNodes.map((node) => node.position.x + nodeWidth);
     const maxY = memberNodes.map((node) => node.position.y + nodeHeight);
 
+    const computedWidth = Math.max(...maxX) - Math.min(...xs) + padding * 2;
+    const computedHeight = Math.max(...maxY) - Math.min(...ys) + padding * 2;
+
     zoneNodes.push({
       id: `zone-${zone.id}`,
       type: "zone",
@@ -289,10 +301,12 @@ const buildZoneNodes = (nodes: Node<NodeData>[]): ClusterZoneNode[] => {
         background: zone.background,
         border: zone.border,
         accent: zone.accent,
+        zoneWidth: computedWidth,
+        zoneHeight: computedHeight,
       },
       style: {
-        width: Math.max(...maxX) - Math.min(...xs) + padding * 2,
-        height: Math.max(...maxY) - Math.min(...ys) + padding * 2,
+        width: computedWidth,
+        height: computedHeight,
         zIndex: 1,
         pointerEvents: "none",
       },
@@ -348,9 +362,9 @@ const EXTERNAL_USER_OFFSET_X = 240;
 const INGRESS_LEFT_SHIFT_X = 90;
 const EXTERNAL_USER_SHIFT_Y = 100;
 const INGRESS_SHIFT_Y = 100;
-const MIRRORD_OPERATOR_SHIFT_X = 480;
+const MIRRORD_OPERATOR_SHIFT_X = 180;
 const MIRRORD_OPERATOR_SHIFT_Y = 100;
-const MIRRORD_AGENT_SHIFT_X = 200;
+const MIRRORD_AGENT_SHIFT_X = 380;
 const MIRRORD_AGENT_SHIFT_Y = 100;
 
 /**
@@ -412,12 +426,10 @@ const LOCAL_ZONE_OFFSET = (() => {
   if (!clusterBounds || !localBounds) {
     return LOCAL_ZONE_DEFAULT_OFFSET;
   }
-  const clusterCenterX = (clusterBounds.minX + clusterBounds.maxX) / 2;
-  const localCenterX = (localBounds.minX + localBounds.maxX) / 2;
-  const offsetX = clusterCenterX - localCenterX;
+  const offsetX = clusterBounds.minX - localBounds.minX;
   const offsetY = clusterBounds.maxY + LOCAL_ZONE_GAP_Y - localBounds.minY;
   return {
-    x: offsetX + LOCAL_ZONE_ADJUSTMENT.x,
+    x: offsetX,
     y: offsetY + LOCAL_ZONE_ADJUSTMENT.y,
   };
 })();
@@ -439,65 +451,27 @@ const adjustedNodes = clusterAdjustedNodes.map((node) => {
   return node;
 });
 
-const initialZoneNodes = buildZoneNodes(adjustedNodes);
-const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
-const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
-
 const SESSION_NODE_IDS = new Set([
   "mirrord-layer",
   "local-process",
   "mirrord-agent",
 ]);
 
-/**
- * Build an index of possible string aliases for each architecture node so snapshot targets can be
- * matched regardless of naming conventions (k8s resource vs repo path, etc.).
- */
-const buildAliasIndex = () => {
-  const aliasIndex = new Map<string, string>();
-  architectureNodes.forEach((node) => {
-    const aliases = new Set<string>();
-    const lowerId = node.id.toLowerCase();
-    aliases.add(lowerId);
-    aliases.add(lowerId.replace(/_/g, "-"));
-    aliases.add(lowerId.replace(/-/g, ""));
-    if (node.repoPath) {
-      const repo = node.repoPath.toLowerCase().replace(/\/$/, "");
-      aliases.add(repo);
-      aliases.add(repo.replace(/[\/]/g, ""));
-    }
-    if (typeof node.label === "string") {
-      const label = node.label.toLowerCase();
-      aliases.add(label);
-      aliases.add(label.replace(/\s+/g, "-"));
-      aliases.add(label.replace(/\s+/g, ""));
-    }
-    aliases.forEach((alias) => {
-      if (alias) {
-        aliasIndex.set(alias, node.id);
-      }
-    });
-  });
-  return aliasIndex;
-};
+const initialZoneNodes = buildZoneNodes(adjustedNodes);
+const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
+const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
 
-/**
- * Produce variant strings for a snapshot target (namespace/name, pod name, base workload name…).
- */
-const extractTargetAliases = (rawTarget: string): string[] => {
-  const normalized = rawTarget.toLowerCase();
-  const aliases = new Set<string>([normalized]);
-  const parts = normalized.split("/").filter(Boolean);
-  parts.forEach((part) => aliases.add(part));
-  const last = parts[parts.length - 1];
-  if (last && /-[a-z0-9]{4,}$/.test(last)) {
-    aliases.add(last.replace(/-[a-z0-9]{4,}$/, ""));
-  }
-  return Array.from(aliases);
-};
+const dynamicAgentBasePosition =
+  adjustedNodes.find((n) => n.id === "mirrord-agent")?.position ?? { x: 0, y: 0 };
+const DYNAMIC_AGENT_SPACING_Y = 220;
 
+const sanitizeHostname = (hostname: string) =>
+  hostname.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
+
+// Only hide mirrord-agent (replaced by dynamic agents when sessions exist).
+// Local-process and mirrord-layer are always visible as the "Local Machine" setup.
 const initialArchitectureNodes: Node<NodeData>[] = adjustedNodes.map((node) =>
-  SESSION_NODE_IDS.has(node.id) ? { ...node, hidden: true } : node,
+  node.id === "mirrord-agent" ? { ...node, hidden: true } : node,
 );
 
 const originalNodeStyles = new Map<string, Node<NodeData>["style"]>();
@@ -508,22 +482,92 @@ adjustedNodes.forEach((node) => {
 });
 
 /**
+ * Architecture node with explicit colored border and background by group (Entry, Core, Data, Queue, mirrord).
+ * Renders clean sans-serif typography: bold title, regular description.
+ */
+const ArchitectureNode = ({ data }: NodeProps<Node<NodeData>>) => {
+  const palette = groupPalette[data.group];
+  const label = typeof data.label === "string" ? data.label : "";
+  const isService = data.group === "service";
+  return (
+    <div
+      className="flex h-full w-full flex-col justify-between text-left"
+      style={{
+        border: `2px solid ${palette.border}`,
+        borderRadius: 18,
+        backgroundColor: palette.background,
+        color: palette.text,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+        padding: isService ? 16 : 14,
+      }}
+    >
+      <Handle type="target" position={Position.Left} style={{ visibility: "hidden" }} />
+      <Handle type="source" position={Position.Right} style={{ visibility: "hidden" }} />
+      <div className="flex flex-col gap-1.5">
+        <span
+          className="font-bold leading-tight text-[#111827]"
+          style={{ fontSize: isService ? 18 : 15 }}
+        >
+          {label}
+        </span>
+        {data.stack && (
+          <span
+            className="font-normal uppercase tracking-wider"
+            style={{
+              fontSize: isService ? 14 : 11,
+              color: isService ? "#607D8B" : "#6B7280",
+            }}
+          >
+            {data.stack}
+          </span>
+        )}
+        {data.description && (
+          <p
+            className="font-normal leading-snug text-[#111827]"
+            style={{ fontSize: isService ? 14 : 13 }}
+          >
+            {data.description}
+          </p>
+        )}
+        {data.repoPath && (
+          <span
+            className="font-normal"
+            style={{
+              fontSize: isService ? 14 : 11,
+              color: isService ? "#607D8B" : "#9CA3AF",
+            }}
+          >
+            {data.repoPath}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
  * Presentational node used for cluster/local zones. Rendered as a non-interactive background card.
  */
 const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   <div
-    className="flex h-full w-full flex-col justify-between rounded-[40px] border border-dashed px-8 py-6"
+    className="flex flex-col justify-between rounded-[40px] border border-dashed px-8 py-6"
     style={{
+      width: data.zoneWidth,
+      height: data.zoneHeight,
       borderColor: data.border,
       background: data.background,
       color: "#0F172A",
+      boxSizing: "border-box",
     }}
   >
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#4F46E5]">
+      <p
+        className="text-xs font-bold uppercase tracking-[0.2em]"
+        style={{ color: data.border }}
+      >
         {data.label}
       </p>
-      <p className="mt-1 text-sm text-[#374151]">{data.description}</p>
+      <p className="mt-1 text-[13px] text-[#374151]">{data.description}</p>
     </div>
     <span
       className="h-1 w-12 rounded-full"
@@ -537,13 +581,19 @@ const handleStyle = { background: "#E66479", width: 8, height: 8 };
 type MirrordNodeType = Node<NodeData, "mirrord">;
 
 /**
- * Custom renderer for mirrord-specific nodes (layer, agent, operator). Adds XYFlow handles and styling.
+ * Custom renderer for mirrord-specific nodes (layer, agent, operator, dynamic agents).
+ * Adds XYFlow handles and styling. Dynamic agent nodes (id starting with "agent-")
+ * render their label from node data instead of the static architecture definitions.
  */
-const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
+const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const info = architectureNodes.find((node) => node.id === id);
   const palette = groupPalette.mirrord;
   const isLayer = id === "mirrord-layer";
-  const isAgent = id === "mirrord-agent";
+  const isStaticAgent = id === "mirrord-agent";
+  const isDynamicAgent = id.startsWith("agent-");
+  const useHighlightBorder = data.highlight || isDynamicAgent;
+  const borderColor = useHighlightBorder ? "#E66479" : palette.border;
+  const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
   const description = info?.description;
@@ -552,7 +602,7 @@ const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
     <div
       className="flex h-full w-full flex-col justify-between whitespace-normal rounded-[18px] border border-solid px-4 py-4 text-left shadow-md"
       style={{
-        borderColor: palette.border,
+        border: `${borderWidth}px solid ${borderColor}`,
         background: palette.background,
         color: palette.text,
       }}
@@ -564,34 +614,47 @@ const MirrordNode = ({ id }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Right} id="layer-source-right" style={handleStyle} />
         </>
       )}
-      {isAgent && (
+      {isStaticAgent && (
         <>
           <Handle type="target" position={Position.Left} id="agent-target-left" style={handleStyle} />
           <Handle type="target" position={Position.Bottom} id="agent-target-bottom" style={handleStyle} />
           <Handle type="source" position={Position.Right} id="agent-source-right" style={handleStyle} />
         </>
       )}
-      <div className="flex flex-col gap-1 text-left">
-        <span className="text-sm font-semibold text-slate-900">{label}</span>
-        {stack && (
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {stack}
+      {isDynamicAgent && (
+        <>
+          <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
+        </>
+      )}
+      {isDynamicAgent ? (
+        data.label
+      ) : (
+        <div className="flex flex-col gap-0.5 text-left">
+          <span className="font-bold text-[15px] leading-tight text-[#111827]">
+            {label}
           </span>
-        )}
-        {description && (
-          <p className="text-xs leading-snug text-slate-600">{description}</p>
-        )}
-      </div>
+          {stack && (
+            <span className="text-[11px] font-medium uppercase tracking-wider text-[#6B7280]">
+              {stack}
+            </span>
+          )}
+          {description && (
+            <p className="text-[13px] leading-snug text-[#374151]">
+              {description}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
-// Legend entries rendered in the top-left panel.
+// Legend entries (match apps/visualization/).
 const legendItems = [
   { label: "Entry / Client", color: groupPalette.entry.border },
-  { label: "Infrastructure", color: groupPalette.infra.border },
   { label: "Core services", color: groupPalette.service.border },
-  { label: "Data stores", color: groupPalette.data.border },
+  { label: "Data services", color: groupPalette.data.border },
   { label: "Queues & Streams", color: groupPalette.queue.border },
   { label: "mirrord control plane", color: groupPalette.mirrord.border },
 ];
@@ -603,7 +666,10 @@ const SHOW_SNAPSHOT_PANEL = false;
  * and wires up UI panels for the demo.
  */
 export default function Home() {
-  const nodeTypes = useMemo(() => ({ zone: ZoneNode, mirrord: MirrordNode }), []);
+  const nodeTypes = useMemo(
+    () => ({ zone: ZoneNode, architecture: ArchitectureNode, mirrord: MirrordNode }),
+    [],
+  );
   const [architectureNodesState, setArchitectureNodesState] = useState<
     Node<NodeData>[]
   >(() => initialArchitectureNodes);
@@ -616,62 +682,252 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<ClusterSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
-  const hasSessions = useMemo(
-    () => (snapshot?.sessions ?? []).length > 0,
-    [snapshot],
-  );
-  const aliasIndex = useMemo(() => buildAliasIndex(), []);
-  // Match active mirrord sessions to architecture node ids so the agent edge can be rewired.
-  const targetedNodeId = useMemo(() => {
-    const sessions = snapshot?.sessions ?? [];
-    for (const session of sessions) {
-      const target = session.targetWorkload;
-      if (!target) {
-        continue;
+  const [operatorSessions, setOperatorSessions] = useState<OperatorSession[]>([]);
+  // Group operator sessions by target.name, filtering to namespace "shop".
+  // Multiple owners targeting the same service share one agent node.
+  const agentGroups = useMemo((): AgentGroup[] => {
+    const shopSessions = operatorSessions.filter(
+      (s) => s.namespace === "shop",
+    );
+    const map = new Map<string, AgentGroup>();
+    for (const session of shopSessions) {
+      const key = session.target.name;
+      if (!map.has(key)) {
+        map.set(key, {
+          targetName: key,
+          owners: [],
+          sessions: [],
+        });
       }
-      const variants = extractTargetAliases(target);
-      for (const variant of variants) {
-        const nodeId = aliasIndex.get(variant);
-        if (nodeId) {
-          return nodeId;
-        }
+      const group = map.get(key)!;
+      group.sessions.push(session);
+      if (!group.owners.some((o) => o.hostname === session.owner.hostname)) {
+        group.owners.push({
+          username: session.owner.username,
+          hostname: session.owner.hostname,
+        });
       }
     }
-    return undefined;
-  }, [snapshot, aliasIndex]);
-  // Rebuild edges when session state changes, swapping the agent target dynamically.
-  const flowEdges = useMemo(() => {
-    const remappedEdges = baseEdges.map((edge) => {
-      if (edge.id === "agent-to-target" && targetedNodeId) {
-        const targetExists = visibleArchitectureNodes.some(
-          (node) => node.id === targetedNodeId,
-        );
-        if (targetExists) {
-          return { ...edge, target: targetedNodeId };
-        }
-      }
-      return edge;
+    return Array.from(map.values());
+  }, [operatorSessions]);
+
+  // Create one React Flow node per unique target (agent).
+  const dynamicAgentNodes = useMemo((): Node<NodeData>[] => {
+    const palette = groupPalette.mirrord;
+    return agentGroups.map((group, index) => {
+      const agentId = `agent-${sanitizeHostname(group.targetName)}`;
+      return {
+        id: agentId,
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">
+                mirrord Agent
+              </span>
+              {group.owners.map((owner) => (
+                <div key={owner.hostname} className="flex flex-col">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    {owner.username}
+                  </span>
+                  <p className="text-xs leading-snug text-slate-600">
+                    {owner.hostname}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ),
+        },
+        type: "mirrord",
+        style: {
+          padding: 14,
+          borderRadius: 18,
+          backgroundColor: "transparent",
+          color: palette.text,
+          boxShadow: "0px 30px 60px rgba(230,100,121,0.35)",
+          width: nodeWidth,
+          zIndex: 10,
+        },
+        position: {
+          x: dynamicAgentBasePosition.x,
+          y: dynamicAgentBasePosition.y + index * DYNAMIC_AGENT_SPACING_Y,
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      };
     });
-    return remappedEdges.filter((edge) => {
-      if (SESSION_NODE_IDS.has(edge.source) || SESSION_NODE_IDS.has(edge.target)) {
-        return hasSessions;
+  }, [agentGroups]);
+
+  // Build dynamic edges: operator -> agent and agent -> target per session.
+  const dynamicEdges = useMemo((): Edge[] => {
+    const edges: Edge[] = [];
+    const mirroredStyle = intentStyles.mirrored;
+    const controlStyle = intentStyles.control;
+
+    for (const group of agentGroups) {
+      const agentId = `agent-${sanitizeHostname(group.targetName)}`;
+
+      // Operator -> Agent
+      edges.push({
+        id: `operator-to-${agentId}`,
+        source: "mirrord-operator",
+        target: agentId,
+        label: "Launch agent",
+        type: "smoothstep",
+        targetHandle: `${agentId}-target-left`,
+        animated: false,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 24,
+          height: 24,
+        },
+        style: {
+          stroke: controlStyle.color,
+          strokeWidth: 1.75,
+          strokeDasharray: controlStyle.dash,
+        },
+        labelBgPadding: [6, 3],
+        labelBgBorderRadius: 10,
+        labelShowBg: true,
+        labelBgStyle: { fill: "#FFFFFF" },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+      });
+
+      // Agent -> Target (single edge with all session IDs as label)
+      const sessionLabel = group.sessions
+        .map((s) => s.sessionId.substring(0, 8))
+        .join(", ");
+      edges.push({
+        id: `${agentId}-to-${group.targetName}`,
+        source: agentId,
+        target: group.targetName,
+        label: sessionLabel,
+        type: "bezier",
+        sourceHandle: `${agentId}-source-right`,
+        animated: true,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 24,
+          height: 24,
+        },
+        style: {
+          stroke: mirroredStyle.color,
+          strokeWidth: 2.75,
+          strokeDasharray: mirroredStyle.dash,
+        },
+        labelBgPadding: [6, 3],
+        labelBgBorderRadius: 10,
+        labelShowBg: true,
+        labelBgStyle: { fill: "#FFFFFF" },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+      });
+    }
+
+    return edges;
+  }, [agentGroups]);
+
+  const hasOperatorSessions = operatorSessions.length > 0;
+
+  // Combine static edges with dynamic agent edges.
+  // Always include "local-to-layer" (LD_PRELOAD hook); exclude other session-only edges.
+  const flowEdges = useMemo(() => {
+    const staticEdges = baseEdges.filter((edge) => {
+      if (edge.id === "local-to-layer") return true;
+      if (edge.id === "layer-to-agent") return hasOperatorSessions;
+      if (
+        SESSION_NODE_IDS.has(edge.source) ||
+        SESSION_NODE_IDS.has(edge.target)
+      ) {
+        return false;
       }
       return true;
     });
-  }, [baseEdges, hasSessions, targetedNodeId, visibleArchitectureNodes]);
+    return [...staticEdges, ...dynamicEdges];
+  }, [baseEdges, dynamicEdges, hasOperatorSessions]);
 
-  // Merge static zone overlays with the current architecture nodes.
+  // Recompute the cluster zone overlay to encompass dynamic agent nodes.
+  const dynamicClusterZoneNode = useMemo(() => {
+    if (!clusterZoneNode) return null;
+    if (dynamicAgentNodes.length === 0) return clusterZoneNode;
+
+    const clusterStaticNodes = adjustedNodes.filter((n) => {
+      const zone = nodeZoneIndex.get(n.id);
+      return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
+    });
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes];
+    const padding = 48;
+    const xs = allClusterNodes.map((n) => n.position.x);
+    const ys = allClusterNodes.map((n) => n.position.y);
+    const maxXs = allClusterNodes.map((n) => n.position.x + nodeWidth);
+    const maxYs = allClusterNodes.map((n) => n.position.y + nodeHeight);
+
+    const newWidth = Math.max(...maxXs) - Math.min(...xs) + padding * 2;
+    const newHeight = Math.max(...maxYs) - Math.min(...ys) + padding * 2;
+    return {
+      ...clusterZoneNode,
+      position: {
+        x: Math.min(...xs) - padding,
+        y: Math.min(...ys) - padding,
+      },
+      data: {
+        ...clusterZoneNode.data,
+        zoneWidth: newWidth,
+        zoneHeight: newHeight,
+      },
+      style: {
+        ...clusterZoneNode.style,
+        width: newWidth,
+        height: newHeight,
+      },
+    };
+  }, [dynamicAgentNodes]);
+
+  // Compute how much the dynamic cluster zone grew compared to the static one,
+  // then shift local nodes/zone down by the same amount to maintain the gap.
+  const localYShift = useMemo(() => {
+    if (!dynamicClusterZoneNode || !clusterZoneNode) return 0;
+    const staticBottom =
+      clusterZoneNode.position.y + (clusterZoneNode.data as ZoneNodeData).zoneHeight;
+    const dynamicBottom =
+      dynamicClusterZoneNode.position.y +
+      (dynamicClusterZoneNode.data as ZoneNodeData).zoneHeight;
+    return Math.max(0, dynamicBottom - staticBottom);
+  }, [dynamicClusterZoneNode]);
+
+  // Merge zone overlays, static architecture nodes, and dynamic agent nodes.
   const flowNodes = useMemo(() => {
     const nodes: Node<NodeData | ZoneNodeData>[] = [];
-    if (clusterZoneNode) {
-      nodes.push(clusterZoneNode);
+    if (dynamicClusterZoneNode) {
+      nodes.push(dynamicClusterZoneNode);
     }
-    if (hasSessions && localZoneNode) {
-      nodes.push(localZoneNode);
+    if (localZoneNode) {
+      const shifted = {
+        ...localZoneNode,
+        position: {
+          ...localZoneNode.position,
+          y: localZoneNode.position.y + localYShift,
+        },
+      };
+      nodes.push(shifted);
     }
-    nodes.push(...visibleArchitectureNodes);
+    // Shift local architecture nodes down by the same amount
+    const shiftedArchNodes = visibleArchitectureNodes.map((node) => {
+      const zone = nodeZoneIndex.get(node.id);
+      if (zone === "local" && localYShift > 0) {
+        return {
+          ...node,
+          position: { ...node.position, y: node.position.y + localYShift },
+        };
+      }
+      return node;
+    });
+    nodes.push(...shiftedArchNodes);
+    nodes.push(...dynamicAgentNodes);
     return nodes;
-  }, [visibleArchitectureNodes, hasSessions]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -684,7 +940,6 @@ export default function Home() {
     [snapshotBaseUrl],
   );
 
-  // React to session changes by toggling mirrord node visibility and styling.
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -717,7 +972,6 @@ export default function Home() {
           clusterName: body.clusterName ?? "unknown-cluster",
           updatedAt: body.updatedAt ?? new Date().toISOString(),
           services: body.services ?? [],
-          sessions: body.sessions ?? [],
         };
         setSnapshot(normalizedSnapshot);
         setSnapshotError(null);
@@ -752,6 +1006,45 @@ export default function Home() {
     };
   }, [fetchSnapshot]);
 
+  // Fetch operator sessions from the backend /operator-status endpoint.
+  const operatorStatusUrl = useMemo(
+    () => `${snapshotBaseUrl}/operator-status`,
+    [snapshotBaseUrl],
+  );
+
+  const fetchOperatorStatus = useCallback(async () => {
+    try {
+      const response = await fetch(operatorStatusUrl, { cache: "no-store" });
+      if (!response.ok) {
+        console.warn(`Operator status request failed (${response.status})`);
+        return;
+      }
+      const body = (await response.json()) as { sessions?: OperatorSession[] };
+      if (isMountedRef.current) {
+        setOperatorSessions(body.sessions ?? []);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch operator status:", (error as Error).message);
+    }
+  }, [operatorStatusUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) {
+        await fetchOperatorStatus();
+      }
+    };
+    run();
+    const interval = setInterval(() => {
+      void fetchOperatorStatus();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [fetchOperatorStatus]);
+
   const handleNodesChange = useCallback(
     /**
      * React Flow change handler that ignores updates for static zone nodes while allowing user drags.
@@ -778,57 +1071,54 @@ export default function Home() {
     void fetchSnapshot({ showSpinner: true, forceRefresh: true });
   }, [fetchSnapshot]);
 
-  // React to session changes by toggling mirrord node visibility and styling.
+  // On mount: hide only mirrord-agent (replaced by dynamic agents when sessions exist).
+  // Local-process and mirrord-layer stay visible as the Local Machine setup.
   useEffect(() => {
-    const sessions = snapshot?.sessions ?? [];
-    const hasSessions = sessions.length > 0;
-
     setArchitectureNodesState((nodes) =>
       nodes.map((node) => {
         const baseStyle = { ...(originalNodeStyles.get(node.id) ?? {}) };
+        if (node.id === "mirrord-agent") {
+          return { ...node, hidden: true, style: baseStyle };
+        }
+        return {
+          ...node,
+          hidden: false,
+          style: { ...baseStyle, opacity: 1 },
+        };
+      }),
+    );
+  }, []);
 
-        if (node.id === "mirrord-layer" || node.id === "mirrord-agent") {
-          const styleWithGlow = hasSessions
+  // When operator sessions are active, add highlight (glow) and pass highlight to MirrordNode for single border.
+  useEffect(() => {
+    setArchitectureNodesState((nodes) =>
+      nodes.map((node) => {
+        if (node.id === "local-process" || node.id === "mirrord-layer") {
+          const baseStyle = { ...(originalNodeStyles.get(node.id) ?? {}) };
+          const styleWithGlow = hasOperatorSessions
             ? {
                 ...baseStyle,
                 opacity: 1,
                 boxShadow: "0px 30px 60px rgba(230,100,121,0.35)",
-                border: "3px solid #E66479",
               }
-            : {
-                ...baseStyle,
-                opacity: 1,
-              };
-
+            : { ...baseStyle, opacity: 1 };
+          const dataWithHighlight = hasOperatorSessions
+            ? { ...node.data, highlight: true as const }
+            : { ...node.data, highlight: undefined };
           return {
             ...node,
-            hidden: !hasSessions,
+            hidden: false,
             style: styleWithGlow,
+            data: dataWithHighlight,
           };
         }
-
-        if (node.id === "local-process") {
-          return {
-            ...node,
-            hidden: !hasSessions,
-            style: { ...baseStyle, opacity: 1 },
-          };
-        }
-
-        return {
-          ...node,
-          hidden: false,
-          style: {
-            ...baseStyle,
-            opacity: 1,
-          },
-        };
+        return node;
       }),
     );
-  }, [snapshot]);
+  }, [hasOperatorSessions]);
 
   return (
-    <div className="flex h-screen w-screen bg-[#F5F5F5] text-[#111827]">
+    <div style={{ width: "100vw", height: "100vh", background: "#F5F5F5", color: "#111827" }}>
       <ReactFlow
         style={{ width: "100%", height: "100%" }}
         nodes={flowNodes}
@@ -838,14 +1128,18 @@ export default function Home() {
         maxZoom={1.5}
         elevateEdgesOnSelect={false}
         panOnScroll
-        className="!bg-white"
+        className="bg-transparent"
         proOptions={{ hideAttribution: true }}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
+        defaultMarkerColor="#374151"
       >
         <Background color="#E9E4FF" gap={24} size={2} />
         <Controls
+          position="bottom-right"
           showInteractive={false}
+          showZoom
+          showFitView
           className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
         />
         <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
@@ -936,22 +1230,22 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                {snapshot.sessions.length > 0 && (
+                {operatorSessions.length > 0 && (
                   <div className="mt-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
-                      Active mirrord sessions ({snapshot.sessions.length})
+                      Active mirrord sessions ({operatorSessions.length})
                     </p>
                     <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
-                      {snapshot.sessions.map((session) => (
-                        <div key={session.id} className="mb-2 last:mb-0">
+                      {operatorSessions.map((session) => (
+                        <div key={session.sessionId} className="mb-2 last:mb-0">
                           <p className="text-xs font-semibold text-[#E66479]">
-                            Target • {session.targetWorkload ?? "Unknown workload"}
+                            Target • {session.target.name ?? "Unknown workload"}
                           </p>
                           <p className="text-[11px] text-[#6B7280]">
-                            Pod {session.podName} in {session.namespace}
+                            {session.owner.username} ({session.owner.hostname}) in {session.namespace}
                           </p>
                           <p className="text-[10px] uppercase tracking-wide text-[#9CA3AF]">
-                            Updated {new Date(session.lastUpdated).toLocaleTimeString()}
+                            Started {new Date(session.createdAt).toLocaleTimeString()}
                           </p>
                         </div>
                       ))}
