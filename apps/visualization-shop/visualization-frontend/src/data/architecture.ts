@@ -163,7 +163,7 @@ export const architectureNodes: ArchitectureNode[] = [
   },
   {
     id: "kafka",
-    label: "Kafka topic",
+    label: "Kafka Producer",
     stack: "orders",
     description: "Receives order events from the order service.",
     group: "queue",
