@@ -1639,6 +1639,17 @@ export default function Home() {
     return base.replace(/\/$/, "");
   }, []);
 
+  const useQueueSplittingMock = process.env.NEXT_PUBLIC_QUEUE_SPLITTING_MOCK_DATA === "true";
+  const useDbBranchMock = process.env.NEXT_PUBLIC_DB_BRANCH_MOCK_DATA === "true";
+
+  const mockQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+    if (useDbBranchMock) params.set("dbBranchMock", "true");
+    const str = params.toString();
+    return str ? `?${str}` : "";
+  }, [useQueueSplittingMock, useDbBranchMock]);
+
   const snapshotUrl = useMemo(
     () => `${snapshotBaseUrl}/snapshot`,
     [snapshotBaseUrl],
@@ -1718,7 +1729,8 @@ export default function Home() {
 
   const fetchOperatorStatus = useCallback(async () => {
     try {
-      const response = await fetch(operatorStatusUrl, { cache: "no-store" });
+      const fullOperatorUrl = mockQueryString ? `${operatorStatusUrl}${mockQueryString}` : operatorStatusUrl;
+      const response = await fetch(fullOperatorUrl, { cache: "no-store" });
       if (!response.ok) {
         console.warn(`Operator status request failed (${response.status})`);
         return;
@@ -1732,7 +1744,7 @@ export default function Home() {
     } catch (error) {
       console.warn("Failed to fetch operator status:", (error as Error).message);
     }
-  }, [operatorStatusUrl]);
+  }, [operatorStatusUrl, mockQueryString]);
 
   useEffect(() => {
     let cancelled = false;
