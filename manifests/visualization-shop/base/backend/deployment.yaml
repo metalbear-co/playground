@@ -27,10 +27,6 @@ spec:
               value: playground
             - name: WATCH_NAMESPACE
               value: "shop"
-            - name: QUEUE_SPLITTING_MOCK_DATA
-              value: "false"
-            - name: DB_BRANCH_MOCK_DATA
-              value: "false"
           ports:
             - containerPort: 8080
               name: http

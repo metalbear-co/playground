@@ -20,6 +20,10 @@ spec:
               value: "3000"
             - name: NEXT_BASE_PATH
               value: "/visualization-shop"
+            - name: QUEUE_SPLITTING_MOCK_DATA
+              value: "false"
+            - name: DB_BRANCH_MOCK_DATA
+              value: "false"
           ports:
             - containerPort: 3000
               protocol: TCP

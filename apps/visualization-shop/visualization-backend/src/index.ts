@@ -11,10 +11,6 @@ import {
  */
 const app = express();
 const port = process.env.PORT || 8080;
-const useMockData = process.env.QUEUE_SPLITTING_MOCK_DATA === "true";
-const useDbBranchMockData = process.env.DB_BRANCH_MOCK_DATA === "true";
-console.log(`QUEUE_SPLITTING_MOCK_DATA env = "${process.env.QUEUE_SPLITTING_MOCK_DATA}", useMockData = ${useMockData}`);
-console.log(`DB_BRANCH_MOCK_DATA env = "${process.env.DB_BRANCH_MOCK_DATA}", useDbBranchMockData = ${useDbBranchMockData}`);
 
 app.use(cors());
 app.use(express.json());
@@ -129,7 +125,7 @@ const operatorStatusPaths = [
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
 app.get(snapshotPaths, async (req, res) => {
-  if (useMockData) {
+  if (req.query.queueSplittingMock === "true") {
     res.json(mockSnapshot);
     return;
   }
@@ -371,8 +367,8 @@ const fetchPgBranchDatabases = async (
  * Return active mirrord operator sessions and Kafka ephemeral topics.
  */
 app.get(operatorStatusPaths, async (req, res) => {
-  const requestUseMock = req.query.queueSplittingMock === "true" || useMockData;
-  const requestUseDbBranchMock = req.query.dbBranchMock === "true" || useDbBranchMockData;
+  const requestUseMock = req.query.queueSplittingMock === "true";
+  const requestUseDbBranchMock = req.query.dbBranchMock === "true";
   if (requestUseMock) {
     const response: OperatorStatusResponse = {
       ...mockOperatorStatus,
@@ -713,17 +709,13 @@ const startDeploymentPoller = (kubeConfig: KubeConfig) => {
   return runPoll;
 };
 
-if (useMockData) {
-  console.log("QUEUE_SPLITTING_MOCK_DATA=true — serving static mock data, Kubernetes polling disabled.");
+kubeConfigRef = loadKubeConfiguration();
+if (kubeConfigRef) {
+  triggerDeploymentPoll = startDeploymentPoller(kubeConfigRef);
 } else {
-  kubeConfigRef = loadKubeConfiguration();
-  if (kubeConfigRef) {
-    triggerDeploymentPoll = startDeploymentPoller(kubeConfigRef);
-  } else {
-    console.warn(
-      "Kubernetes configuration unavailable; snapshot watchers are disabled.",
-    );
-  }
+  console.warn(
+    "Kubernetes configuration unavailable; snapshot watchers are disabled.",
+  );
 }
 
 app.listen(port, () => {
