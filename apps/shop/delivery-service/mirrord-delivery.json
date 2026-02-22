@@ -1,0 +1,28 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "delivery-service"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "X-PG-Tenant: Ari"
+        }
+      },
+      "outgoing": true
+    },
+    "split_queues": {
+      "orders": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "author": "^me$",
+          "source": "^my-session-"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-service"
+    }
+  },
+  "feature": {
+    "fs": "read",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "X-PG-Tenant: Ari"
+        }
+      },
+      "outgoing":true
+    },"db_branches": [
+    {
+      "id": "ari4-branch-db",
+      "type": "pg",
+      "ttl_secs": 60,    
+      "version": "16.0",
+      "connection": {
+        "url": {
+          "type": "env",
+          "variable": "DATABASE_URL"
+        }
+      },
+      "copy": {
+        "mode": "schema"                 
+      }
+    }
+  ]
+  
+  },
+  "internal_proxy": {
+    "log_destination": "/tmp/mirrord.log",
+    "log_level": "mirrord=trace"
+  }
+}

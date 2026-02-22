@@ -19,7 +19,7 @@ spec:
       containers:
         - name: backend
           image: ghcr.io/metalbear-co/visualization-shop-backend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: PORT
               value: "8080"
