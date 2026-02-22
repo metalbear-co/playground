@@ -1212,7 +1212,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       });
     }
     const uniqueHostnames = new Map<string, LocalMachineEntry>();
-    for (const session of operatorSessions) {
+    const shopSessions = operatorSessions.filter((s) => s.namespace === "shop");
+    for (const session of shopSessions) {
       if (!uniqueHostnames.has(session.owner.hostname)) {
         uniqueHostnames.set(session.owner.hostname, {
           ownerName: session.owner.username,

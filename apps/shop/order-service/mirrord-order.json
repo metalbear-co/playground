@@ -19,7 +19,7 @@
     {
       "id": "ari4-branch-db",
       "type": "pg",
-      "ttl_secs": 60,    
+      "ttl_secs": 30,    
       "version": "16.0",
       "connection": {
         "url": {
