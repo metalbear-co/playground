@@ -1,0 +1,36 @@
+{
+  "target": {
+    "namespace": "visualization-shop",
+    "path": {
+      "deployment": "visualization-shop-frontend"
+    }
+  },
+  "feature": {
+    "env": {
+      "exclude": "NODE_ENV",
+      "override": {
+        "NEXT_PUBLIC_VISUALIZATION_BACKEND_URL":"http://localhost:8080",
+        "DB_BRANCH_MOCK_DATA": "true",
+        "QUEUE_SPLITTING_MOCK_DATA": "false"
+      }
+    },
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "any_of": [
+            { "header": "X-PG-Tenant: Ari" }
+          ]
+        }
+      },
+      "outgoing": {
+        "ignore_localhost": true
+      }
+    }
+  },
+  "internal_proxy": {
+    "log_destination": "/tmp/mirrord.log",
+    "log_level": "mirrord=trace"
+  }
+
+}

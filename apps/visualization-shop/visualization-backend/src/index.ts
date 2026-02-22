@@ -583,7 +583,7 @@ const mockPgBranches: PgBranchDatabase[] = [
     namespace: "shop",
     branchId: "ari-branch-db",
     targetDeployment: "order-service",
-    copyMode: "empty",
+    copyMode: "schema",
     postgresVersion: "16.0",
     phase: "Ready",
     expireTime: "2026-02-19T08:50:57.701063Z",
