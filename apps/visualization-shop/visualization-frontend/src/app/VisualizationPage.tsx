@@ -1171,7 +1171,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     return edges;
   }, [kafkaTopics, operatorSessions, aliasIndex]);
 
-  const hasOperatorSessions = operatorSessions.length > 0;
+  const hasShopSessions = agentGroups.length > 0;
 
   // Build a set of static edges to hide when a kafka split topic replaces the direct path.
   // e.g. if a split topic sits between "kafka" and "delivery-service", hide "kafka-to-delivery".
@@ -1542,8 +1542,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       if (kafkaReplacedEdges.has(edge.id)) return false;
       // Hide static local edges when dynamic local machines replace them
       if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) return false;
-      if (edge.id === "local-to-layer") return true;
-      if (edge.id === "layer-to-agent") return hasOperatorSessions;
+      if (edge.id === "local-to-layer") return hasShopSessions;
+      if (edge.id === "layer-to-agent") return hasShopSessions;
       if (
         SESSION_NODE_IDS.has(edge.source) ||
         SESSION_NODE_IDS.has(edge.target)
@@ -1553,7 +1553,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       return true;
     });
     return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...dynamicLocalEdges, ...pgBranchEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, hasOperatorSessions, kafkaReplacedEdges, hasDynamicLocalMachines]);
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, hasShopSessions, kafkaReplacedEdges, hasDynamicLocalMachines]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
@@ -1638,6 +1638,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         if (hasDynamicLocalMachines && (node.id === "local-process" || node.id === "mirrord-layer")) {
           return false;
         }
+        // Hide mirrord-layer when no shop sessions exist
+        if (node.id === "mirrord-layer" && !hasShopSessions) return false;
         return true;
       })
       .map((node) => {
@@ -1666,7 +1668,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, hasDynamicLocalMachines, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -1867,25 +1869,26 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     );
   }, []);
 
-  // When operator sessions are active, add highlight (glow) to local-process and mirrord-layer.
+  // When shop-namespace sessions are active, add highlight (glow) to local-process and mirrord-layer.
+  // mirrord-layer is hidden when no shop sessions exist.
   useEffect(() => {
     setArchitectureNodesState((nodes) =>
       nodes.map((node) => {
         if (node.id === "local-process" || node.id === "mirrord-layer") {
           const baseStyle = { ...(originalNodeStyles.get(node.id) ?? {}) };
-          const styleWithGlow = hasOperatorSessions
+          const styleWithGlow = hasShopSessions
             ? {
                 ...baseStyle,
                 opacity: 1,
                 boxShadow: "0px 30px 60px rgba(124,58,237,0.35)",
               }
             : { ...baseStyle, opacity: 1 };
-          const dataWithHighlight = hasOperatorSessions
+          const dataWithHighlight = hasShopSessions
             ? { ...node.data, highlight: true as const }
             : { ...node.data, highlight: undefined };
           return {
             ...node,
-            hidden: false,
+            hidden: node.id === "mirrord-layer" ? !hasShopSessions : false,
             style: styleWithGlow,
             data: dataWithHighlight,
           };
@@ -1893,7 +1896,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         return node;
       }),
     );
-  }, [hasOperatorSessions]);
+  }, [hasShopSessions]);
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#F5F5F5", color: "#111827" }}>
