@@ -369,6 +369,16 @@ const fetchPgBranchDatabases = async (
 app.get(operatorStatusPaths, async (req, res) => {
   const requestUseMock = req.query.queueSplittingMock === "true";
   const requestUseDbBranchMock = req.query.dbBranchMock === "true";
+  const requestUseMultipleSessionMock = req.query.multipleSessionMock === "true";
+  if (requestUseMultipleSessionMock) {
+    const response: OperatorStatusResponse = {
+      ...mockMultipleSessionsOperatorStatus,
+      pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
+      fetchedAt: new Date().toISOString(),
+    };
+    res.json(response);
+    return;
+  }
   if (requestUseMock) {
     const response: OperatorStatusResponse = {
       ...mockOperatorStatus,
@@ -592,6 +602,93 @@ const mockPgBranches: PgBranchDatabase[] = [
     ],
   },
 ];
+
+const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
+  sessions: [
+    {
+      sessionId: "2f585742d0784ac0",
+      target: { kind: "Deployment", name: "ip-visit-counter", container: "main", apiVersion: "apps/v1" },
+      namespace: "ip-visit-counter",
+      owner: { username: "Aviram Hassan", k8sUsername: "aviram@metalbear.com", hostname: "Avirams-MacBook-Pro-2.local" },
+      createdAt: "2026-02-18T07:36:04Z",
+      connectedAt: "2026-02-18T07:56:13.864240Z",
+      durationSeconds: 1211,
+    },
+    {
+      sessionId: "504d016ef5980f1a",
+      target: { kind: "Deployment", name: "delivery-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:27:49Z",
+      connectedAt: "2026-02-18T07:56:14.217820Z",
+      durationSeconds: 1706,
+    },
+    {
+      sessionId: "786f862af51aa05f",
+      target: { kind: "Deployment", name: "order-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:27:27Z",
+      connectedAt: "2026-02-18T07:56:13.244857Z",
+      durationSeconds: 1728,
+    },
+    {
+      sessionId: "923b94707a8b122e",
+      target: { kind: "Deployment", name: "delivery-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Aviram Hassan", k8sUsername: "aviram@metalbear.com", hostname: "Avirams-MacBook-Pro-2.local" },
+      createdAt: "2026-02-18T07:51:48Z",
+      connectedAt: "2026-02-18T07:56:15.195898Z",
+      durationSeconds: 267,
+    },
+    {
+      sessionId: "bf386eb54ddcb9a1",
+      target: { kind: "Deployment", name: "visualization-shop-frontend", container: "frontend", apiVersion: "apps/v1" },
+      namespace: "visualization-shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:48:51Z",
+      connectedAt: "2026-02-18T07:56:15.322586Z",
+      durationSeconds: 444,
+    },
+    {
+      sessionId: "ed62c28e08c05a4b",
+      target: { kind: "Deployment", name: "visualization-shop-backend", container: "backend", apiVersion: "apps/v1" },
+      namespace: "visualization-shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:46:51Z",
+      connectedAt: "2026-02-18T07:56:15.398127Z",
+      durationSeconds: 564,
+    },
+    {
+      sessionId: "fd5532528u664b",
+      target: { kind: "Deployment", name: "metal-mart-frontend", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Adna Lokisic", k8sUsername: "adna@metalbear.com", hostname: "Adna-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:46:51Z",
+      connectedAt: "2026-02-18T07:56:15.398127Z",
+      durationSeconds: 233,
+    },
+    {
+      sessionId: "ed62c2528u664b",
+      target: { kind: "Deployment", name: "payment-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Karlo Dabrovic", k8sUsername: "karlo@metalbear.com", hostname: "Karlo-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:46:51Z",
+      connectedAt: "2026-02-18T07:56:15.398127Z",
+      durationSeconds: 233,
+    },
+  ],
+  sessionCount: 8,
+  kafkaTopics: [],
+  pgBranches: [],
+  fetchedAt: new Date().toISOString(),
+};
 
 const mockDbBranchSession: OperatorSession = {
   sessionId: "786f862af51aa05f",

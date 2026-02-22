@@ -773,9 +773,10 @@ const SHOW_SNAPSHOT_PANEL = false;
 export type VisualizationPageProps = {
   useQueueSplittingMock: boolean;
   useDbBranchMock: boolean;
+  useMultipleSessionMock: boolean;
 };
 
-export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMock }: VisualizationPageProps) {
+export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMock, useMultipleSessionMock }: VisualizationPageProps) {
   const nodeTypes = useMemo(
     () => ({ zone: ZoneNode, architecture: ArchitectureNode, mirrord: MirrordNode }),
     [],
@@ -1194,10 +1195,41 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
   // When there are multiple kafka topics, create per-topic local machine nodes
   // (each with its own local-process and mirrord-layer).
+  // When there are no kafka topics but multiple unique hostnames in operator sessions,
+  // create per-hostname local machine nodes instead.
   const hasMultipleKafkaTopics = kafkaTopics.length > 1;
 
+  type LocalMachineEntry = { ownerName: string; hostname: string };
+
+  const localMachineEntries = useMemo((): LocalMachineEntry[] => {
+    if (hasMultipleKafkaTopics) {
+      return kafkaTopics.map((topic) => {
+        const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
+        return {
+          ownerName: session?.owner.username ?? "Unknown",
+          hostname: session?.owner.hostname ?? "",
+        };
+      });
+    }
+    const uniqueHostnames = new Map<string, LocalMachineEntry>();
+    for (const session of operatorSessions) {
+      if (!uniqueHostnames.has(session.owner.hostname)) {
+        uniqueHostnames.set(session.owner.hostname, {
+          ownerName: session.owner.username,
+          hostname: session.owner.hostname,
+        });
+      }
+    }
+    if (uniqueHostnames.size > 1) {
+      return Array.from(uniqueHostnames.values());
+    }
+    return [];
+  }, [kafkaTopics, operatorSessions, hasMultipleKafkaTopics]);
+
+  const hasDynamicLocalMachines = localMachineEntries.length > 1;
+
   const dynamicLocalMachineNodes = useMemo((): Node<NodeData>[] => {
-    if (!hasMultipleKafkaTopics) return [];
+    if (!hasDynamicLocalMachines) return [];
     const palette = groupPalette.mirrord;
     const nodes: Node<NodeData>[] = [];
     const sharedStyle = {
@@ -1209,10 +1241,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       zIndex: 10,
     };
 
-    kafkaTopics.forEach((topic, index) => {
-      const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
-      const ownerName = session?.owner.username ?? "Unknown";
-      const hostname = session?.owner.hostname ?? "";
+    localMachineEntries.forEach((entry, index) => {
+      const ownerName = entry.ownerName;
+      const hostname = entry.hostname;
       const localId = `dynamic-local-${index}`;
       const layerId = `dynamic-layer-${index}`;
 
@@ -1276,11 +1307,11 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     });
 
     return nodes;
-  }, [kafkaTopics, operatorSessions, hasMultipleKafkaTopics, dynamicNodePositions]);
+  }, [localMachineEntries, hasDynamicLocalMachines, dynamicNodePositions]);
 
   // Edges for dynamic local machines: local→layer (LD_PRELOAD) and layer→operator.
   const dynamicLocalEdges = useMemo((): Edge[] => {
-    if (!hasMultipleKafkaTopics) return [];
+    if (!hasDynamicLocalMachines) return [];
     const edges: Edge[] = [];
     const mirroredStyle = intentStyles.mirrored;
     const edgeLabelDefaults = {
@@ -1291,7 +1322,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
     };
 
-    kafkaTopics.forEach((_, index) => {
+    localMachineEntries.forEach((_, index) => {
       const localId = `dynamic-local-${index}`;
       const layerId = `dynamic-layer-${index}`;
 
@@ -1334,23 +1365,22 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     });
 
     return edges;
-  }, [kafkaTopics, hasMultipleKafkaTopics]);
+  }, [localMachineEntries, hasDynamicLocalMachines]);
 
   // Zone overlays for each dynamic local machine pair.
   const dynamicLocalZoneNodes = useMemo((): ClusterZoneNode[] => {
-    if (!hasMultipleKafkaTopics) return [];
+    if (!hasDynamicLocalMachines) return [];
     const zones: ClusterZoneNode[] = [];
     const padding = 80;
 
-    kafkaTopics.forEach((topic, index) => {
+    localMachineEntries.forEach((entry, index) => {
       const localId = `dynamic-local-${index}`;
       const layerId = `dynamic-layer-${index}`;
       const localNode = dynamicLocalMachineNodes.find((n) => n.id === localId);
       const layerNode = dynamicLocalMachineNodes.find((n) => n.id === layerId);
       if (!localNode || !layerNode) return;
 
-      const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
-      const ownerName = session?.owner.username ?? "Unknown";
+      const ownerName = entry.ownerName;
 
       const minX = Math.min(localNode.position.x, layerNode.position.x);
       const minY = Math.min(localNode.position.y, layerNode.position.y);
@@ -1387,7 +1417,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     });
 
     return zones;
-  }, [kafkaTopics, operatorSessions, dynamicLocalMachineNodes, hasMultipleKafkaTopics]);
+  }, [localMachineEntries, dynamicLocalMachineNodes, hasDynamicLocalMachines]);
 
   // Build dynamic nodes for PgBranchDatabase resources.
   // Each branch is positioned to the right of its target deployment's postgres data node.
@@ -1511,7 +1541,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     const staticEdges = baseEdges.filter((edge) => {
       if (kafkaReplacedEdges.has(edge.id)) return false;
       // Hide static local edges when dynamic local machines replace them
-      if (hasMultipleKafkaTopics && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) return false;
+      if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) return false;
       if (edge.id === "local-to-layer") return true;
       if (edge.id === "layer-to-agent") return hasOperatorSessions;
       if (
@@ -1523,7 +1553,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       return true;
     });
     return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...dynamicLocalEdges, ...pgBranchEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, hasOperatorSessions, kafkaReplacedEdges, hasMultipleKafkaTopics]);
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, hasOperatorSessions, kafkaReplacedEdges, hasDynamicLocalMachines]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
@@ -1581,7 +1611,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     if (dynamicClusterZoneNode) {
       nodes.push(dynamicClusterZoneNode);
     }
-    if (hasMultipleKafkaTopics) {
+    if (hasDynamicLocalMachines) {
       // Use dynamic local zone overlays instead of the static one
       const shiftedDynamicLocalZones = dynamicLocalZoneNodes.map((zone) => ({
         ...zone,
@@ -1605,7 +1635,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     // When multiple kafka topics exist, hide static local nodes (replaced by dynamic ones)
     const shiftedArchNodes = visibleArchitectureNodes
       .filter((node) => {
-        if (hasMultipleKafkaTopics && (node.id === "local-process" || node.id === "mirrord-layer")) {
+        if (hasDynamicLocalMachines && (node.id === "local-process" || node.id === "mirrord-layer")) {
           return false;
         }
         return true;
@@ -1625,7 +1655,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     nodes.push(...kafkaTopicNodes);
     nodes.push(...pgBranchNodes);
     // Add dynamic local machine nodes with localYShift applied
-    if (hasMultipleKafkaTopics) {
+    if (hasDynamicLocalMachines) {
       const shiftedDynamicLocalNodes = dynamicLocalMachineNodes.map((node) => ({
         ...node,
         position: {
@@ -1636,7 +1666,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, hasMultipleKafkaTopics, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, hasDynamicLocalMachines, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -1646,11 +1676,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
   const mockQueryString = useMemo(() => {
     const params = new URLSearchParams();
-    if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+    if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
+    else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
     if (useDbBranchMock) params.set("dbBranchMock", "true");
     const str = params.toString();
     return str ? `?${str}` : "";
-  }, [useQueueSplittingMock, useDbBranchMock]);
+  }, [useQueueSplittingMock, useDbBranchMock, useMultipleSessionMock]);
 
   const snapshotUrl = useMemo(
     () => `${snapshotBaseUrl}/snapshot`,
