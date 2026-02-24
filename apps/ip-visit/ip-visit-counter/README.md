@@ -10,4 +10,4 @@ On pull requests that touch ip-visit-counter or ip-visit-frontend, CI builds bot
 - **Workflow:** [.github/workflows/preview-env-pr.yml](../../.github/workflows/preview-env-pr.yml)
 - **Preview configs:** [mirrord-preview.json](./mirrord-preview.json) (counter), [../ip-visit-frontend/mirrord-preview.json](../ip-visit-frontend/mirrord-preview.json) (frontend)
 
-Cluster access (kubeconfig) is configured in GitHub secrets (`KUBECONFIG_BASE64`), not in code.
+Cluster access is obtained via Workload Identity Federation (GitHub OIDC → GCP) using the `GCP_WIF_PROVIDER` and `GCP_SERVICE_ACCOUNT` secrets; no kubeconfig is stored in GitHub.
