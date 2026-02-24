@@ -1,0 +1,37 @@
+{
+  "key": "redesign",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "metal-mart-frontend"
+    }
+  },
+  "feature": {
+   "preview": {
+      "image": "ghcr.io/metalbear-co/metalmart-{{key}}:latest",
+      "creation_timeout_secs":2400
+    },
+    "env": {
+      "override": {
+        "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
+      },
+      "exclude": "NODE_ENV"
+    },
+    
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+             "header_filter": "x-traffic: {{key}}"
+        }
+      },
+      "outgoing": {
+        "ignore_localhost": true
+      }
+    },
+    "fs": {
+      "mode": "read",
+      "local": ["globals\\.css", ".+\\.js"]
+    }
+  }
+}
