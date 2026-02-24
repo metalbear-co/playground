@@ -1,0 +1,31 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "metal-mart-frontend"
+    }
+  },
+  "feature": {
+    "env": {
+      "override": {
+        "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
+      },
+      "exclude": "NODE_ENV"
+    },
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+           "header_filter": "X-PG-Tenant: Ari"
+        }
+      },
+      "outgoing": {
+        "ignore_localhost": true
+      }
+    }
+  },
+  "internal_proxy": {
+    "log_destination": "/tmp/mirrord.log",
+    "log_level": "mirrord=trace"
+  }
+}

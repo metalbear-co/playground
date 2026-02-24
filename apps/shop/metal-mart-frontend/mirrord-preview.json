@@ -11,13 +11,6 @@
       "image": "ghcr.io/metalbear-co/metalmart-{{key}}:latest",
       "creation_timeout_secs":2400
     },
-    "env": {
-      "override": {
-        "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
-      },
-      "exclude": "NODE_ENV"
-    },
-    
     "network": {
       "incoming": {
         "mode": "steal",
@@ -32,6 +25,12 @@
     "fs": {
       "mode": "read",
       "local": ["globals\\.css", ".+\\.js"]
+    },
+    "env": {
+      "override": {
+        "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
+      },
+      "exclude": "NODE_ENV"
     }
   }
 }
