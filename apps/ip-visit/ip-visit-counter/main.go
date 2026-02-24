@@ -259,7 +259,11 @@ func getCount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"count": count, "text": ResponseString + "hi", "info": ipInfo, "info2": ipInfo2})
+	demoMarker := "production"
+	if tenant != "" {
+		demoMarker = tenant
+	}
+	c.JSON(200, gin.H{"count": count, "text": ResponseString + "hi", "info": ipInfo, "info2": ipInfo2, "demo_marker": demoMarker})
 }
 
 func main() {
