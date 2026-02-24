@@ -5,11 +5,19 @@
 import { CardTitle, CardHeader, CardContent, Card } from "@/components/ui/card"
 
 
-export function IPInfo({ count, ip, name, text }: { count: number, ip: string, name: string, text: string }) {
+export function IPInfo({ count, ip, name, text, demoMarker }: { count: number, ip: string, name: string, text: string; demoMarker?: string }) {
+  const isPreview = demoMarker && demoMarker !== "production";
   return (
       <Card className="max-w-md w-full mx-4">
         <CardHeader>
-          <CardTitle className="text-lg font-bold">API Data</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-bold">API Data</CardTitle>
+            {isPreview ? (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-sm font-medium text-amber-800">Preview: {demoMarker}</span>
+            ) : (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-sm font-medium text-slate-600">Production</span>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">

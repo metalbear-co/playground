@@ -1,0 +1,168 @@
+# mirrord Preview Environment: create on PR, delete on merge/close.
+# Builds frontend + counter, starts two preview pods (same key), posts link + header in comment.
+# Requires: KUBECONFIG_BASE64 secret, mirrord operator with Enterprise license.
+name: Preview Environment (PR)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - "apps/ip-visit/ip-visit-counter/**"
+      - "apps/ip-visit/ip-visit-frontend/**"
+      - ".github/workflows/preview-env-pr.yml"
+      - "apps/ip-visit/ip-visit-counter/mirrord-preview.json"
+      - "apps/ip-visit/ip-visit-frontend/mirrord-preview.json"
+
+concurrency:
+  group: preview-env-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PREVIEW_KEY: "pr-${{ github.event.pull_request.number }}"
+  COUNTER_IMAGE: "ghcr.io/metalbear-co/playground-ip-visit-counter:preview-pr-${{ github.event.pull_request.number }}-${{ github.sha }}"
+  FRONTEND_IMAGE: "ghcr.io/metalbear-co/playground-ip-visit-frontend:preview-pr-${{ github.event.pull_request.number }}-${{ github.sha }}"
+
+jobs:
+  preview-start:
+    name: Start preview (build, push, start, comment)
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push counter image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/ip-visit/ip-visit-counter/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.COUNTER_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/ip-visit/ip-visit-frontend
+          file: apps/ip-visit/ip-visit-frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl get ns ip-visit-counter >/dev/null
+
+      - name: Install mirrord
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+
+      - name: Start mirrord preview (counter)
+        run: |
+          mirrord preview start \
+            -f apps/ip-visit/ip-visit-counter/mirrord-preview.json \
+            -i "${{ env.COUNTER_IMAGE }}" \
+            -k "${{ env.PREVIEW_KEY }}" \
+            --timeout 600
+
+      - name: Start mirrord preview (frontend)
+        run: |
+          mirrord preview start \
+            -f apps/ip-visit/ip-visit-frontend/mirrord-preview.json \
+            -i "${{ env.FRONTEND_IMAGE }}" \
+            -k "${{ env.PREVIEW_KEY }}" \
+            --timeout 600
+
+      - name: Post PR comment with preview link and header
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const key = `${{ env.PREVIEW_KEY }}`;
+            const url = 'https://playground.metalbear.dev';
+            const body = `## mirrord Preview Environment
+
+            A preview environment is running for this PR (frontend + counter).
+
+            | | |
+            |---|---|
+            | **Preview URL** | [${url}](${url}) |
+            | **Header** | \`X-PG-Tenant: ${key}\` |
+
+            To send traffic to this preview:
+            - Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or
+            - \`curl -H "X-PG-Tenant: ${key}" ${url}/count\`
+
+            The UI will show "Preview: ${key}" when the header is set.
+
+            *Preview is stopped when the PR is merged or closed.*
+            `;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c => c.body && c.body.includes('## mirrord Preview Environment'));
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  preview-stop:
+    name: Stop preview on merge/close
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Install mirrord
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+
+      - name: Stop mirrord preview
+        run: |
+          mirrord preview stop -k "pr-${{ github.event.pull_request.number }}" || true

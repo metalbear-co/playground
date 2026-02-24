@@ -23,7 +23,7 @@ export default function Home() {
   console.log
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24 bg-gray-100">
-      <IPInfo ip={data.info.ip} count={data.count} text={data.text} name={data.info.name} />
+      <IPInfo ip={data.info.ip} count={data.count} text={data.text} name={data.info.name} demoMarker={data.demo_marker} />
     </main>
   )
 }
