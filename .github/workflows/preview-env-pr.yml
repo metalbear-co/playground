@@ -1,6 +1,6 @@
 # mirrord Preview Environment: create on PR, delete on merge/close.
 # Builds frontend + counter, starts two preview pods (same key), posts link + header in comment.
-# Requires: KUBECONFIG_BASE64 secret, mirrord operator with Enterprise license.
+# Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT secrets, mirrord operator with Enterprise license.
 name: Preview Environment (PR)
 
 on:
@@ -32,6 +32,7 @@ jobs:
       contents: read
       packages: write
       pull-requests: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,12 +70,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-          kubectl get ns ip-visit-counter >/dev/null
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
 
       - name: Install mirrord
         run: |
@@ -148,15 +155,25 @@ jobs:
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
 
       - name: Install mirrord
         run: |
