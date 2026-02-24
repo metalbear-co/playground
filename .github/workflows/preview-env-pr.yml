@@ -5,13 +5,9 @@ name: Preview Environment (PR)
 
 on:
   pull_request:
+    branches:
+      - main
     types: [opened, synchronize, reopened, closed]
-    paths:
-      - "apps/ip-visit/ip-visit-counter/**"
-      - "apps/ip-visit/ip-visit-frontend/**"
-      - ".github/workflows/preview-env-pr.yml"
-      - "apps/ip-visit/ip-visit-counter/mirrord-preview.json"
-      - "apps/ip-visit/ip-visit-frontend/mirrord-preview.json"
 
 concurrency:
   group: preview-env-${{ github.event.pull_request.number }}
@@ -25,7 +21,7 @@ env:
 jobs:
   preview-start:
     name: Start preview (build, push, start, comment)
-    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'demo/preview-env-ci'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -152,7 +148,7 @@ jobs:
 
   preview-stop:
     name: Stop preview on merge/close
-    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'demo/preview-env-ci'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
