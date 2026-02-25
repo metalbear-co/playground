@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import pg from "pg";
 import {
   AppsV1Api,
@@ -879,11 +880,18 @@ const getPool = (connectionString: string): pg.Pool => {
 const dbTablesPaths = ["/db/:dbId/tables", "/visualization-shop/api/db/:dbId/tables"];
 const dbTableDataPaths = ["/db/:dbId/tables/:tableName", "/visualization-shop/api/db/:dbId/tables/:tableName"];
 
-app.get(dbTablesPaths, async (req, res) => {
+const dbRateLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
   const dbId = req.params.dbId ?? "";
   const connectionString = resolveDbConnection(dbId);
   if (!connectionString) {
-    res.status(404).json({ error: `No connection configured for database: ${dbId}` });
+    res.status(404).json({ error: "No connection configured for the requested database" });
     return;
   }
 
@@ -899,19 +907,19 @@ app.get(dbTablesPaths, async (req, res) => {
       tables: result.rows.map((r: { table_name: string }) => r.table_name),
     });
   } catch (error) {
-    console.error(`Failed to list tables for ${dbId}:`, error instanceof Error ? error.message : error);
+    console.error("Failed to list tables for db:", dbId, error instanceof Error ? error.message : error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to list tables",
     });
   }
 });
 
-app.get(dbTableDataPaths, async (req, res) => {
+app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
   const dbId = req.params.dbId ?? "";
   const tableName = req.params.tableName ?? "";
   const connectionString = resolveDbConnection(dbId);
   if (!connectionString) {
-    res.status(404).json({ error: `No connection configured for database: ${dbId}` });
+    res.status(404).json({ error: "No connection configured for the requested database" });
     return;
   }
 
@@ -921,32 +929,35 @@ app.get(dbTableDataPaths, async (req, res) => {
   try {
     const pool = getPool(connectionString);
 
-    // Validate table name exists to prevent SQL injection
+    // Validate table name exists and retrieve the canonical name to prevent SQL injection
     const tableCheck = await pool.query(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = $1`,
       [tableName],
     );
     if (tableCheck.rows.length === 0) {
-      res.status(404).json({ error: `Table not found: ${tableName}` });
+      res.status(404).json({ error: "Table not found" });
       return;
     }
 
+    // Use the validated table name from the database catalog
+    const validatedTable: string = tableCheck.rows[0].table_name;
+
     const countResult = await pool.query(
-      `SELECT COUNT(*) AS total FROM "${tableName}"`,
+      `SELECT COUNT(*) AS total FROM "${validatedTable}"`,
     );
     const totalRows = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalRows / pageSize);
     const offset = (page - 1) * pageSize;
 
     const dataResult = await pool.query(
-      `SELECT * FROM "${tableName}" LIMIT $1 OFFSET $2`,
+      `SELECT * FROM "${validatedTable}" LIMIT $1 OFFSET $2`,
       [pageSize, offset],
     );
 
     res.json({
       dbId,
-      tableName,
+      tableName: validatedTable,
       columns: dataResult.fields.map((f) => f.name),
       rows: dataResult.rows,
       totalRows,
@@ -955,7 +966,7 @@ app.get(dbTableDataPaths, async (req, res) => {
       totalPages,
     });
   } catch (error) {
-    console.error(`Failed to query table ${tableName} for ${dbId}:`, error instanceof Error ? error.message : error);
+    console.error("Failed to query table for db:", dbId, error instanceof Error ? error.message : error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to query table",
     });

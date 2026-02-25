@@ -17,6 +17,7 @@
     "@kubernetes/client-node": "^1.4.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
     "pg": "^8.13.0"
   },
   "devDependencies": {
