@@ -867,7 +867,6 @@ const resolvePgBranchConnection = async (
 
   const coreApi = kubeConfigRef.makeApiClient(CoreV1Api);
   const customApi = kubeConfigRef.makeApiClient(CustomObjectsApi);
-  const appsApi = kubeConfigRef.makeApiClient(AppsV1Api);
 
   // Find the PgBranchDatabase CR whose sanitized name matches dbId
   const result = await customApi.listNamespacedCustomObject({
@@ -887,9 +886,6 @@ const resolvePgBranchConnection = async (
 
   const metadata = (branch.metadata ?? {}) as Record<string, unknown>;
   const branchName = metadata.name as string;
-  const spec = (branch.spec ?? {}) as Record<string, unknown>;
-  const target = (spec.target ?? {}) as Record<string, unknown>;
-  const targetDeployment = target.deployment as string | undefined;
 
   // Find the branch pod via owner label
   const podList = await coreApi.listNamespacedPod({
@@ -908,27 +904,10 @@ const resolvePgBranchConnection = async (
   const user =
     envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
 
-  // Get the database name from the target deployment's DATABASE_URL
-  let dbName = "postgres";
-  if (targetDeployment) {
-    try {
-      const dep = await appsApi.readNamespacedDeployment({
-        name: targetDeployment,
-        namespace: defaultNamespace,
-      });
-      const containers = dep.spec?.template?.spec?.containers ?? [];
-      for (const c of containers) {
-        const dbUrlEnv = (c.env ?? []).find((e) => e.name === "DATABASE_URL");
-        if (dbUrlEnv?.value) {
-          const match = dbUrlEnv.value.match(/\/([^/?]+)(\?.*)?$/);
-          if (match?.[1]) dbName = match[1];
-          break;
-        }
-      }
-    } catch {
-      // Fall back to default db name
-    }
-  }
+  // Get the database name from the branch pod's POSTGRES_DB env, falling back
+  // to well-known branch database name, then default "postgres".
+  const dbName =
+    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? "branch_db";
 
   const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
   dynamicPgConnections.set(dbId, connectionUrl);
@@ -1032,7 +1011,7 @@ app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
     const offset = (page - 1) * pageSize;
 
     const dataResult = await pool.query(
-      `SELECT * FROM "${validatedTable}" LIMIT $1 OFFSET $2`,
+      `SELECT * FROM "${validatedTable}" ORDER BY ctid DESC LIMIT $1 OFFSET $2`,
       [pageSize, offset],
     );
 

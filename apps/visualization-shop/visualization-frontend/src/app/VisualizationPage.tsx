@@ -606,8 +606,6 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
         {isDataNode && (
           <a
             href={`${basePath}/db/${id}`}
-            target="_blank"
-            rel="noopener noreferrer"
             className="mt-1 inline-flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
             style={{
               backgroundColor: `${palette.border}15`,
@@ -1483,8 +1481,6 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
               ))}
               <a
                 href={`${basePath}/db/${nodeId}`}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors"
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
