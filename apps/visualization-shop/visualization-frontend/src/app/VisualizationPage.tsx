@@ -46,6 +46,8 @@ type NodeData = {
   highlight?: boolean;
 };
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 const nodeWidth = 260;
 const nodeHeight = 130;
 
@@ -543,10 +545,11 @@ adjustedNodes.forEach((node) => {
 /**
  * Architecture node with explicit colored border and background by group (Entry, Core, Data, Queue, mirrord).
  */
-const ArchitectureNode = ({ data }: NodeProps<Node<NodeData>>) => {
+const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
   const palette = groupPalette[data.group];
   const label = typeof data.label === "string" ? data.label : "";
   const isService = data.group === "service";
+  const isDataNode = data.group === "data";
   return (
     <div
       className="flex h-full w-full flex-col justify-between text-left"
@@ -599,6 +602,23 @@ const ArchitectureNode = ({ data }: NodeProps<Node<NodeData>>) => {
           >
             {data.repoPath}
           </span>
+        )}
+        {isDataNode && (
+          <a
+            href={`${basePath}/db/${id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
+            style={{
+              backgroundColor: `${palette.border}15`,
+              color: palette.border,
+              border: `1px solid ${palette.border}40`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            View Data
+          </a>
         )}
       </div>
     </div>
@@ -1461,6 +1481,16 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                   {owner.username} ({owner.hostname})
                 </p>
               ))}
+              <a
+                href={`${basePath}/db/${nodeId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                View Data
+              </a>
             </div>
           ),
         },
