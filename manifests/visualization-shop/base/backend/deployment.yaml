@@ -27,6 +27,12 @@ spec:
               value: playground
             - name: WATCH_NAMESPACE
               value: "shop"
+            - name: PG_INVENTORY_URL
+              value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/inventory"
+            - name: PG_ORDERS_URL
+              value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/orders"
+            - name: PG_DELIVERIES_URL
+              value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/deliveries"
           ports:
             - containerPort: 8080
               name: http
