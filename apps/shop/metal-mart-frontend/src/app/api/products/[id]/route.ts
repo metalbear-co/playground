@@ -5,7 +5,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const res = await fetch(`${base}/products/${id}`);
+  const res = await fetch(`${base}/products/${id}`, {
+    headers: { "X-PG-Tenant": "dev" },
+  });
   const data = await res.json();
   return Response.json(data, { status: res.status });
 }

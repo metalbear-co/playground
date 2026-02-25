@@ -12,7 +12,7 @@
             "incoming": {
                 "mode": "steal",
                 "http_filter": {
-                    "header_filter": "X-PG-Tenant: Ari"
+                    "header_filter": "X-PG-Tenant: Karlo"
                 }
             },
             "outgoing": true
