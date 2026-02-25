@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
+import pg from "pg";
 import {
   AppsV1Api,
   CustomObjectsApi,
@@ -218,6 +220,7 @@ type PgBranchDatabase = {
   postgresVersion: string;
   phase: string;
   expireTime?: string;
+  connectionUrl?: string;
   owners: { username: string; hostname: string }[];
 };
 
@@ -349,6 +352,11 @@ const fetchPgBranchDatabases = async (
       };
     });
 
+    const connectionUrl =
+      (status.connectionUrl as string) ??
+      (status.connectionString as string) ??
+      undefined;
+
     return {
       name: (metadata.name as string) ?? "unknown",
       namespace: (metadata.namespace as string) ?? defaultNamespace,
@@ -358,9 +366,29 @@ const fetchPgBranchDatabases = async (
       postgresVersion: (spec.postgresVersion as string) ?? "unknown",
       phase: (status.phase as string) ?? "unknown",
       expireTime: (status.expireTime as string) ?? undefined,
+      connectionUrl,
       owners,
     };
   });
+};
+
+const dynamicPgConnections = new Map<string, string>();
+
+const sanitizeHostname = (raw: string): string =>
+  raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+const refreshDynamicPgConnections = (branches: PgBranchDatabase[]) => {
+  dynamicPgConnections.clear();
+  for (const branch of branches) {
+    if (branch.connectionUrl) {
+      const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
+      dynamicPgConnections.set(nodeId, branch.connectionUrl);
+    }
+  }
 };
 
 /**
@@ -420,6 +448,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     const allSessions = requestUseDbBranchMock
       ? [...sessions, mockDbBranchSession]
       : sessions;
+    refreshDynamicPgConnections(pgBranches);
     const response: OperatorStatusResponse = {
       sessions: allSessions,
       sessionCount: allSessions.length,
@@ -814,6 +843,135 @@ if (kubeConfigRef) {
     "Kubernetes configuration unavailable; snapshot watchers are disabled.",
   );
 }
+
+// ---------------------------------------------------------------------------
+// Database viewer endpoints
+// ---------------------------------------------------------------------------
+
+const staticDbConnections: Record<string, string | undefined> = {
+  "postgres-inventory": process.env.PG_INVENTORY_URL,
+  "postgres-orders": process.env.PG_ORDERS_URL,
+  "postgres-deliveries": process.env.PG_DELIVERIES_URL,
+};
+
+const resolveDbConnection = (dbId: string): string | undefined => {
+  if (staticDbConnections[dbId]) return staticDbConnections[dbId];
+  if (dynamicPgConnections.has(dbId)) return dynamicPgConnections.get(dbId);
+  return undefined;
+};
+
+const pgPools = new Map<string, pg.Pool>();
+
+const getPool = (connectionString: string): pg.Pool => {
+  let pool = pgPools.get(connectionString);
+  if (!pool) {
+    console.log(`Creating pg pool for: ${connectionString.replace(/\/\/([^:]+):([^@]+)@/, "//$1:***@")}`);
+    pool = new pg.Pool({
+      connectionString,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 30000,
+    });
+    pgPools.set(connectionString, pool);
+  }
+  return pool;
+};
+
+const dbTablesPaths = ["/db/:dbId/tables", "/visualization-shop/api/db/:dbId/tables"];
+const dbTableDataPaths = ["/db/:dbId/tables/:tableName", "/visualization-shop/api/db/:dbId/tables/:tableName"];
+
+const dbRateLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
+  const dbId = req.params.dbId ?? "";
+  const connectionString = resolveDbConnection(dbId);
+  if (!connectionString) {
+    res.status(404).json({ error: "No connection configured for the requested database" });
+    return;
+  }
+
+  try {
+    const pool = getPool(connectionString);
+    const result = await pool.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public'
+       ORDER BY table_name`,
+    );
+    res.json({
+      dbId,
+      tables: result.rows.map((r: { table_name: string }) => r.table_name),
+    });
+  } catch (error) {
+    console.error("Failed to list tables for db:", dbId, error instanceof Error ? error.message : error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list tables",
+    });
+  }
+});
+
+app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
+  const dbId = req.params.dbId ?? "";
+  const tableName = req.params.tableName ?? "";
+  const connectionString = resolveDbConnection(dbId);
+  if (!connectionString) {
+    res.status(404).json({ error: "No connection configured for the requested database" });
+    return;
+  }
+
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 50));
+
+  try {
+    const pool = getPool(connectionString);
+
+    // Validate table name exists and retrieve the canonical name to prevent SQL injection
+    const tableCheck = await pool.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = $1`,
+      [tableName],
+    );
+    if (tableCheck.rows.length === 0) {
+      res.status(404).json({ error: "Table not found" });
+      return;
+    }
+
+    // Use the validated table name from the database catalog
+    const validatedTable: string = tableCheck.rows[0].table_name;
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM "${validatedTable}"`,
+    );
+    const totalRows = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalRows / pageSize);
+    const offset = (page - 1) * pageSize;
+
+    const dataResult = await pool.query(
+      `SELECT * FROM "${validatedTable}" LIMIT $1 OFFSET $2`,
+      [pageSize, offset],
+    );
+
+    res.json({
+      dbId,
+      tableName: validatedTable,
+      columns: dataResult.fields.map((f) => f.name),
+      rows: dataResult.rows,
+      totalRows,
+      page,
+      pageSize,
+      totalPages,
+    });
+  } catch (error) {
+    console.error("Failed to query table for db:", dbId, error instanceof Error ? error.message : error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to query table",
+    });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Shop visualization backend listening on port ${port}`);
