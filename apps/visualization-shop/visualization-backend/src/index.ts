@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import pg from "pg";
 import {
   AppsV1Api,
+  CoreV1Api,
   CustomObjectsApi,
   KubeConfig,
 } from "@kubernetes/client-node";
@@ -855,10 +856,89 @@ const staticDbConnections: Record<string, string | undefined> = {
   "postgres-deliveries": process.env.PG_DELIVERIES_URL,
 };
 
-const resolveDbConnection = (dbId: string): string | undefined => {
+/**
+ * Resolve a pg-branch connection on demand by querying the cluster for the
+ * branch pod (via label selector) and the target deployment's DATABASE_URL.
+ */
+const resolvePgBranchConnection = async (
+  dbId: string,
+): Promise<string | undefined> => {
+  if (!kubeConfigRef || !dbId.startsWith("pg-branch-")) return undefined;
+
+  const coreApi = kubeConfigRef.makeApiClient(CoreV1Api);
+  const customApi = kubeConfigRef.makeApiClient(CustomObjectsApi);
+  const appsApi = kubeConfigRef.makeApiClient(AppsV1Api);
+
+  // Find the PgBranchDatabase CR whose sanitized name matches dbId
+  const result = await customApi.listNamespacedCustomObject({
+    group: "dbs.mirrord.metalbear.co",
+    version: "v1alpha1",
+    namespace: defaultNamespace,
+    plural: "pgbranchdatabases",
+  });
+  const body = result as { items?: Array<Record<string, unknown>> };
+  const items = body.items ?? [];
+
+  const branch = items.find((item) => {
+    const name = ((item.metadata as Record<string, unknown>)?.name as string) ?? "";
+    return `pg-branch-${sanitizeHostname(name)}` === dbId;
+  });
+  if (!branch) return undefined;
+
+  const metadata = (branch.metadata ?? {}) as Record<string, unknown>;
+  const branchName = metadata.name as string;
+  const spec = (branch.spec ?? {}) as Record<string, unknown>;
+  const target = (spec.target ?? {}) as Record<string, unknown>;
+  const targetDeployment = target.deployment as string | undefined;
+
+  // Find the branch pod via owner label
+  const podList = await coreApi.listNamespacedPod({
+    namespace: defaultNamespace,
+    labelSelector: `db-owner-name=${branchName}`,
+  });
+  const pod = podList.items?.[0];
+  if (!pod?.status?.podIP) return undefined;
+
+  const podIp = pod.status.podIP;
+  const container = pod.spec?.containers?.[0];
+  const envVars = container?.env ?? [];
+  const password =
+    envVars.find((e) => e.name === "POSTGRES_PASSWORD")?.value ??
+    "postgres";
+  const user =
+    envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
+
+  // Get the database name from the target deployment's DATABASE_URL
+  let dbName = "postgres";
+  if (targetDeployment) {
+    try {
+      const dep = await appsApi.readNamespacedDeployment({
+        name: targetDeployment,
+        namespace: defaultNamespace,
+      });
+      const containers = dep.spec?.template?.spec?.containers ?? [];
+      for (const c of containers) {
+        const dbUrlEnv = (c.env ?? []).find((e) => e.name === "DATABASE_URL");
+        if (dbUrlEnv?.value) {
+          const match = dbUrlEnv.value.match(/\/([^/?]+)(\?.*)?$/);
+          if (match?.[1]) dbName = match[1];
+          break;
+        }
+      }
+    } catch {
+      // Fall back to default db name
+    }
+  }
+
+  const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
+  dynamicPgConnections.set(dbId, connectionUrl);
+  return connectionUrl;
+};
+
+const resolveDbConnection = async (dbId: string): Promise<string | undefined> => {
   if (staticDbConnections[dbId]) return staticDbConnections[dbId];
   if (dynamicPgConnections.has(dbId)) return dynamicPgConnections.get(dbId);
-  return undefined;
+  return resolvePgBranchConnection(dbId);
 };
 
 const pgPools = new Map<string, pg.Pool>();
@@ -890,7 +970,7 @@ const dbRateLimiter = rateLimit({
 
 app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
   const dbId = req.params.dbId ?? "";
-  const connectionString = resolveDbConnection(dbId);
+  const connectionString = await resolveDbConnection(dbId);
   if (!connectionString) {
     res.status(404).json({ error: "No connection configured for the requested database" });
     return;
@@ -918,7 +998,7 @@ app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
 app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
   const dbId = req.params.dbId ?? "";
   const tableName = req.params.tableName ?? "";
-  const connectionString = resolveDbConnection(dbId);
+  const connectionString = await resolveDbConnection(dbId);
   if (!connectionString) {
     res.status(404).json({ error: "No connection configured for the requested database" });
     return;
