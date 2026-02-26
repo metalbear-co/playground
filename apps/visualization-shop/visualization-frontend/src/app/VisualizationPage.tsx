@@ -276,11 +276,32 @@ type PgBranchDatabase = {
   owners: { username: string; hostname: string }[];
 };
 
+/**
+ * Preview session from the PreviewSession CRD.
+ */
+type PreviewSession = {
+  name: string;
+  namespace: string;
+  key: string;
+  target: {
+    kind: string;
+    name: string;
+    container: string;
+  };
+  image: string;
+  ttlSecs: number;
+  phase: string;
+  podName?: string;
+  failureMessage?: string;
+  startedAt?: string;
+};
+
 type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
   pgBranches: PgBranchDatabase[];
+  previewSessions: PreviewSession[];
   fetchedAt: string;
 };
 
@@ -675,9 +696,10 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const isDynamicLocal = id.startsWith("dynamic-local-");
   const isDynamicLayer = id.startsWith("dynamic-layer-");
   const isDynamicPgBranch = id.startsWith("pg-branch-");
-  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicLocal || isDynamicLayer || isDynamicPgBranch;
+  const isDynamicPreview = id.startsWith("preview-");
+  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
   const isOperator = id === "mirrord-operator";
-  const borderColor = isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicPgBranch ? "#DC2626" : useHighlightBorder ? "#E66479" : palette.border;
+  const borderColor = isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
@@ -753,7 +775,13 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
         </>
       )}
-      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicLocal || isDynamicLayer || isDynamicPgBranch) ? (
+      {isDynamicPreview && (
+        <>
+          <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
+        </>
+      )}
+      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview) ? (
         data.label
       ) : (
         <div className="flex flex-col gap-0.5 text-left">
@@ -818,6 +846,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [operatorSessions, setOperatorSessions] = useState<OperatorSession[]>([]);
   const [kafkaTopics, setKafkaTopics] = useState<KafkaEphemeralTopic[]>([]);
   const [pgBranches, setPgBranches] = useState<PgBranchDatabase[]>([]);
+  const [previewSessions, setPreviewSessions] = useState<PreviewSession[]>([]);
   const aliasIndex = useMemo(() => buildAliasIndex(), []);
   const [dynamicNodePositions, setDynamicNodePositions] = useState<
     Map<string, { x: number; y: number }>
@@ -1574,6 +1603,98 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     return edges;
   }, [pgBranches]);
 
+  // Build dynamic nodes for PreviewSession resources.
+  const previewSessionNodes = useMemo((): Node<NodeData>[] => {
+    if (previewSessions.length === 0) return [];
+    const palette = groupPalette.mirrord;
+    const operatorPos = adjustedNodes.find((n) => n.id === "mirrord-operator")?.position ?? { x: 0, y: 0 };
+
+    return previewSessions.map((session, index) => {
+      const nodeId = `preview-${sanitizeHostname(session.name)}`;
+      const phaseColor = session.phase === "Ready" ? "text-green-600" : session.phase === "Failed" ? "text-red-600" : "text-yellow-600";
+
+      return {
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">
+                Preview Pod
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {session.target.name}
+              </span>
+              {session.podName && (
+                <p className="text-[11px] text-slate-500 break-all">
+                  {session.podName}
+                </p>
+              )}
+              <p className="text-xs leading-snug text-slate-600">
+                Key: <span className="font-semibold">{session.key}</span>
+              </p>
+              <p className={`text-[11px] font-medium ${phaseColor}`}>
+                {session.phase}{session.failureMessage ? ` — ${session.failureMessage}` : ""}
+              </p>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: operatorPos.x + nodeWidth + 80,
+          y: operatorPos.y + (index + 1) * (nodeHeight + 40),
+        },
+        style: {
+          borderRadius: 18,
+          backgroundColor: "transparent",
+          color: palette.text,
+          boxShadow: "0px 30px 60px rgba(14,165,233,0.25)",
+          width: nodeWidth,
+          zIndex: 10,
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      };
+    });
+  }, [previewSessions, dynamicNodePositions]);
+
+  // Build dynamic edges for PreviewSession nodes: operator → preview pod.
+  const previewSessionEdges = useMemo((): Edge[] => {
+    if (previewSessions.length === 0) return [];
+    const mirroredStyle = intentStyles.mirrored;
+    const edgeLabelDefaults = {
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 10,
+      labelShowBg: true,
+      labelBgStyle: { fill: "#FFFFFF" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+    };
+
+    return previewSessions.map((session) => {
+      const nodeId = `preview-${sanitizeHostname(session.name)}`;
+      return {
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "Preview pod",
+        type: "bezier",
+        sourceHandle: "operator-source-right",
+        targetHandle: `${nodeId}-target-left`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: {
+          stroke: mirroredStyle.color,
+          strokeWidth: 2.75,
+          strokeDasharray: mirroredStyle.dash,
+        },
+        ...edgeLabelDefaults,
+      };
+    });
+  }, [previewSessions]);
+
   // Combine static edges with dynamic agent edges and kafka edges.
   // When multiple kafka topics exist, static local-to-layer and layer-to-agent are replaced
   // by per-topic dynamic local edges.
@@ -1592,19 +1713,19 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       }
       return true;
     });
-    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...dynamicLocalEdges, ...pgBranchEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, hasShopSessions, kafkaReplacedEdges, hasDynamicLocalMachines]);
+    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, hasDynamicLocalMachines]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
     if (!clusterZoneNode) return null;
-    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && pgBranchNodes.length === 0) return clusterZoneNode;
+    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
 
     const clusterStaticNodes = adjustedNodes.filter((n) => {
       const zone = nodeZoneIndex.get(n.id);
       return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
     });
-    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...pgBranchNodes];
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...pgBranchNodes, ...previewSessionNodes];
     const padding = 48;
     const xs = allClusterNodes.map((n) => n.position.x);
     const ys = allClusterNodes.map((n) => n.position.y);
@@ -1630,7 +1751,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, pgBranchNodes]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, pgBranchNodes, previewSessionNodes]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -1696,6 +1817,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     nodes.push(...dynamicAgentNodes);
     nodes.push(...kafkaTopicNodes);
     nodes.push(...pgBranchNodes);
+    nodes.push(...previewSessionNodes);
     // Add dynamic local machine nodes with localYShift applied
     if (hasDynamicLocalMachines) {
       const shiftedDynamicLocalNodes = dynamicLocalMachineNodes.map((node) => ({
@@ -1708,7 +1830,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, previewSessionNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -1815,6 +1937,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         setOperatorSessions(body.sessions ?? []);
         setKafkaTopics(body.kafkaTopics ?? []);
         setPgBranches(body.pgBranches ?? []);
+        setPreviewSessions(body.previewSessions ?? []);
       }
     } catch (error) {
       console.warn("Failed to fetch operator status:", (error as Error).message);
@@ -1848,7 +1971,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         if ("id" in change && change.id.startsWith("zone-")) continue;
         const isDynamic =
           "id" in change &&
-          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-"));
+          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-"));
         if (
           isDynamic &&
           change.type === "position" &&
