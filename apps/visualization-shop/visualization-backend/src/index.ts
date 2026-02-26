@@ -904,10 +904,11 @@ const resolvePgBranchConnection = async (
   const user =
     envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
 
-  // Get the database name from the branch pod's POSTGRES_DB env, falling back
-  // to well-known branch database name, then default "postgres".
+  // Get the database name from the branch pod's POSTGRES_DB env.
+  // mirrord routes connections to the default "postgres" database on the
+  // branch pod, so fall back to "postgres" rather than "branch_db".
   const dbName =
-    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? "branch_db";
+    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? "postgres";
 
   const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
   dynamicPgConnections.set(dbId, connectionUrl);
