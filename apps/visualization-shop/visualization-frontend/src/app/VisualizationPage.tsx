@@ -33,6 +33,7 @@ import {
   type ArchitectureEdge,
   type ArchitectureNode,
 } from "@/data/architecture";
+import DatabaseViewerDialog from "./DatabaseViewerDialog";
 
 /**
  * Custom data payload carried by each React Flow node rendered in the visualization.
@@ -46,7 +47,8 @@ type NodeData = {
   highlight?: boolean;
 };
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+/** Module-level ref so ArchitectureNode (defined outside the component) can open the DB dialog. */
+let openDbDialog: ((dbId: string) => void) | null = null;
 
 const nodeWidth = 260;
 const nodeHeight = 130;
@@ -604,19 +606,21 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
           </span>
         )}
         {isDataNode && (
-          <a
-            href={`${basePath}/db/${id}`}
-            className="mt-1 inline-flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
+          <button
+            className="mt-1 inline-flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer"
             style={{
               backgroundColor: `${palette.border}15`,
               color: palette.border,
               border: `1px solid ${palette.border}40`,
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              openDbDialog?.(id);
+            }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             View Data
-          </a>
+          </button>
         )}
       </div>
     </div>
@@ -818,6 +822,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [dynamicNodePositions, setDynamicNodePositions] = useState<
     Map<string, { x: number; y: number }>
   >(() => new Map());
+  const [dbDialogId, setDbDialogId] = useState<string | null>(null);
+
+  // Keep the module-level ref in sync so ArchitectureNode can open the dialog.
+  useEffect(() => {
+    openDbDialog = (id: string) => setDbDialogId(id);
+    return () => { openDbDialog = null; };
+  }, []);
 
   // Group operator sessions by target.name, filtering to namespace "shop".
   // Multiple owners targeting the same service share one agent node.
@@ -1479,14 +1490,16 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                   {owner.username} ({owner.hostname})
                 </p>
               ))}
-              <a
-                href={`${basePath}/db/${nodeId}`}
-                className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors"
-                onClick={(e) => e.stopPropagation()}
+              <button
+                className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDbDialogId(nodeId);
+                }}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 View Data
-              </a>
+              </button>
             </div>
           ),
         },
@@ -2065,6 +2078,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           </Panel>
         )}
       </ReactFlow>
+      {dbDialogId && (
+        <DatabaseViewerDialog
+          dbId={dbDialogId}
+          onClose={() => setDbDialogId(null)}
+        />
+      )}
     </div>
   );
 }

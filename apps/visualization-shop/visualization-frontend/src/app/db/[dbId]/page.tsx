@@ -175,7 +175,7 @@ export default function DatabaseViewerPage() {
             <div className="flex items-center justify-center h-full text-gray-500">
               Loading...
             </div>
-          ) : tableData && tableData.rows.length > 0 ? (
+          ) : tableData && tableData.columns.length > 0 ? (
             <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
@@ -191,28 +191,35 @@ export default function DatabaseViewerPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {tableData.rows.map((row, i) => (
-                    <tr
-                      key={i}
-                      className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                    >
-                      {tableData.columns.map((col) => (
-                        <td
-                          key={col}
-                          className="px-4 py-2 whitespace-nowrap text-gray-800 max-w-xs truncate"
-                          title={formatCellValue(row[col])}
-                        >
-                          {formatCellValue(row[col])}
-                        </td>
-                      ))}
+                  {tableData.rows.length > 0 ? (
+                    tableData.rows.map((row, i) => (
+                      <tr
+                        key={i}
+                        className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                      >
+                        {tableData.columns.map((col) => (
+                          <td
+                            key={col}
+                            className="px-4 py-2 whitespace-nowrap text-gray-800 max-w-xs truncate"
+                            title={formatCellValue(row[col])}
+                          >
+                            {formatCellValue(row[col])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={tableData.columns.length}
+                        className="px-4 py-8 text-center text-gray-500"
+                      >
+                        Table is empty
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
-            </div>
-          ) : tableData && tableData.rows.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              Table is empty
             </div>
           ) : !error ? (
             <div className="flex items-center justify-center h-full text-gray-400">
