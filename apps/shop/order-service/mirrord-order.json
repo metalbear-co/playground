@@ -17,7 +17,7 @@
       "outgoing":true
     },"db_branches": [
     {
-      "id": "ari5-branch-db",
+      "id": "ari7-branch-db",
       "type": "pg",
       "ttl_secs": 1200,    
       "version": "16.0",

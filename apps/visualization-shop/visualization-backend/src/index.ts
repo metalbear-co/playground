@@ -226,11 +226,29 @@ type PgBranchDatabase = {
   owners: { username: string; hostname: string }[];
 };
 
+type PreviewSession = {
+  name: string;
+  namespace: string;
+  key: string;
+  target: {
+    kind: string;
+    name: string;
+    container: string;
+  };
+  image: string;
+  ttlSecs: number;
+  phase: string;
+  podName?: string;
+  failureMessage?: string;
+  startedAt?: string;
+};
+
 type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
   pgBranches: PgBranchDatabase[];
+  previewSessions: PreviewSession[];
   fetchedAt: string;
 };
 
@@ -374,6 +392,49 @@ const fetchPgBranchDatabases = async (
   });
 };
 
+/**
+ * Query PreviewSession custom resources from the operator CRD.
+ * Returns preview session data including target, key, phase, and pod info.
+ */
+const fetchPreviewSessions = async (
+  kubeConfig: KubeConfig,
+): Promise<PreviewSession[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const result = await customApi.listNamespacedCustomObject({
+    group: "preview.mirrord.metalbear.co",
+    version: "v1alpha",
+    namespace: defaultNamespace,
+    plural: "previewsessions",
+  });
+
+  const body = result as { items?: Array<Record<string, unknown>> };
+  const items = body.items ?? [];
+
+  return items.map((item) => {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const target = (spec.target ?? {}) as Record<string, unknown>;
+
+    return {
+      name: (metadata.name as string) ?? "unknown",
+      namespace: (metadata.namespace as string) ?? defaultNamespace,
+      key: (spec.key as string) ?? "unknown",
+      target: {
+        kind: (target.kind as string) ?? "Deployment",
+        name: (target.name as string) ?? "unknown",
+        container: (target.container as string) ?? "main",
+      },
+      image: (spec.image as string) ?? "unknown",
+      ttlSecs: (spec.ttlSecs as number) ?? 0,
+      phase: (status.phase as string) ?? "unknown",
+      podName: (status.podName as string) ?? undefined,
+      failureMessage: (status.failureMessage as string) ?? undefined,
+      startedAt: (status.startedAt as string) ?? undefined,
+    };
+  });
+};
+
 const dynamicPgConnections = new Map<string, string>();
 
 const sanitizeHostname = (raw: string): string =>
@@ -404,6 +465,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     const response: OperatorStatusResponse = {
       ...mockMultipleSessionsOperatorStatus,
       pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
+      previewSessions: mockMultipleSessionsOperatorStatus.previewSessions,
       fetchedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -413,6 +475,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     const response: OperatorStatusResponse = {
       ...mockOperatorStatus,
       pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
+      previewSessions: mockOperatorStatus.previewSessions,
       sessions: requestUseDbBranchMock
         ? [...mockOperatorStatus.sessions, mockDbBranchSession]
         : mockOperatorStatus.sessions,
@@ -431,7 +494,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     return;
   }
   try {
-    const [sessions, kafkaTopics, pgBranches] = await Promise.all([
+    const [sessions, kafkaTopics, pgBranches, previewSessions] = await Promise.all([
       fetchOperatorSessions(kubeConfigRef).catch((err) => {
         console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
         return [] as OperatorSession[];
@@ -446,6 +509,10 @@ app.get(operatorStatusPaths, async (req, res) => {
             console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
             return [] as PgBranchDatabase[];
           }),
+      fetchPreviewSessions(kubeConfigRef).catch((err) => {
+        console.warn("Failed to fetch preview sessions:", err instanceof Error ? err.message : err);
+        return [] as PreviewSession[];
+      }),
     ]);
     const allSessions = requestUseDbBranchMock
       ? [...sessions, mockDbBranchSession]
@@ -456,6 +523,7 @@ app.get(operatorStatusPaths, async (req, res) => {
       sessionCount: allSessions.length,
       kafkaTopics,
       pgBranches,
+      previewSessions,
       fetchedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -615,6 +683,7 @@ const mockOperatorStatus: OperatorStatusResponse = {
     },
   ],
   pgBranches: [],
+  previewSessions: [],
   fetchedAt: new Date().toISOString(),
 };
 
@@ -718,6 +787,19 @@ const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
   sessionCount: 8,
   kafkaTopics: [],
   pgBranches: [],
+  previewSessions: [
+    {
+      name: "preview-session-deployment-metal-mart-frontend-11cf356f",
+      namespace: "shop",
+      key: "redesign",
+      target: { kind: "Deployment", name: "metal-mart-frontend", container: "main" },
+      image: "ghcr.io/metalbear-co/metalmart-redesign:latest",
+      ttlSecs: 300,
+      phase: "Ready",
+      podName: "preview-pod-deployment-metal-mart-frontend-11cf356f",
+      startedAt: "2026-02-25T12:17:31.405462Z",
+    },
+  ],
   fetchedAt: new Date().toISOString(),
 };
 
@@ -905,10 +987,9 @@ const resolvePgBranchConnection = async (
     envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
 
   // Get the database name from the branch pod's POSTGRES_DB env.
-  // mirrord routes connections to the default "postgres" database on the
-  // branch pod, so fall back to "postgres" rather than "branch_db".
+  // mirrord copies data into "branch_db" on the branch pod.
   const dbName =
-    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? "postgres";
+    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? "branch_db";
 
   const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
   dynamicPgConnections.set(dbId, connectionUrl);
