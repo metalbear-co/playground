@@ -1,0 +1,9 @@
+apiVersion: policies.mirrord.metalbear.co/v1alpha
+kind: MirrordPolicy
+metadata:
+  name: block-steal-without-filter
+  namespace: mirrord
+spec:
+  targetPath: "deploy/order-service"
+  block:
+    - steal-without-filter
