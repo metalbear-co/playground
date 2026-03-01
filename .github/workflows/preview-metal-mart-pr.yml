@@ -1,14 +1,11 @@
 # mirrord Preview Environment: create on PR, delete on merge/close.
 # Builds metal-mart-frontend, starts a preview pod using PR branch name as key.
 # Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT secrets, mirrord operator with Enterprise license.
-# Uses pull_request_target so fork PRs get secrets (runs in base repo context).
-# Runs for any PR branch except main.
+# Runs on any PR to any branch.
 name: Preview Environment - Metal Mart (PR)
 
 on:
-  pull_request_target:
-    branches:
-      - main
+  pull_request:
     types: [opened, synchronize, reopened, closed]
 
 concurrency:
