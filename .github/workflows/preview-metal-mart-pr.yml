@@ -1,0 +1,160 @@
+# mirrord Preview Environment: create on PR, delete on merge/close.
+# Builds metal-mart-frontend, starts a preview pod using PR branch name as key.
+# Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT secrets, mirrord operator with Enterprise license.
+# Runs on any PR to any branch.
+name: Preview Environment - Metal Mart (PR)
+
+on:
+  pull_request:
+    types: [opened,closed]
+
+concurrency:
+  group: preview-metal-mart-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PREVIEW_KEY: "${{ github.head_ref }}"
+  FRONTEND_IMAGE: "ghcr.io/metalbear-co/playground-metal-mart-frontend:preview-${{ github.head_ref }}-${{ github.sha }}"
+
+jobs:
+  preview-start:
+    name: Start preview (build, push, start)
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push metal-mart-frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/shop/metal-mart-frontend
+          file: apps/shop/metal-mart-frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
+
+      - name: Install mirrord
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+
+      - name: Start mirrord preview (metal-mart-frontend)
+        run: |
+          mirrord preview start \
+            -f apps/shop/metal-mart-frontend/mirrord-preview.json \
+            -i "${{ env.FRONTEND_IMAGE }}" \
+            -k "${{ env.PREVIEW_KEY }}" \
+            --timeout 600
+
+      - name: Post PR comment with preview link and header
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const key = `${{ env.PREVIEW_KEY }}`;
+            const url = 'https://playground.metalbear.dev/shop';
+            const body = `## mirrord Preview Environment - Metal Mart
+
+            A preview environment is running for this PR (metal-mart-frontend).
+
+            | | |
+            |---|---|
+            | **Preview URL** | [${url}](${url}) |
+            | **Header** | \`X-PG-Tenant: ${key}\` |
+
+            To send traffic to this preview:
+            - Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or
+            - \`curl -H "X-PG-Tenant: ${key}" ${url}\`
+
+            The UI will show "Preview: ${key}" when the header is set.
+
+            *Preview is stopped when the PR is merged or closed.*
+            `;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c => c.body && c.body.includes('## mirrord Preview Environment - Metal Mart'));
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  preview-stop:
+    name: Stop preview on merge/close
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
+
+      - name: Install mirrord
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+
+      - name: Stop mirrord preview
+        run: |
+          mirrord preview stop -k "${{ github.head_ref }}" || true
