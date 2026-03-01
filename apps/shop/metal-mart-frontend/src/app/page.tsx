@@ -185,7 +185,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl">
             {hasProducts && (
               <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
-                Featured products
+                Featured products -prev123
               </h1>
             )}
             {hasProducts ? (

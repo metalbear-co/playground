@@ -74,7 +74,7 @@ jobs:
       - name: Start mirrord preview (metal-mart-frontend)
         run: |
           mirrord preview start \
-            -f apps/shop/metal-mart-frontend/mirrord-preview.json \
+            -f apps/shop/metal-mart-frontend/mirrord-preview-front-end.json \
             -i "${{ env.FRONTEND_IMAGE }}" \
             -k "${{ env.PREVIEW_KEY }}" \
             --timeout 600
