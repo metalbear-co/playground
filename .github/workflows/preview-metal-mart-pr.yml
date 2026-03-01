@@ -50,6 +50,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.FRONTEND_IMAGE }}
+          build-args: |
+            NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxas4fpir
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
