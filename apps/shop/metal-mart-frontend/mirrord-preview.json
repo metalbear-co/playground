@@ -16,6 +16,9 @@
         "http_filter": {
           "header_filter": "X-PG-Tenant: {{ key }}"
         }
+      },
+      "outgoing": {
+        "ignore_localhost": true
       }
     },
     "env": {
