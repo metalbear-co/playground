@@ -92,6 +92,7 @@ export default function ProductsPage() {
           </div>
         </div>
       </main>
+
       <ProductDialog productId={selectedProductId} onClose={() => setSelectedProductId(null)} />
     </div>
   );

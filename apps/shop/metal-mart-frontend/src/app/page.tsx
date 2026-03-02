@@ -26,7 +26,6 @@ function ProductTile({
   onSelect: (id: number) => void;
 }) {
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
-
   const elevatedClass = elevated ? "relative z-30" : "";
 
   if (variant === "featured") {
@@ -60,7 +59,7 @@ function ProductTile({
           </h2>
           <p className="mt-1 text-lg font-semibold text-white/90">{price}</p>
           <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
-            Shop now →
+            View details →
           </span>
         </div>
       </button>
@@ -275,6 +274,7 @@ export default function Home() {
           </div>
         </section>
       </main>
+
       <ProductDialog productId={selectedProductId} onClose={() => setSelectedProductId(null)} />
     </div>
   );

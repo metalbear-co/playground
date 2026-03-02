@@ -61,11 +61,11 @@ export default function ProductDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl animate-card-reveal"
+        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
@@ -96,10 +96,10 @@ export default function ProductDialog({
         )}
 
         {product && (
-          <div className="grid gap-6 p-6 md:grid-cols-2 md:p-8">
-            {/* Image gallery */}
-            <div className="space-y-3">
-              <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg">
+          <div className="grid md:grid-cols-2">
+            {/* Image side */}
+            <div className="p-6 space-y-3 bg-slate-50">
+              <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 {product.is_new && <NewBadge size="lg" />}
                 {imageUrls.length > 0 ? (
                   <ProductImage
@@ -143,7 +143,7 @@ export default function ProductDialog({
             </div>
 
             {/* Product details */}
-            <div className="flex flex-col">
+            <div className="flex flex-col p-6">
               <h2 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
                 {product.name}
               </h2>
@@ -154,9 +154,9 @@ export default function ProductDialog({
                 <p className="mt-4 text-slate-600 leading-relaxed">{product.description}</p>
               )}
               <p className="mt-3 text-sm text-slate-500">In stock: {product.stock}</p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-auto pt-8 flex flex-col gap-3 sm:flex-row">
                 <Link
-                  href={`/cart?add=${product.id}`}
+                  href={`${basePath}/cart?add=${product.id}`}
                   className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3.5 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
                 >
                   Add to cart
