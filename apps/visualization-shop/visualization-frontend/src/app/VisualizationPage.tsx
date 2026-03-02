@@ -1661,7 +1661,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     });
   }, [previewSessions, dynamicNodePositions]);
 
-  // Build dynamic edges for PreviewSession nodes: operator → preview pod.
+  // Build dynamic edges for PreviewSession nodes: operator → preview pod, operator → target service.
   const previewSessionEdges = useMemo((): Edge[] => {
     if (previewSessions.length === 0) return [];
     const mirroredStyle = intentStyles.mirrored;
@@ -1673,9 +1673,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
     };
 
-    return previewSessions.map((session) => {
+    const edges: Edge[] = [];
+    for (const session of previewSessions) {
       const nodeId = `preview-${sanitizeHostname(session.name)}`;
-      return {
+      edges.push({
         id: `operator-to-${nodeId}`,
         source: "mirrord-operator",
         target: nodeId,
@@ -1691,9 +1692,30 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           strokeDasharray: mirroredStyle.dash,
         },
         ...edgeLabelDefaults,
-      };
-    });
-  }, [previewSessions]);
+      });
+
+      const targetArchNodeId = aliasIndex.get(session.target.name.toLowerCase());
+      if (targetArchNodeId) {
+        edges.push({
+          id: `${nodeId}-to-${targetArchNodeId}`,
+          source: nodeId,
+          target: targetArchNodeId,
+          label: "Target service",
+          type: "bezier",
+          sourceHandle: `${nodeId}-source-right`,
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+          style: {
+            stroke: "#0EA5E9",
+            strokeWidth: 2.75,
+            strokeDasharray: mirroredStyle.dash,
+          },
+          ...edgeLabelDefaults,
+        });
+      }
+    }
+    return edges;
+  }, [previewSessions, aliasIndex]);
 
   // Combine static edges with dynamic agent edges and kafka edges.
   // When multiple kafka topics exist, static local-to-layer and layer-to-agent are replaced
