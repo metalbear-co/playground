@@ -127,6 +127,31 @@ jobs:
               });
             }
 
+      - name: Post preview link to Slack
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": { "type": "plain_text", "text": "mirrord Preview Environment - Metal Mart" }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }} ${{ github.event.pull_request.title }}>" },
+                    { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
+                    { "type": "mrkdwn", "text": "*Header:*\n`X-PG-Tenant: ${{ env.PREVIEW_KEY }}`" },
+                    { "type": "mrkdwn", "text": "*curl:*\n`curl -H \"X-PG-Tenant: ${{ env.PREVIEW_KEY }}\" https://playground.metalbear.dev/shop`" }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
   preview-stop:
     name: Stop preview on merge/close
     if: github.event.action == 'closed'
