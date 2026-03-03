@@ -1,10 +1,16 @@
 {
   "target": {
+    "namespace": "shop",
     "path": {
       "deployment": "delivery-service"
     }
   },
   "feature": {
+    "env": {
+      "override": {
+        "KAFKA_CONSUMER_GROUP": "delivery-service-local"
+      }
+    },
     "network": {
       "incoming": "steal",
       "outgoing": true

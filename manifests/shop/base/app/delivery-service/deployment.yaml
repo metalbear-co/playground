@@ -24,6 +24,8 @@ spec:
               value: "orders"
             - name: KAFKA_CONSUMER_GROUP
               value: "delivery-service"
+            - name: MIRRORD_KAFKA_CONSUMER_GROUP
+              value: "delivery-service-mirrord"
             - name: DATABASE_URL
               value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/deliveries"
           ports:
