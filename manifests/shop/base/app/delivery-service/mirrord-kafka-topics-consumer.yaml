@@ -12,7 +12,7 @@ spec:
       groupIdSources:
         - directEnvVar:
             container: main
-            variable: KAFKA_CONSUMER_GROUP
+            variable: MIRRORD_KAFKA_CONSUMER_GROUP
       nameSources:
         - directEnvVar:
             container: main
