@@ -52,7 +52,7 @@ ERROR:
 
 To continue, run:
   export MIRRORD_LICENSE_KEY='<your-license-key>'
-  ./apps/shop/scripts/setup-minikube-mirrord-kafka-demo.sh
+  ./apps/shop/scripts/setup-minikube.sh
 EOF
       exit 1
     fi
@@ -112,13 +112,17 @@ cat <<'EOF'
 
 Setup complete.
 
-Next:
+Required next step:
   1) cd apps/shop/delivery-service
      mirrord exec -f mirrord.json -- npm run dev
 
+Optional (only if you want to call order-service via localhost):
   2) kubectl port-forward -n shop svc/order-service 3001:80
 
-  3) Trigger tenant-tagged orders:
+  3) Trigger tenant-tagged orders through localhost:
      curl -X POST http://localhost:3001/orders -H "Content-Type: application/json" -H "X-PG-Tenant: dev" -d '{"items":[{"productId":1,"quantity":1}],"total_cents":1000}'
      curl -X POST http://localhost:3001/orders -H "Content-Type: application/json" -H "X-PG-Tenant: prod" -d '{"items":[{"productId":1,"quantity":1}],"total_cents":1000}'
+
+Alternative to steps 2-3:
+  - Send traffic through your existing ingress/frontend URL instead of port-forward.
 EOF
