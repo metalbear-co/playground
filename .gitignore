@@ -8,7 +8,8 @@ overlays/localstack/charts
 base/charts
 
 .idea
-.vscode
+.vscode/*
+!.vscode/launch.json
 
 # Local env (secrets, API keys)
 **/.env.local

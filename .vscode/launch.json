@@ -1,0 +1,189 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+    
+    
+
+        
+        
+
+
+        
+
+
+
+    
+        
+        {
+            "name": "ip-info",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/apps/ip-visit/ip-info",
+            "env": {
+                "PORT": "8080"
+            },
+            "cwd": "${workspaceFolder}/apps/ip-visit/ip-info"
+        },
+        {
+            "name": "ip-info-grpc",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/apps/ip-visit/ip-info-grpc",
+            "env": {
+                "PORT": "50051"
+            },
+            "cwd": "${workspaceFolder}/apps/ip-visit/ip-info-grpc"
+        },
+        {
+            "name": "ip-visit-counter",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/apps/ip-visit/ip-visit-counter",
+            "env": {
+                "PORT": "8081",
+                "REDISADDRESS": "localhost:6379",
+                "RESPONSEFILE": "${workspaceFolder}/apps/ip-visit/ip-visit-counter/response.txt",
+                "KAFKAADDRESS": "localhost:9092",
+                "KAFKATOPIC": "ip-visits",
+                "IPINFOADDRESS": "http://localhost:8080",
+                "IPINFOGRPCADDRESS": "localhost:50051",
+                "SQSQUEUENAME": ""
+            },
+            "cwd": "${workspaceFolder}/apps/ip-visit/ip-visit-counter"
+        },
+        {
+            "name": "ip-visit-sqs-consumer",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/apps/ip-visit/ip-visit-sqs-consumer",
+            "env": {
+                "PORT": "8082",
+                "SQSQUEUENAME": "ip-count"
+            },
+            "cwd": "${workspaceFolder}/apps/ip-visit/ip-visit-sqs-consumer"
+        },
+        {
+            "name": "ip-visit-consumer (Python)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/apps/ip-visit/ip-visit-consumer/main.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PORT": "5000",
+                "KAFKAADDRESS": "localhost:9092",
+                "KAFKATOPIC": "ip-visits",
+                "KAFKACONSUMERGROUP": "ip-visit-consumer-group"
+            },
+            "cwd": "${workspaceFolder}/apps/ip-visit/ip-visit-consumer",
+            "python": "${command:python.interpreterPath}"
+        },
+        {
+            "name": "ip-visit-frontend (Next.js)",
+            "type": "node",
+            "request": "launch",
+            "name": "Next.js: debug server",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}/apps/ip-visit/ip-visit-frontend",
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "port": 9229,
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        },
+        {
+            "name": "temp-demo (Debug Kafka Consumer)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/apps/temp-demo",
+            "args": ["-wf-cnt=2"],
+            "env": {
+                "TEMPORAL_HOST_PORT": "localhost:7233",
+                "TEMPORAL_NAMESPACE": "default",
+                "KAFKA_BROKERS": "localhost:9092",
+                "KAFKA_TOPIC": "temporal-topic",
+                "KAFKA_CONSUMER_GROUP": "consumer-group-1"
+            },
+            "cwd": "${workspaceFolder}/apps/temp-demo"
+        },
+        {
+            "name": "order-service",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["tsx", "${workspaceFolder}/apps/shop/order-service/src/index.ts"],
+            "env": {
+                "PORT": "80"
+            },
+            "cwd": "${workspaceFolder}/apps/shop/order-service"
+        },
+          {
+            "name": "delivery-service",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["tsx", "${workspaceFolder}/apps/shop/delivery-service/src/index.ts"],
+            "env": {
+                "PORT": "80"
+            },
+            "cwd": "${workspaceFolder}/apps/shop/delivery-service"
+        },
+        {
+            "name": "inventory-service",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["tsx", "${workspaceFolder}/apps/shop/inventory-service/src/index.ts"],
+            "env": {
+                "PORT": "80"
+            },
+            "cwd": "${workspaceFolder}/apps/shop/inventory-service"
+        },
+        {
+            "name": "visualization-backend",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["tsx", "${workspaceFolder}/apps/visualization-shop/visualization-backend/src/index.ts"],
+            "env": {
+                "PORT": "8080",
+                "CLUSTER_NAME": "playground",
+                "WATCH_NAMESPACE": "shop",
+                "WATCH_INTERVAL_MS": "10000"
+            },
+            "cwd": "${workspaceFolder}/apps/visualization-shop/visualization-backend"
+        },
+        {
+            "name": "visualization-frontend (Next.js)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}/apps/visualization-shop/visualization-frontend",
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "port": 9229,
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "env": {
+                "NEXT_PUBLIC_VISUALIZATION_BACKEND_URL": "http://localhost:8080"
+            }
+        }
+    ]
+}
