@@ -1,9 +1,14 @@
 import VisualizationPage from "./VisualizationPage";
 
-export default function Home() {
-  const useQueueSplittingMock = process.env.QUEUE_SPLITTING_MOCK_DATA === "true";
-  const useDbBranchMock = process.env.DB_BRANCH_MOCK_DATA === "true";
-  const useMultipleSessionMock = process.env.MULTIPLE_SESSION_MOCK_DATA === "true";
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const useQueueSplittingMock = params.queue_splitting === "true";
+  const useDbBranchMock = params.db_branch === "true";
+  const useMultipleSessionMock = params.multiple_session === "true";
 
   return (
     <VisualizationPage
