@@ -259,6 +259,7 @@ type KafkaEphemeralTopic = {
   topicName: string;
   sessionId: string;
   clientConfig: string;
+  topicType: "Filtered" | "Fallback";
 };
 
 /**
@@ -1035,8 +1036,11 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       zIndex: 10,
     };
 
-    // Per-KafkaEphemeralTopic nodes (named by topicName, one per session)
-    kafkaTopics.forEach((topic, index) => {
+    const fallbackTopics = kafkaTopics.filter((t) => t.topicType === "Fallback");
+    const filteredTopics = kafkaTopics.filter((t) => t.topicType === "Filtered");
+
+    // Filtered topic nodes – these connect to the local machine (mirrord-layer)
+    filteredTopics.forEach((topic, index) => {
       const nodeId = `kafka-topic-${topic.topicName}`;
       nodes.push({
         id: nodeId,
@@ -1071,32 +1075,35 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       });
     });
 
-    // 3. "Temporary Topic for Deployed App" node – positioned to the right of delivery-service
-    const deployedNodeId = "kafka-deployed-topic-delivery";
+    // Fallback topic nodes – these connect to the target service (deployed app)
     const deliveryPos = adjustedNodes.find((n) => n.id === "delivery-service")?.position ?? { x: 0, y: 0 };
-    nodes.push({
-      id: deployedNodeId,
-      type: "mirrord",
-      data: {
-        group: "mirrord" as const,
-        label: (
-          <div className="flex flex-col gap-1 text-left">
-            <span className="text-sm font-semibold text-slate-900">
-              Temporary Queue for Deployed Application 
-            </span>
-          </div>
-        ),
-      },
-      position: dynamicNodePositions.get(deployedNodeId) ?? {
-        x: deliveryPos.x + nodeWidth - 300,
-        y: deliveryPos.y + 500,
-      },
-      style: sharedStyle,
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-      connectable: false,
-      draggable: true,
-      selectable: true,
+    fallbackTopics.forEach((topic, index) => {
+      const nodeId = `kafka-deployed-topic-${topic.topicName}`;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{topic.topicName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                session: {topic.sessionId}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: deliveryPos.x + nodeWidth - 300 + index * (nodeWidth + 40),
+          y: deliveryPos.y + 500,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
     });
 
     return nodes;
@@ -1140,8 +1147,11 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       ...edgeLabelDefaults,
     });
 
-    // Operator → each session topic node (per KafkaEphemeralTopic)
-    for (const topic of kafkaTopics) {
+    const fallbackTopics = kafkaTopics.filter((t) => t.topicType === "Fallback");
+    const filteredTopics = kafkaTopics.filter((t) => t.topicType === "Filtered");
+
+    // Operator → each filtered topic node (matching filter → local machine)
+    for (const topic of filteredTopics) {
       const nodeId = `kafka-topic-${topic.topicName}`;
       edges.push({
         id: `operator-to-${nodeId}`,
@@ -1162,11 +1172,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       });
     }
 
-    // KafkaEphemeralTopic → mirrord-layer (arrow from bottom of topic to layer)
-    // When multiple topics exist, each points to its own dynamic layer.
-    kafkaTopics.forEach((topic, index) => {
+    // Filtered topic → mirrord-layer (arrow from bottom of topic to layer)
+    filteredTopics.forEach((topic, index) => {
       const nodeId = `kafka-topic-${topic.topicName}`;
-      const usesDynamicLocal = kafkaTopics.length > 1;
+      const usesDynamicLocal = filteredTopics.length > 1;
       const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
       const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
       edges.push({
@@ -1188,43 +1197,49 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       });
     });
 
-    // Operator → Temporary Topic for Deployed App
-    edges.push({
-      id: "operator-to-kafka-deployed-topic-delivery",
-      source: "mirrord-operator",
-      target: "kafka-deployed-topic-delivery",
-      label: "send messages not matching any filter",
-      type: "bezier",
-      sourceHandle: "operator-source-bottom",
-      targetHandle: "kafka-deployed-topic-delivery-target-left",
-      animated: true,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-      style: {
-        stroke: mirroredStyle.color,
-        strokeWidth: 2.75,
-        strokeDasharray: mirroredStyle.dash,
-      },
-      ...edgeLabelDefaults,
-    });
+    // Operator → each fallback topic node (not matching any filter → deployed app)
+    for (const topic of fallbackTopics) {
+      const nodeId = `kafka-deployed-topic-${topic.topicName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "send messages not matching any filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-left`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: {
+          stroke: mirroredStyle.color,
+          strokeWidth: 2.75,
+          strokeDasharray: mirroredStyle.dash,
+        },
+        ...edgeLabelDefaults,
+      });
+    }
 
-    // Temporary Topic for Deployed App → delivery-service (right to left)
-    edges.push({
-      id: "kafka-deployed-topic-delivery-to-delivery",
-      source: "kafka-deployed-topic-delivery",
-      target: "delivery-service",
-      label: "consume messages",
-      type: "bezier",
-      sourceHandle: "kafka-deployed-topic-delivery-source-top",
-      targetHandle: "target-bottom",
-      animated: true,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-      style: {
-        stroke: mirroredStyle.color,
-        strokeWidth: 2.75,
-        strokeDasharray: mirroredStyle.dash,
-      },
-      ...edgeLabelDefaults,
-    });
+    // Fallback topic → delivery-service (consume messages to target)
+    for (const topic of fallbackTopics) {
+      const nodeId = `kafka-deployed-topic-${topic.topicName}`;
+      edges.push({
+        id: `${nodeId}-to-delivery`,
+        source: nodeId,
+        target: "delivery-service",
+        label: "consume messages",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-top`,
+        targetHandle: "target-bottom",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: {
+          stroke: mirroredStyle.color,
+          strokeWidth: 2.75,
+          strokeDasharray: mirroredStyle.dash,
+        },
+        ...edgeLabelDefaults,
+      });
+    }
 
     return edges;
   }, [kafkaTopics, operatorSessions, aliasIndex]);
@@ -1261,13 +1276,21 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
   const localMachineEntries = useMemo((): LocalMachineEntry[] => {
     if (hasMultipleKafkaTopics) {
-      return kafkaTopics.map((topic) => {
+      const uniqueByHostname = new Map<string, LocalMachineEntry>();
+      for (const topic of kafkaTopics) {
         const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
-        return {
-          ownerName: session?.owner.username ?? "Unknown",
-          hostname: session?.owner.hostname ?? "",
-        };
-      });
+        const hostname = session?.owner.hostname ?? "";
+        if (!uniqueByHostname.has(hostname)) {
+          uniqueByHostname.set(hostname, {
+            ownerName: session?.owner.username ?? "Unknown",
+            hostname,
+          });
+        }
+      }
+      if (uniqueByHostname.size > 1) {
+        return Array.from(uniqueByHostname.values());
+      }
+      return [];
     }
     const uniqueHostnames = new Map<string, LocalMachineEntry>();
     const shopSessions = operatorSessions.filter((s) => s.namespace === "shop");

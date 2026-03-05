@@ -211,6 +211,7 @@ type KafkaEphemeralTopic = {
   topicName: string;
   sessionId: string;
   clientConfig: string;
+  topicType: "Filtered" | "Fallback";
 };
 
 type PgBranchDatabase = {
@@ -331,10 +332,12 @@ const fetchKafkaEphemeralTopics = async (
     const spec = (item.spec ?? {}) as Record<string, unknown>;
     const labels = (metadata.labels ?? {}) as Record<string, string>;
 
+    const topicName = (spec.name as string) ?? "unknown";
     return {
-      topicName: (spec.name as string) ?? "unknown",
+      topicName,
       sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
       clientConfig: (spec.clientConfig as string) ?? "unknown",
+      topicType: topicName.includes("-fallback-") ? "Fallback" as const : "Filtered" as const,
     };
   });
 };
@@ -675,11 +678,13 @@ const mockOperatorStatus: OperatorStatusResponse = {
       topicName: "mirrord-tmp-kmhkbbzgki-orders",
       sessionId: "504d016ef5980f1a",
       clientConfig: "shop-kafka-config",
+      topicType: "Filtered",
     },
     {
-      topicName: "mirrord-tmp-fferfrefrfdd-orders",
-      sessionId: "923b94707a8b122e",
+      topicName: "mirrord-tmp-kmhkbbzgki-fallback-orders",
+      sessionId: "504d016ef5980f1a",
       clientConfig: "shop-kafka-config",
+      topicType: "Fallback",
     },
   ],
   pgBranches: [],
