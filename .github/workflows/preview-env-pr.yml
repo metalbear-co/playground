@@ -1,11 +1,10 @@
 # mirrord Preview Environment: create on PR, delete on merge/close.
 # Builds frontend + counter, starts two preview pods (same key), posts link + header in comment.
 # Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT secrets, mirrord operator with Enterprise license.
-# Uses pull_request_target so fork PRs get secrets (runs in base repo context); scoped to demo branch only.
 name: Preview Environment (PR)
 
 on:
-  pull_request_target:
+  pull_request:
     branches:
       - main
     types: [opened, synchronize, reopened, closed]
