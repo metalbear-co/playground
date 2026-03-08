@@ -6,6 +6,7 @@ spec:
   consumerApiVersion: apps/v1
   consumerKind: Deployment
   consumerName: delivery-service
+  consumerRestartTimeout: 180
   topics:
     - id: orders
       clientConfig: shop-kafka-config
