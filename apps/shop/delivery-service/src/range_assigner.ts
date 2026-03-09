@@ -14,7 +14,7 @@ export const range: PartitionAssigner = ({ cluster }) => {
             const memberMetadata = new Map(
                 members.map(m => [
                     m.memberId,
-                    AssignerProtocol.MemberMetadata.decode(m.memberMetadata).topics ?? [],
+                    AssignerProtocol.MemberMetadata.decode(m.memberMetadata)?.topics ?? [],
                 ])
             )
             const assignment: Record<string, Assignment> = {};
