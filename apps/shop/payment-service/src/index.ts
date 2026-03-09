@@ -9,7 +9,8 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
-app.post("/payments", (_req, res) => {
+app.post("/payments", (req: express.Request, res: express.Response) => {
+  console.log("Request headers:", JSON.stringify(req.headers, null, 2));
   // Mock payment - always succeeds
   res.status(200).json({
     success: true,
