@@ -47,20 +47,6 @@ async function startConsumer() {
   const topic = process.env.KAFKA_TOPIC || "orders";
   await consumer.subscribe({ topic });
 
-  let readyCount = 0;
-  consumer.on("consumer.group_join", ({ payload }) => {
-    const assignment = payload.memberAssignment;
-    if (assignment && Object.keys(assignment).length > 0) {
-      readyCount++;
-      if (readyCount >= 2) {
-        console.log(`✅ [STABLE] Consumer assigned partitions (after rebalance):`, assignment);
-      } else {
-        console.log(`⏳ [INITIALIZING] First assignment received, waiting for rebalance to stabilize...`);
-      }
-    } else {
-      console.log(`⏳ [WAITING] Consumer joined but no partitions assigned yet`);
-    }
-  });
 
   await consumer.run({
     eachMessage: async ({ topic: t, partition, message }) => {
