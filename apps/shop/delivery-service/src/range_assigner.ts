@@ -11,22 +11,11 @@ export const range: PartitionAssigner = ({ cluster }) => {
         name: name,
         version: version,
         async assign({ members, topics }) {
-            const memberMetadata = new Map(
-                members.map(m => [
-                    m.memberId,
-                    AssignerProtocol.MemberMetadata.decode(m.memberMetadata)?.topics ?? [],
-                ])
-            )
+            const sortedMembers = members.map(m => m.memberId).sort()
+            const membersCount = sortedMembers.length
             const assignment: Record<string, Assignment> = {};
 
             for (const topic of topics) {
-                const subscribedMembers = members
-                    .filter(m => memberMetadata.get(m.memberId)?.includes(topic))
-                    .map(m => m.memberId)
-                    .sort()
-                const membersCount = subscribedMembers.length
-                if (membersCount === 0) continue
-
                 const partitionMetadata = cluster.findTopicPartitionMetadata(topic)
                 const numPartitionsForTopic = partitionMetadata.length
                 const numPartitionsPerConsumer = Math.floor(numPartitionsForTopic / membersCount)
@@ -35,7 +24,7 @@ export const range: PartitionAssigner = ({ cluster }) => {
                 for (let i = 0; i < membersCount; i++) {
                     const start = numPartitionsPerConsumer * i + Math.min(i, consumersWithExtraPartition)
                     const length = numPartitionsPerConsumer + (i < consumersWithExtraPartition ? 1 : 0)
-                    const assignee = subscribedMembers[i]
+                    const assignee = sortedMembers[i]
 
                     for (let partition = start; partition < start + length; partition++) {
                         assignment[assignee] ??= {}
