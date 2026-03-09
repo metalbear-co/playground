@@ -992,9 +992,31 @@ const resolvePgBranchConnection = async (
     envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
 
   // Get the database name from the branch pod's POSTGRES_DB env.
-  // mirrord copies data into "branch_db" on the branch pod.
-  const dbName =
-    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? "branch_db";
+  // If not set, connect to the default "postgres" database and discover
+  // the actual user database (mirrord copies data using the original DB name).
+  let dbName =
+    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? undefined;
+
+  if (!dbName) {
+    const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
+    const discoverPool = new pg.Pool({
+      connectionString: discoverUrl,
+      max: 1,
+      connectionTimeoutMillis: 10000,
+    });
+    try {
+      const result = await discoverPool.query(
+        `SELECT datname FROM pg_database
+         WHERE datistemplate = false AND datname != 'postgres'
+         ORDER BY datname LIMIT 1`,
+      );
+      dbName = result.rows[0]?.datname ?? "postgres";
+    } catch {
+      dbName = "postgres";
+    } finally {
+      discoverPool.end().catch(() => {});
+    }
+  }
 
   const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
   dynamicPgConnections.set(dbId, connectionUrl);
