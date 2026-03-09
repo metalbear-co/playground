@@ -18,13 +18,16 @@
         "id": "metal-mart-dev",
         "type": "pg",
         "version": "16",
-        "name": "inventory",
+        "ttl_secs": 30,   
         "connection": {
           "url": {
             "type": "env",
             "variable": "DATABASE_URL"
           }
-        }
+        },
+      "copy": {
+        "mode": "schema"                   
+      }
       }
     ]
   }
