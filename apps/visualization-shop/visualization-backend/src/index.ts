@@ -1036,7 +1036,7 @@ const dbRateLimiter = rateLimit({
 
 app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
   const dbId = req.params.dbId ?? "";
-  const connectionString = await resolveDbConnection(dbId);
+  let connectionString = await resolveDbConnection(dbId);
   if (!connectionString) {
     res.status(404).json({ error: "No connection configured for the requested database" });
     return;
@@ -1054,6 +1054,39 @@ app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
       tables: result.rows.map((r: { table_name: string }) => r.table_name),
     });
   } catch (error) {
+    // If the connection failed and this was a cached dynamic connection, invalidate and retry once
+    if (dynamicPgConnections.has(dbId)) {
+      console.warn("Connection failed for cached db:", dbId, "— retrying with fresh resolution");
+      const oldConn = dynamicPgConnections.get(dbId)!;
+      dynamicPgConnections.delete(dbId);
+      const oldPool = pgPools.get(oldConn);
+      if (oldPool) {
+        pgPools.delete(oldConn);
+        oldPool.end().catch(() => {});
+      }
+      connectionString = await resolvePgBranchConnection(dbId);
+      if (connectionString) {
+        try {
+          const pool = getPool(connectionString);
+          const result = await pool.query(
+            `SELECT table_name FROM information_schema.tables
+             WHERE table_schema = 'public'
+             ORDER BY table_name`,
+          );
+          res.json({
+            dbId,
+            tables: result.rows.map((r: { table_name: string }) => r.table_name),
+          });
+          return;
+        } catch (retryError) {
+          console.error("Retry also failed for db:", dbId, retryError instanceof Error ? retryError.message : retryError);
+          res.status(500).json({
+            error: retryError instanceof Error ? retryError.message : "Failed to list tables",
+          });
+          return;
+        }
+      }
+    }
     console.error("Failed to list tables for db:", dbId, error instanceof Error ? error.message : error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to list tables",
@@ -1061,10 +1094,41 @@ app.get(dbTablesPaths, dbRateLimiter, async (req, res) => {
   }
 });
 
+const queryTableData = async (pool: pg.Pool, dbId: string, tableName: string, page: number, pageSize: number) => {
+  const tableCheck = await pool.query(
+    `SELECT table_name FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName],
+  );
+  if (tableCheck.rows.length === 0) return null;
+
+  const validatedTable: string = tableCheck.rows[0].table_name;
+  const countResult = await pool.query(
+    `SELECT COUNT(*) AS total FROM "${validatedTable}"`,
+  );
+  const totalRows = parseInt(countResult.rows[0].total);
+  const totalPages = Math.ceil(totalRows / pageSize);
+  const offset = (page - 1) * pageSize;
+  const dataResult = await pool.query(
+    `SELECT * FROM "${validatedTable}" ORDER BY ctid DESC LIMIT $1 OFFSET $2`,
+    [pageSize, offset],
+  );
+  return {
+    dbId,
+    tableName: validatedTable,
+    columns: dataResult.fields.map((f) => f.name),
+    rows: dataResult.rows,
+    totalRows,
+    page,
+    pageSize,
+    totalPages,
+  };
+};
+
 app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
   const dbId = req.params.dbId ?? "";
   const tableName = req.params.tableName ?? "";
-  const connectionString = await resolveDbConnection(dbId);
+  let connectionString = await resolveDbConnection(dbId);
   if (!connectionString) {
     res.status(404).json({ error: "No connection configured for the requested database" });
     return;
@@ -1075,44 +1139,42 @@ app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
 
   try {
     const pool = getPool(connectionString);
-
-    // Validate table name exists and retrieve the canonical name to prevent SQL injection
-    const tableCheck = await pool.query(
-      `SELECT table_name FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = $1`,
-      [tableName],
-    );
-    if (tableCheck.rows.length === 0) {
+    const result = await queryTableData(pool, dbId, tableName, page, pageSize);
+    if (!result) {
       res.status(404).json({ error: "Table not found" });
       return;
     }
-
-    // Use the validated table name from the database catalog
-    const validatedTable: string = tableCheck.rows[0].table_name;
-
-    const countResult = await pool.query(
-      `SELECT COUNT(*) AS total FROM "${validatedTable}"`,
-    );
-    const totalRows = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(totalRows / pageSize);
-    const offset = (page - 1) * pageSize;
-
-    const dataResult = await pool.query(
-      `SELECT * FROM "${validatedTable}" ORDER BY ctid DESC LIMIT $1 OFFSET $2`,
-      [pageSize, offset],
-    );
-
-    res.json({
-      dbId,
-      tableName: validatedTable,
-      columns: dataResult.fields.map((f) => f.name),
-      rows: dataResult.rows,
-      totalRows,
-      page,
-      pageSize,
-      totalPages,
-    });
+    res.json(result);
   } catch (error) {
+    if (dynamicPgConnections.has(dbId)) {
+      console.warn("Connection failed for cached db:", dbId, "— retrying with fresh resolution");
+      const oldConn = dynamicPgConnections.get(dbId)!;
+      dynamicPgConnections.delete(dbId);
+      const oldPool = pgPools.get(oldConn);
+      if (oldPool) {
+        pgPools.delete(oldConn);
+        oldPool.end().catch(() => {});
+      }
+      connectionString = await resolvePgBranchConnection(dbId);
+      if (connectionString) {
+        try {
+          const pool = getPool(connectionString);
+          const result = await queryTableData(pool, dbId, tableName, page, pageSize);
+          if (!result) {
+            res.status(404).json({ error: "Table not found" });
+            return;
+          }
+          res.json(result);
+          return;
+        } catch (retryError) {
+          console.error("Retry also failed for db:", dbId, retryError instanceof Error ? retryError.message : retryError);
+          res.status(500).json({
+            error: retryError instanceof Error ? retryError.message : "Failed to query table",
+          });
+          return;
+        }
+      }
+    }
     console.error("Failed to query table for db:", dbId, error instanceof Error ? error.message : error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to query table",
