@@ -34,11 +34,33 @@ async function initDb() {
 async function startConsumer() {
   const consumer = kafka.consumer({
     groupId: process.env.KAFKA_CONSUMER_GROUP || "delivery-service",
-    partitionAssigners: [range]
+    partitionAssigners: [range],
+    sessionTimeout: 600000,
+    heartbeatInterval: 10000,
+    maxWaitTimeInMs: 5000,
+    retry: {
+      retries: 10,
+      initialRetryTime: 300,
+    },
   });
   await consumer.connect();
   const topic = process.env.KAFKA_TOPIC || "orders";
   await consumer.subscribe({ topic });
+
+  let readyCount = 0;
+  consumer.on("consumer.group_join", ({ payload }) => {
+    const assignment = payload.memberAssignment;
+    if (assignment && Object.keys(assignment).length > 0) {
+      readyCount++;
+      if (readyCount >= 2) {
+        console.log(`✅ [STABLE] Consumer assigned partitions (after rebalance):`, assignment);
+      } else {
+        console.log(`⏳ [INITIALIZING] First assignment received, waiting for rebalance to stabilize...`);
+      }
+    } else {
+      console.log(`⏳ [WAITING] Consumer joined but no partitions assigned yet`);
+    }
+  });
 
   await consumer.run({
     eachMessage: async ({ topic: t, partition, message }) => {
@@ -62,7 +84,7 @@ async function startConsumer() {
           client.release();
         }
 
-        console.log(`Created delivery for order ${orderId}`);
+        console.log(`🚀 [LOCAL] Created delivery for order ${orderId}`);
       } catch (err) {
         console.error("Error processing message:", err);
       }
