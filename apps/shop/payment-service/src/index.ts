@@ -12,9 +12,11 @@ app.get("/health", (_req, res) => {
 app.post("/payments", (req: express.Request, res: express.Response) => {
   console.log("Request headers:", JSON.stringify(req.headers, null, 2));
   console.log("Request body:", JSON.stringify(req.body, null, 2));
+  const { orderId } = req.body as { orderId?: number };
   // Mock payment - always succeeds
   res.status(200).json({
     success: true,
+    orderId,
     transactionId: `mock-${Date.now()}`,
     message: "Payment processed successfully (mock)",
   });
