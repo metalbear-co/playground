@@ -1,3 +1,4 @@
+import "./otel.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";

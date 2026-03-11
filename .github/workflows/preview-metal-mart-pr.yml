@@ -94,11 +94,11 @@ jobs:
             | | |
             |---|---|
             | **Preview URL** | [${url}](${url}) |
-            | **Header** | \`X-PG-Tenant: ${key}\` |
+            | **Header** | \`baggage: mirrord=${key}\` |
 
             To send traffic to this preview:
             - Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or
-            - \`curl -H "X-PG-Tenant: ${key}" ${url}\`
+            - \`curl -H "baggage: mirrord=${key}" ${url}\`
 
             The UI will show "Preview: ${key}" when the header is set.
 
@@ -142,8 +142,8 @@ jobs:
                   "fields": [
                     { "type": "mrkdwn", "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }} ${{ github.event.pull_request.title }}>" },
                     { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
-                    { "type": "mrkdwn", "text": "*Header:*\n`X-PG-Tenant: ${{ env.PREVIEW_KEY }}`" },
-                    { "type": "mrkdwn", "text": "*curl:*\n`curl -H \"X-PG-Tenant: ${{ env.PREVIEW_KEY }}\" https://playground.metalbear.dev/shop`" }
+                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord=${{ env.PREVIEW_KEY }}`" },
+                    { "type": "mrkdwn", "text": "*curl:*\n`curl -H \"baggage: mirrord=${{ env.PREVIEW_KEY }}\" https://playground.metalbear.dev/shop`" }
                   ]
                 }
               ]
