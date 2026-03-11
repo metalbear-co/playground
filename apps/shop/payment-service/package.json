@@ -9,6 +9,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1006.0",
     "express": "^5.1.0"
   },
   "devDependencies": {

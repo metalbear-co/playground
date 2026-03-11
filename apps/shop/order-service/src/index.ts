@@ -6,8 +6,9 @@ import rateLimit from "express-rate-limit";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import { Connection, Client } from "@temporalio/client";
 import { orderMode } from "./config.js";
-import { pool, producer } from "./connections.js";
-import { inventoryUrl, paymentUrl } from "./connections.js";
+import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
+import { inventoryUrl } from "./connections.js";
+import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
 import * as activities from "./activities.js";
 import { CheckoutWorkflow } from "./workflows/checkout.js";
@@ -178,14 +179,18 @@ async function createOrderDirect(
     }
   }
 
-  const paymentRes = await fetch(`${paymentUrl}/payments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: 0, items }),
-  });
-  if (!paymentRes.ok) {
-    throw new OrderError("Payment failed", 502, { error: "Payment failed" });
-  }
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: sqsQueueUrl,
+      MessageBody: JSON.stringify({ amount: totalCents, items }),
+      MessageAttributes: {
+        "x-pg-tenant": {
+          DataType: "String",
+          StringValue: tenant || "unknown",
+        },
+      },
+    })
+  );
 
   const client = await pool.connect();
   let orderId: number;

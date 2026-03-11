@@ -1,0 +1,13 @@
+{
+  "target": "deployment/payment-service",
+  "feature": {
+    "split_queues": {
+      "payments": {
+        "queue_type": "SQS",
+        "message_filter": {
+          "x-pg-tenant": "dev"
+        }
+      }
+    }
+  }
+}

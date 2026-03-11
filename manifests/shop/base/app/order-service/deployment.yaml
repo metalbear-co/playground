@@ -22,8 +22,10 @@ spec:
               value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/orders"
             - name: INVENTORY_SERVICE_URL
               value: "http://inventory-service:80"
-            - name: PAYMENT_SERVICE_URL
-              value: "http://payment-service:80"
+            - name: SQS_QUEUE_URL
+              value: ""
+            - name: AWS_REGION
+              value: "eu-north-1"
             - name: KAFKA_ADDRESS
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC

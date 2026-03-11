@@ -18,6 +18,10 @@ spec:
           env:
             - name: PORT
               value: "80"
+            - name: SQS_QUEUE_URL
+              value: ""
+            - name: AWS_REGION
+              value: "eu-north-1"
           ports:
             - containerPort: 80
               protocol: TCP

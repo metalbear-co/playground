@@ -1,4 +1,5 @@
-import { pool, producer, inventoryUrl, paymentUrl } from "./connections.js";
+import { SendMessageCommand } from "@aws-sdk/client-sqs";
+import { pool, producer, inventoryUrl, sqsClient, sqsQueueUrl } from "./connections.js";
 import { sendOrderToKafka } from "./kafka.js";
 
 export type CheckoutInput = {
@@ -34,16 +35,20 @@ export async function reserveStock(input: CheckoutInput): Promise<void> {
   }
 }
 
-/** Charge payment via payment-service */
+/** Send payment message to SQS */
 export async function chargePayment(input: CheckoutInput): Promise<void> {
-  const paymentRes = await fetch(`${paymentUrl}/payments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: 0, items: input.items }),
-  });
-  if (!paymentRes.ok) {
-    throw new Error("Payment failed");
-  }
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: sqsQueueUrl,
+      MessageBody: JSON.stringify({ amount: input.total_cents, items: input.items }),
+      MessageAttributes: {
+        "x-pg-tenant": {
+          DataType: "String",
+          StringValue: input.tenant || "unknown",
+        },
+      },
+    })
+  );
 }
 
 /** Insert order into DB and return orderId */
