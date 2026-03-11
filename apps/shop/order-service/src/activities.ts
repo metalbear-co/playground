@@ -35,11 +35,11 @@ export async function reserveStock(input: CheckoutInput): Promise<void> {
 }
 
 /** Charge payment via payment-service */
-export async function chargePayment(input: CheckoutInput): Promise<void> {
+export async function chargePayment(input: CheckoutInput, orderId: number): Promise<void> {
   const paymentRes = await fetch(`${paymentUrl}/payments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: 0, items: input.items }),
+    body: JSON.stringify({ orderId, amount: 0, items: input.items }),
   });
   if (!paymentRes.ok) {
     throw new Error("Payment failed");

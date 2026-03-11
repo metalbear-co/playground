@@ -104,6 +104,8 @@ app.get("/products/:id", async (req, res) => {
 });
 
 app.post("/products/:id/check-stock", async (req, res) => {
+  console.log("Check-stock request headers:", JSON.stringify(req.headers, null, 2));
+  console.log("Check-stock request body:", JSON.stringify(req.body, null, 2));
   const id = parseInt(req.params.id, 10);
   const { quantity = 1 } = req.body;
   if (isNaN(id) || typeof quantity !== "number" || quantity < 1) {
