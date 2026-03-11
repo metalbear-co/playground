@@ -214,7 +214,8 @@ async function createOrderDirect(
 
 app.post("/orders", async (req, res) => {
   console.log("Order request headers:", JSON.stringify(req.headers, null, 2));
-  const tenant = req.headers["x-pg-tenant"] as string | undefined;
+  const baggage = req.headers["baggage"] as string | undefined;
+  const tenant = baggage?.split(",").find(e => e.trim().startsWith("mirrord="))?.split("=")[1]?.trim();
   const body = req.body as { items?: unknown; total_cents?: number };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
 

@@ -20,7 +20,7 @@ export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void>
     timestamp: new Date().toISOString(),
   };
   const kafkaHeaders: Record<string, string> = {};
-  if (tenant) kafkaHeaders["x-pg-tenant"] = tenant;
+  if (tenant) kafkaHeaders["baggage"] = `mirrord=${tenant}`;
   if (process.env.KAFKA_MSG_AUTHOR) kafkaHeaders["author"] = process.env.KAFKA_MSG_AUTHOR;
   if (process.env.KAFKA_MSG_SOURCE) kafkaHeaders["source"] = process.env.KAFKA_MSG_SOURCE;
 
