@@ -9,3 +9,9 @@ spec:
       value: kafka.infra.svc.cluster.local:9092
     - name: client.id
       value: mirrord-operator-shop
+    - name: session.timeout.ms
+      value: "30000"
+    - name: max.poll.interval.ms
+      value: "60000"
+    - name: partition.assignment.strategy
+      value: range

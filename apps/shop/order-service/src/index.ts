@@ -212,6 +212,7 @@ async function createOrderDirect(
 }
 
 app.post("/orders", async (req, res) => {
+  console.log("Order request headers:", JSON.stringify(req.headers, null, 2));
   const tenant = req.headers["x-pg-tenant"] as string | undefined;
   const body = req.body as { items?: unknown; total_cents?: number };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
@@ -233,6 +234,7 @@ app.post("/orders", async (req, res) => {
       orderMode === "temporal"
         ? await createOrderViaTemporal(input)
         : await createOrderDirect(input);
+    console.log("Order response:", JSON.stringify(result, null, 2));
     return res.status(201).json(result);
   } catch (err) {
     console.error(

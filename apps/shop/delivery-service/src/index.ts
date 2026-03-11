@@ -1,7 +1,7 @@
 import express from "express";
 import { Kafka } from "kafkajs";
 import { Pool } from "pg";
-import { range }  from "./range_assigner.js"
+import { range } from "./range_assigner.js"
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -35,7 +35,8 @@ async function startConsumer() {
   const consumer = kafka.consumer({
     groupId: process.env.KAFKA_CONSUMER_GROUP || "delivery-service",
     partitionAssigners: [range],
-    sessionTimeout: 600000,
+    sessionTimeout: 30000,
+    rebalanceTimeout: 60000,
     heartbeatInterval: 10000,
     maxWaitTimeInMs: 5000,
     retry: {
@@ -112,11 +113,11 @@ app.get("/deliveries/order/:orderId", async (req, res) => {
 });
 
 async function main() {
-  await initDb();
-  await startConsumer();
   app.listen(port, "0.0.0.0", () => {
     console.log(`Delivery service listening on port ${port}`);
   });
+  await initDb();
+  await startConsumer();
 }
 
 main().catch((err) => {
