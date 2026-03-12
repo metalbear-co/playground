@@ -6,6 +6,7 @@ export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
   tenant?: string;
+  customer_email?: string;
 };
 
 export type CheckoutResult = {
@@ -40,7 +41,7 @@ export async function chargePayment(input: CheckoutInput): Promise<void> {
   await sqsClient.send(
     new SendMessageCommand({
       QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ amount: input.total_cents, items: input.items }),
+      MessageBody: JSON.stringify({ amount: input.total_cents, items: input.items, customer_email: input.customer_email ?? null }),
       MessageAttributes: {
         "x-pg-tenant": {
           DataType: "String",
@@ -58,8 +59,8 @@ export async function createOrder(input: CheckoutInput): Promise<number> {
     const {
       rows: [row],
     } = await client.query(
-      "INSERT INTO orders (items, total_cents, status) VALUES ($1, $2, 'confirmed') RETURNING id",
-      [JSON.stringify(input.items), input.total_cents]
+      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id",
+      [JSON.stringify(input.items), input.total_cents, input.customer_email ?? null]
     );
     return row.id as number;
   } finally {

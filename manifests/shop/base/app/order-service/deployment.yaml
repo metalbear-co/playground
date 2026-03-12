@@ -23,9 +23,9 @@ spec:
             - name: INVENTORY_SERVICE_URL
               value: "http://inventory-service:80"
             - name: SQS_QUEUE_URL
-              value: ""
+              value: "https://sqs.us-east-1.amazonaws.com/526936346962/payments"
             - name: AWS_REGION
-              value: "eu-north-1"
+              value: "us-east-1"
             - name: KAFKA_ADDRESS
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC

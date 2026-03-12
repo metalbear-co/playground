@@ -297,10 +297,19 @@ type PreviewSession = {
   startedAt?: string;
 };
 
+type SqsEphemeralQueue = {
+  queueName: string;
+  originalQueueName: string;
+  sessionId: string;
+  consumer: string;
+  jqFilter?: string;
+};
+
 type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
+  sqsQueues: SqsEphemeralQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
   fetchedAt: string;
@@ -694,13 +703,14 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const isStaticAgent = id === "mirrord-agent";
   const isDynamicAgent = id.startsWith("agent-");
   const isDynamicKafkaTopic = id.startsWith("kafka-topic-") || id.startsWith("kafka-deployed-topic-");
+  const isDynamicSqsQueue = id.startsWith("sqs-queue-") || id.startsWith("sqs-deployed-queue-");
   const isDynamicLocal = id.startsWith("dynamic-local-");
   const isDynamicLayer = id.startsWith("dynamic-layer-");
   const isDynamicPgBranch = id.startsWith("pg-branch-");
   const isDynamicPreview = id.startsWith("preview-");
-  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
+  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
   const isOperator = id === "mirrord-operator";
-  const borderColor = isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
+  const borderColor = isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
@@ -756,6 +766,17 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Bottom} id={`${id}-source-bottom`} style={handleStyle} />
         </>
       )}
+      {isDynamicSqsQueue && (
+        <>
+          <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="target" position={Position.Right} id={`${id}-target-right`} style={handleStyle} />
+          <Handle type="target" position={Position.Top} id={`${id}-target-top`} style={handleStyle} />
+          <Handle type="source" position={Position.Left} id={`${id}-source-left`} style={handleStyle} />
+          <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
+          <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
+          <Handle type="source" position={Position.Bottom} id={`${id}-source-bottom`} style={handleStyle} />
+        </>
+      )}
       {isDynamicLayer && (
         <>
           <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
@@ -782,7 +803,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
         </>
       )}
-      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview) ? (
+      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview) ? (
         data.label
       ) : (
         <div className="flex flex-col gap-0.5 text-left">
@@ -846,6 +867,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [snapshotLoading, setSnapshotLoading] = useState(true);
   const [operatorSessions, setOperatorSessions] = useState<OperatorSession[]>([]);
   const [kafkaTopics, setKafkaTopics] = useState<KafkaEphemeralTopic[]>([]);
+  const [sqsQueues, setSqsQueues] = useState<SqsEphemeralQueue[]>([]);
   const [pgBranches, setPgBranches] = useState<PgBranchDatabase[]>([]);
   const [previewSessions, setPreviewSessions] = useState<PreviewSession[]>([]);
   const aliasIndex = useMemo(() => buildAliasIndex(), []);
@@ -1243,6 +1265,211 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
     return edges;
   }, [kafkaTopics, operatorSessions, aliasIndex]);
+
+  // Build dynamic nodes for SQS split queues.
+  // For each active split queue we create two nodes:
+  //   1. Filtered/ephemeral node (sqs-queue-*) — receives messages matching the filter → local machine
+  //   2. Deployed/original node (sqs-deployed-queue-*) — receives non-matching messages → payment-service
+  const sqsQueueNodes = useMemo((): Node<NodeData>[] => {
+    if (sqsQueues.length === 0) return [];
+    const palette = groupPalette.mirrord;
+    const nodes: Node<NodeData>[] = [];
+    const sharedStyle = {
+      borderRadius: 18,
+      backgroundColor: "transparent",
+      color: palette.text,
+      boxShadow: "0px 30px 60px rgba(202,138,4,0.35)",
+      width: nodeWidth,
+      zIndex: 10,
+    };
+    const paymentPos = adjustedNodes.find((n) => n.id === "payment-service")?.position ?? { x: 0, y: 0 };
+
+    // Filtered/ephemeral nodes — connect to mirrord-layer (local machine)
+    sqsQueues.forEach((queue, index) => {
+      const nodeId = `sqs-queue-${queue.queueName}`;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{queue.queueName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#CA8A04]">
+                ephemeral · filtered
+              </span>
+              {queue.jqFilter && (
+                <span className="text-[10px] font-mono text-slate-500 truncate" title={queue.jqFilter}>
+                  {queue.jqFilter}
+                </span>
+              )}
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                session: {queue.sessionId.toLowerCase()}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: paymentPos.x + index * (nodeWidth + 40),
+          y: paymentPos.y + 500,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
+    });
+
+    // Deployed/original nodes — connect to payment-service (non-matching messages)
+    sqsQueues.forEach((queue, index) => {
+      const nodeId = `sqs-deployed-queue-${queue.originalQueueName}`;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{queue.originalQueueName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#CA8A04]">
+                original · unfiltered
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                session: {queue.sessionId.toLowerCase()}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: paymentPos.x + nodeWidth + 60 + index * (nodeWidth + 40),
+          y: paymentPos.y + 500,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
+    });
+
+    return nodes;
+  }, [sqsQueues, dynamicNodePositions, adjustedNodes]);
+
+  // Build dynamic edges for SQS split queue nodes.
+  const sqsQueueEdges = useMemo((): Edge[] => {
+    if (sqsQueues.length === 0) return [];
+    const edges: Edge[] = [];
+    const mirroredStyle = intentStyles.mirrored;
+    const edgeLabelDefaults = {
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 10,
+      labelShowBg: true,
+      labelBgStyle: { fill: "#FFFFFF" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+    };
+
+    // sqs → operator (intercept messages)
+    edges.push({
+      id: "sqs-to-operator",
+      source: "sqs",
+      target: "mirrord-operator",
+      label: "consume messages",
+      type: "bezier",
+      sourceHandle: "source-bottom",
+      targetHandle: "operator-target-top",
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+      style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+      ...edgeLabelDefaults,
+    });
+
+    // operator → each filtered/ephemeral queue node (matching filter → local machine)
+    for (const queue of sqsQueues) {
+      const nodeId = `sqs-queue-${queue.queueName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "matching filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-top`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    // operator → each deployed/original queue node (not matching filter → deployed app)
+    for (const queue of sqsQueues) {
+      const nodeId = `sqs-deployed-queue-${queue.originalQueueName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "not matching filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-top`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    // filtered queue → mirrord-layer (local process consumes matching messages)
+    sqsQueues.forEach((queue, index) => {
+      const nodeId = `sqs-queue-${queue.queueName}`;
+      const usesDynamicLocal = sqsQueues.length > 1;
+      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
+      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      edges.push({
+        id: `${nodeId}-to-layer`,
+        source: nodeId,
+        target: targetLayer,
+        label: "consume messages",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-bottom`,
+        targetHandle,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    });
+
+    // deployed queue → payment-service (deployed app consumes non-matching messages)
+    for (const queue of sqsQueues) {
+      const nodeId = `sqs-deployed-queue-${queue.originalQueueName}`;
+      edges.push({
+        id: `${nodeId}-to-payment`,
+        source: nodeId,
+        target: "payment-service",
+        label: "consume messages",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-top`,
+        targetHandle: "target-bottom",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    return edges;
+  }, [sqsQueues, operatorSessions, aliasIndex]);
+
+  // Hide the static sqs→payment edge when a split queue replaces it.
+  const sqsReplacedEdges = useMemo(() => {
+    const replaced = new Set<string>();
+    if (sqsQueues.length > 0) replaced.add("sqs-to-payment");
+    return replaced;
+  }, [sqsQueues]);
 
   const hasShopSessions = agentGroups.length > 0;
 
@@ -1746,6 +1973,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const flowEdges = useMemo(() => {
     const staticEdges = baseEdges.filter((edge) => {
       if (kafkaReplacedEdges.has(edge.id)) return false;
+      if (sqsReplacedEdges.has(edge.id)) return false;
       // Hide static local edges when dynamic local machines replace them
       if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) return false;
       if (edge.id === "local-to-layer") return hasShopSessions;
@@ -1758,19 +1986,19 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       }
       return true;
     });
-    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, hasDynamicLocalMachines]);
+    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, sqsReplacedEdges, hasDynamicLocalMachines]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
     if (!clusterZoneNode) return null;
-    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
+    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
 
     const clusterStaticNodes = adjustedNodes.filter((n) => {
       const zone = nodeZoneIndex.get(n.id);
       return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
     });
-    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...pgBranchNodes, ...previewSessionNodes];
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...pgBranchNodes, ...previewSessionNodes];
     const padding = 48;
     const xs = allClusterNodes.map((n) => n.position.x);
     const ys = allClusterNodes.map((n) => n.position.y);
@@ -1796,7 +2024,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, pgBranchNodes, previewSessionNodes]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -1861,6 +2089,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     nodes.push(...shiftedArchNodes);
     nodes.push(...dynamicAgentNodes);
     nodes.push(...kafkaTopicNodes);
+    nodes.push(...sqsQueueNodes);
     nodes.push(...pgBranchNodes);
     nodes.push(...previewSessionNodes);
     // Add dynamic local machine nodes with localYShift applied
@@ -1875,11 +2104,11 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, pgBranchNodes, previewSessionNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
-      process.env.NEXT_PUBLIC_VISUALIZATION_BACKEND_URL ?? "http://localhost:8080";
+      process.env.NEXT_PUBLIC_VISUALIZATION_BACKEND_URL || "http://localhost:8080";
     return base.replace(/\/$/, "");
   }, []);
 
@@ -1981,6 +2210,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       if (isMountedRef.current) {
         setOperatorSessions(body.sessions ?? []);
         setKafkaTopics(body.kafkaTopics ?? []);
+        setSqsQueues(body.sqsQueues ?? []);
         setPgBranches(body.pgBranches ?? []);
         setPreviewSessions(body.previewSessions ?? []);
       }
@@ -2016,7 +2246,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         if ("id" in change && change.id.startsWith("zone-")) continue;
         const isDynamic =
           "id" in change &&
-          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-"));
+          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("sqs-queue-") || change.id.startsWith("sqs-deployed-queue-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-"));
         if (
           isDynamic &&
           change.type === "position" &&

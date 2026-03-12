@@ -10,6 +10,7 @@ const port = parseInt(process.env.PORT || "80", 10);
 
 const sqsClient = new SQSClient({
   region: process.env.AWS_REGION || "eu-north-1",
+  useQueueUrlAsEndpoint: false,
 });
 const sqsQueueUrl = process.env.SQS_QUEUE_URL || "";
 
@@ -38,16 +39,14 @@ async function consumeMessages(): Promise<void> {
       for (const message of response.Messages) {
         const tenant =
           message.MessageAttributes?.["x-pg-tenant"]?.StringValue ?? "unknown";
-        console.log(
-          `[Payment] Processing payment message (tenant: ${tenant}):`,
-          message.Body
-        );
-
-        // Mock payment processing — always succeeds
         const body = JSON.parse(message.Body || "{}");
-        console.log(
-          `[Payment] Payment processed successfully (mock) — amount: ${body.amount}, items: ${JSON.stringify(body.items)}`
-        );
+        console.log("[Payment] Received SQS message:", JSON.stringify({
+          tenant,
+          amount: body.amount,
+          customer_email: body.customer_email ?? null,
+          items: body.items,
+          messageId: message.MessageId,
+        }, null, 2));
 
         await sqsClient.send(
           new DeleteMessageCommand({

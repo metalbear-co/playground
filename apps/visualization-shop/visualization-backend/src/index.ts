@@ -214,6 +214,14 @@ type KafkaEphemeralTopic = {
   topicType: "Filtered" | "Fallback";
 };
 
+type SqsEphemeralQueue = {
+  queueName: string;
+  originalQueueName: string;
+  sessionId: string;
+  consumer: string;
+  jqFilter?: string;
+};
+
 type PgBranchDatabase = {
   name: string;
   namespace: string;
@@ -248,6 +256,7 @@ type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
+  sqsQueues: SqsEphemeralQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
   fetchedAt: string;
@@ -340,6 +349,50 @@ const fetchKafkaEphemeralTopics = async (
       topicType: topicName.includes("-fallback-") ? "Fallback" as const : "Filtered" as const,
     };
   });
+};
+
+/**
+ * Query MirrordSqsSession custom resources from the operator CRD.
+ * Returns ephemeral SQS queues linked to active splitting sessions.
+ */
+const fetchSqsEphemeralQueues = async (
+  kubeConfig: KubeConfig,
+): Promise<SqsEphemeralQueue[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const result = await customApi.listClusterCustomObject({
+    group: "queues.mirrord.metalbear.co",
+    version: "v1alpha",
+    plural: "mirrordsqssessions",
+  });
+
+  const body = result as { items?: Array<Record<string, unknown>> };
+  const items = body.items ?? [];
+  const queues: SqsEphemeralQueue[] = [];
+
+  for (const item of items) {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const labels = (metadata.labels ?? {}) as Record<string, string>;
+    const sessionId = labels["mirrord-session"] ?? (spec.sessionId as string) ?? "unknown";
+    const consumer = ((spec.queueConsumer as Record<string, unknown>)?.name as string) ?? "unknown";
+    const jqFilters = (spec.queueJqFilters ?? {}) as Record<string, string>;
+    const ready = (status["Ready"] ?? {}) as Record<string, unknown>;
+    const envUpdates = (ready.envUpdates ?? {}) as Record<string, Record<string, string>>;
+
+    for (const [, mapping] of Object.entries(envUpdates)) {
+      const outputUrl = mapping.outputName ?? "";
+      const originalUrl = mapping.originalName ?? "";
+      const queueName = outputUrl.split("/").pop() ?? outputUrl;
+      const originalQueueName = originalUrl.split("/").pop() ?? originalUrl;
+      const jqFilter: string | undefined = Object.values(jqFilters)[0];
+      const entry: SqsEphemeralQueue = { queueName, originalQueueName, sessionId, consumer };
+      if (jqFilter !== undefined) entry.jqFilter = jqFilter;
+      queues.push(entry);
+    }
+  }
+
+  return queues;
 };
 
 /**
@@ -497,7 +550,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     return;
   }
   try {
-    const [sessions, kafkaTopics, pgBranches, previewSessions] = await Promise.all([
+    const [sessions, kafkaTopics, sqsQueues, pgBranches, previewSessions] = await Promise.all([
       fetchOperatorSessions(kubeConfigRef).catch((err) => {
         console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
         return [] as OperatorSession[];
@@ -505,6 +558,10 @@ app.get(operatorStatusPaths, async (req, res) => {
       fetchKafkaEphemeralTopics(kubeConfigRef).catch((err) => {
         console.warn("Failed to fetch kafka topics:", err instanceof Error ? err.message : err);
         return [] as KafkaEphemeralTopic[];
+      }),
+      fetchSqsEphemeralQueues(kubeConfigRef).catch((err) => {
+        console.warn("Failed to fetch SQS sessions:", err instanceof Error ? err.message : err);
+        return [] as SqsEphemeralQueue[];
       }),
       requestUseDbBranchMock
         ? Promise.resolve(mockPgBranches)
@@ -525,6 +582,7 @@ app.get(operatorStatusPaths, async (req, res) => {
       sessions: allSessions,
       sessionCount: allSessions.length,
       kafkaTopics,
+      sqsQueues,
       pgBranches,
       previewSessions,
       fetchedAt: new Date().toISOString(),
@@ -611,6 +669,16 @@ const mockSnapshot: ClusterSnapshot = {
   })),
 };
 
+const mockSqsQueues: SqsEphemeralQueue[] = [
+  {
+    queueName: "mirrord-phxgypecfv-payments",
+    originalQueueName: "payments",
+    sessionId: "DC190DEE9C7F8651",
+    consumer: "payment-service",
+    jqFilter: ".Body | fromjson | .customer_email | test(\"metalbear\\\\.com\")",
+  },
+];
+
 const mockOperatorStatus: OperatorStatusResponse = {
   sessions: [
     {
@@ -687,6 +755,7 @@ const mockOperatorStatus: OperatorStatusResponse = {
       topicType: "Fallback",
     },
   ],
+  sqsQueues: mockSqsQueues,
   pgBranches: [],
   previewSessions: [],
   fetchedAt: new Date().toISOString(),
@@ -791,6 +860,7 @@ const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
   ],
   sessionCount: 8,
   kafkaTopics: [],
+  sqsQueues: [],
   pgBranches: [],
   previewSessions: [
     {

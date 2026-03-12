@@ -19,9 +19,9 @@ spec:
             - name: PORT
               value: "80"
             - name: SQS_QUEUE_URL
-              value: ""
+              value: "https://sqs.us-east-1.amazonaws.com/526936346962/payments"
             - name: AWS_REGION
-              value: "eu-north-1"
+              value: "us-east-1"
           ports:
             - containerPort: 80
               protocol: TCP
