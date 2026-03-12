@@ -12,8 +12,8 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 
 ## Mirrord Demo Features
 
-1. **HTTP Filtering** – Order service uses `X-PG-Tenant` header to route traffic (see `order-service/mirrord.json`)
-2. **Queue Splitting** – Delivery service filters Kafka messages by `x-pg-tenant` header (see `delivery-service/mirrord.json`)
+1. **HTTP Filtering** – Order service uses `baggage: mirrord=<key>` header to route traffic (see `order-service/mirrord.json`)
+2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord=<key>` (see `delivery-service/mirrord.json`)
 3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart)
 
 ## Local Development

@@ -1,3 +1,4 @@
+import "./otel.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
@@ -209,6 +210,15 @@ async function createOrderDirect(
     orderId = row.id;
   } finally {
     client.release();
+  }
+
+  const paymentRes = await fetch(`${paymentUrl}/payments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderId, amount: 0, items }),
+  });
+  if (!paymentRes.ok) {
+    throw new OrderError("Payment failed", 502, { error: "Payment failed" });
   }
 
   await sendOrderToKafka({
