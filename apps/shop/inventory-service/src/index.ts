@@ -70,7 +70,7 @@ app.use(express.json());
 
 app.use((req, _res, next) => {
   if (req.path !== "/health") {
-    console.log(`[Inventory] ${req.method} ${req.path} headers:`, JSON.stringify(req.headers, null, 2));
+    console.log("[Inventory] %s %s headers: %s", req.method, req.path, JSON.stringify(req.headers, null, 2));
   }
   next();
 });
