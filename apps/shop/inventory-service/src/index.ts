@@ -69,7 +69,9 @@ async function initDb() {
 app.use(express.json());
 
 app.use((req, _res, next) => {
-  console.log(`[Inventory] ${req.method} ${req.path} headers:`, JSON.stringify(req.headers, null, 2));
+  if (req.path !== "/health") {
+    console.log(`[Inventory] ${req.method} ${req.path} headers:`, JSON.stringify(req.headers, null, 2));
+  }
   next();
 });
 
