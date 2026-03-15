@@ -18,7 +18,7 @@ const receiptServiceUrl = process.env.RECEIPT_SERVICE_URL || "http://receipt-ser
 app.use(express.json());
 
 app.use((req, _res, next) => {
-  if (req.path !== "/health") {
+  if (req.path !== "/health" && !req.path.startsWith("/visualization-shop")) {
     console.log("[Payment] %s %s headers: %s", req.method, req.path, JSON.stringify(req.headers, null, 2));
   }
   next();
