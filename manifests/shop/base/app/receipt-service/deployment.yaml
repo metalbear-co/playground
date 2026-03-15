@@ -1,29 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: payment-service
+  name: receipt-service
 spec:
   selector:
     matchLabels:
-      app: payment-service
+      app: receipt-service
   template:
     metadata:
       labels:
-        app: payment-service
+        app: receipt-service
     spec:
       containers:
         - name: main
-          image: ghcr.io/metalbear-co/playground-payment-service:latest
+          image: ghcr.io/metalbear-co/playground-receipt-service:latest
           imagePullPolicy: Always
           env:
             - name: PORT
               value: "80"
-            - name: SQS_QUEUE_URL
-              value: "https://sqs.us-east-1.amazonaws.com/526936346962/payments"
-            - name: AWS_REGION
-              value: "us-east-1"
-            - name: RECEIPT_SERVICE_URL
-              value: "http://receipt-service"
           ports:
             - containerPort: 80
               protocol: TCP

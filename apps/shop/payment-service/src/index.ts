@@ -13,12 +13,13 @@ const sqsClient = new SQSClient({
   useQueueUrlAsEndpoint: false,
 });
 const sqsQueueUrl = process.env.SQS_QUEUE_URL || "";
+const receiptServiceUrl = process.env.RECEIPT_SERVICE_URL || "http://receipt-service";
 
 app.use(express.json());
 
 app.use((req, _res, next) => {
   if (req.path !== "/health") {
-    console.log(`[Payment] ${req.method} ${req.path} headers:`, JSON.stringify(req.headers, null, 2));
+    console.log("[Payment] %s %s headers: %s", req.method, req.path, JSON.stringify(req.headers, null, 2));
   }
   next();
 });
@@ -55,6 +56,34 @@ async function consumeMessages(): Promise<void> {
           items: body.items,
           messageId: message.MessageId,
         }, null, 2));
+        console.log("[Payment] SQS message attributes:", JSON.stringify(message.MessageAttributes, null, 2));
+
+        // Propagate OTel headers to receipt service
+        const otelHeaders: Record<string, string> = {};
+        const traceparent = message.MessageAttributes?.["traceparent"]?.StringValue;
+        const tracestate = message.MessageAttributes?.["tracestate"]?.StringValue;
+        if (traceparent) otelHeaders["traceparent"] = traceparent;
+        if (tracestate) otelHeaders["tracestate"] = tracestate;
+
+        const outgoingHeaders = { "Content-Type": "application/json", ...otelHeaders };
+        console.log("[Payment] Outgoing headers to receipt-service:", JSON.stringify(outgoingHeaders, null, 2));
+
+        try {
+          const receiptRes = await fetch(`${receiptServiceUrl}/receipts`, {
+            method: "POST",
+            headers: outgoingHeaders,
+            body: JSON.stringify({
+              orderId: body.orderId,
+              amount: body.amount,
+              customer_email: body.customer_email ?? null,
+              items: body.items,
+            }),
+          });
+          const receipt = await receiptRes.json();
+          console.log("[Payment] Receipt generated:", JSON.stringify(receipt, null, 2));
+        } catch (receiptErr) {
+          console.error("[Payment] Failed to generate receipt:", receiptErr);
+        }
 
         await sqsClient.send(
           new DeleteMessageCommand({

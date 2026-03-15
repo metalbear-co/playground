@@ -52,6 +52,7 @@ export const architectureZones: ArchitectureZone[] = [
       "inventory-service",
       "order-service",
       "payment-service",
+      "receipt-service",
       "delivery-service",
       "kafka",
       "sqs",
@@ -151,6 +152,15 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Mock payment processing (always succeeds).",
     group: "service",
     repoPath: "shop/payment-service/",
+    zone: "cluster",
+  },
+  {
+    id: "receipt-service",
+    label: "receipt-service",
+    stack: "Node.js / Express",
+    description: "Generates receipts after payment processing.",
+    group: "service",
+    repoPath: "shop/receipt-service/",
     zone: "cluster",
   },
   {
@@ -268,6 +278,13 @@ export const architectureEdges: ArchitectureEdge[] = [
     target: "payment-service",
     label: "Consume payment",
     intent: "data",
+  },
+  {
+    id: "payment-to-receipt",
+    source: "payment-service",
+    target: "receipt-service",
+    label: "Generate receipt",
+    intent: "request",
   },
   {
     id: "order-to-kafka",
