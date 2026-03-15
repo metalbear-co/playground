@@ -185,19 +185,6 @@ async function createOrderDirect(
     }
   }
 
-  await sqsClient.send(
-    new SendMessageCommand({
-      QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ amount: totalCents, items, customer_email: customer_email ?? null }),
-      MessageAttributes: {
-        "x-pg-tenant": {
-          DataType: "String",
-          StringValue: tenant || "unknown",
-        },
-      },
-    })
-  );
-
   const client = await pool.connect();
   let orderId: number;
   try {
@@ -212,14 +199,18 @@ async function createOrderDirect(
     client.release();
   }
 
-  const paymentRes = await fetch(`${paymentUrl}/payments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ orderId, amount: 0, items }),
-  });
-  if (!paymentRes.ok) {
-    throw new OrderError("Payment failed", 502, { error: "Payment failed" });
-  }
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: sqsQueueUrl,
+      MessageBody: JSON.stringify({ orderId, amount: totalCents, items, customer_email: customer_email ?? null }),
+      MessageAttributes: {
+        "x-pg-tenant": {
+          DataType: "String",
+          StringValue: tenant || "unknown",
+        },
+      },
+    })
+  );
 
   await sendOrderToKafka({
     orderId,

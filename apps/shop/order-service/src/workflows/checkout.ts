@@ -27,7 +27,7 @@ export async function CheckoutWorkflow(
 ): Promise<CheckoutResult> {
   await reserveStock(input);
   const orderId = await createOrder(input);
-  await chargePayment(input, orderId);
+  await chargePayment({ ...input, orderId });
   await publishOrderToKafka({
     orderId,
     items: input.items,

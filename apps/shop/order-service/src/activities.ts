@@ -37,11 +37,11 @@ export async function reserveStock(input: CheckoutInput): Promise<void> {
 }
 
 /** Send payment message to SQS */
-export async function chargePayment(input: CheckoutInput): Promise<void> {
+export async function chargePayment(input: CheckoutInput & { orderId?: number }): Promise<void> {
   await sqsClient.send(
     new SendMessageCommand({
       QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ amount: input.total_cents, items: input.items, customer_email: input.customer_email ?? null }),
+      MessageBody: JSON.stringify({ orderId: input.orderId, amount: input.total_cents, items: input.items, customer_email: input.customer_email ?? null }),
       MessageAttributes: {
         "x-pg-tenant": {
           DataType: "String",

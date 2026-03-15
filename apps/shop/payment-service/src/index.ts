@@ -42,6 +42,7 @@ async function consumeMessages(): Promise<void> {
         const body = JSON.parse(message.Body || "{}");
         console.log("[Payment] Received SQS message:", JSON.stringify({
           tenant,
+          orderId: body.orderId,
           amount: body.amount,
           customer_email: body.customer_email ?? null,
           items: body.items,
