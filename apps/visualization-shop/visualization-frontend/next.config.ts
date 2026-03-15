@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const basePath = process.env.NEXT_BASE_PATH ?? "";
+const backendUrl =
+  process.env.VISUALIZATION_BACKEND_URL ?? "http://visualization-shop-backend";
 const defaultBackendUrl =
-  process.env.NEXT_PUBLIC_VISUALIZATION_BACKEND_URL ??
+  process.env.NEXT_PUBLIC_VISUALIZATION_BACKEND_URL ||
   (basePath ? `${basePath}/api` : "http://localhost:8080");
 
 const nextConfig: NextConfig = {
@@ -15,6 +17,7 @@ const nextConfig: NextConfig = {
     return [
       { source: `${basePath}`, destination: `/` },
       { source: `${basePath}/`, destination: `/` },
+      { source: `${basePath}/api/:path*`, destination: `${backendUrl}/:path*` },
     ];
   },
   env: {

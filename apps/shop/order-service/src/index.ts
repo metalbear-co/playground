@@ -7,8 +7,9 @@ import rateLimit from "express-rate-limit";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import { Connection, Client } from "@temporalio/client";
 import { orderMode } from "./config.js";
-import { pool, producer } from "./connections.js";
-import { inventoryUrl, paymentUrl } from "./connections.js";
+import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
+import { inventoryUrl } from "./connections.js";
+import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
 import * as activities from "./activities.js";
 import { CheckoutWorkflow } from "./workflows/checkout.js";
@@ -31,8 +32,12 @@ async function initDb() {
         items JSONB NOT NULL,
         total_cents INTEGER NOT NULL,
         status VARCHAR(50) DEFAULT 'pending',
+        customer_email VARCHAR(255),
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)
     `);
   } finally {
     client.release();
@@ -74,6 +79,7 @@ type OrderInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
   tenant?: string;
+  customer_email?: string;
 };
 
 const MAX_PRODUCT_ID = 2 ** 31 - 1; // safe integer, prevents URL injection
@@ -151,7 +157,7 @@ async function createOrderViaTemporal(
 async function createOrderDirect(
   input: OrderInput
 ): Promise<{ orderId: number; status: string }> {
-  const { items, total_cents: totalCents, tenant } = input;
+  const { items, total_cents: totalCents, tenant, customer_email } = input;
 
   for (const item of items) {
     const productId = encodeURIComponent(String(item.productId));
@@ -179,14 +185,27 @@ async function createOrderDirect(
     }
   }
 
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: sqsQueueUrl,
+      MessageBody: JSON.stringify({ amount: totalCents, items, customer_email: customer_email ?? null }),
+      MessageAttributes: {
+        "x-pg-tenant": {
+          DataType: "String",
+          StringValue: tenant || "unknown",
+        },
+      },
+    })
+  );
+
   const client = await pool.connect();
   let orderId: number;
   try {
     const {
       rows: [row],
     } = await client.query(
-      "INSERT INTO orders (items, total_cents, status) VALUES ($1, $2, 'confirmed') RETURNING id",
-      [JSON.stringify(items), totalCents]
+      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id",
+      [JSON.stringify(items), totalCents, customer_email ?? null]
     );
     orderId = row.id;
   } finally {
@@ -213,11 +232,11 @@ async function createOrderDirect(
 }
 
 app.post("/orders", async (req, res) => {
-  console.log("Order request headers:", JSON.stringify(req.headers, null, 2));
-  const baggage = req.headers["baggage"] as string | undefined;
-  const tenant = baggage?.split(",").find(e => e.trim().startsWith("mirrord="))?.split("=")[1]?.trim();
-  const body = req.body as { items?: unknown; total_cents?: number };
+  const tenant = req.headers["x-pg-tenant"] as string | undefined;
+  const body = req.body as { items?: unknown; total_cents?: number; customer_email?: string };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
+  const customer_email = typeof body.customer_email === "string" ? body.customer_email : undefined;
+  console.log("Order request:", JSON.stringify({ tenant, total_cents, customer_email, items: body.items }, null, 2));
 
   const validated = validateOrderItems(body.items);
   if ("error" in validated) {
@@ -229,7 +248,7 @@ app.post("/orders", async (req, res) => {
   }
   const { items } = validated;
 
-  const input: OrderInput = { items, total_cents, tenant };
+  const input: OrderInput = { items, total_cents, tenant, customer_email };
 
   try {
     const result =

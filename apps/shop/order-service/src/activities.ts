@@ -1,10 +1,12 @@
-import { pool, producer, inventoryUrl, paymentUrl } from "./connections.js";
+import { SendMessageCommand } from "@aws-sdk/client-sqs";
+import { pool, producer, inventoryUrl, sqsClient, sqsQueueUrl } from "./connections.js";
 import { sendOrderToKafka } from "./kafka.js";
 
 export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
   tenant?: string;
+  customer_email?: string;
 };
 
 export type CheckoutResult = {
@@ -34,16 +36,20 @@ export async function reserveStock(input: CheckoutInput): Promise<void> {
   }
 }
 
-/** Charge payment via payment-service */
-export async function chargePayment(input: CheckoutInput, orderId: number): Promise<void> {
-  const paymentRes = await fetch(`${paymentUrl}/payments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ orderId, amount: 0, items: input.items }),
-  });
-  if (!paymentRes.ok) {
-    throw new Error("Payment failed");
-  }
+/** Send payment message to SQS */
+export async function chargePayment(input: CheckoutInput): Promise<void> {
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: sqsQueueUrl,
+      MessageBody: JSON.stringify({ amount: input.total_cents, items: input.items, customer_email: input.customer_email ?? null }),
+      MessageAttributes: {
+        "x-pg-tenant": {
+          DataType: "String",
+          StringValue: input.tenant || "unknown",
+        },
+      },
+    })
+  );
 }
 
 /** Insert order into DB and return orderId */
@@ -53,8 +59,8 @@ export async function createOrder(input: CheckoutInput): Promise<number> {
     const {
       rows: [row],
     } = await client.query(
-      "INSERT INTO orders (items, total_cents, status) VALUES ($1, $2, 'confirmed') RETURNING id",
-      [JSON.stringify(input.items), input.total_cents]
+      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id",
+      [JSON.stringify(input.items), input.total_cents, input.customer_email ?? null]
     );
     return row.id as number;
   } finally {

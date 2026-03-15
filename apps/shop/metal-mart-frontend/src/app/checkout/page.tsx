@@ -21,6 +21,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     const raw = localStorage.getItem("metal-mart-cart");
@@ -44,7 +45,7 @@ export default function CheckoutPage() {
       const r = await fetch(`${basePath}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: orderItems, total_cents: totalCents }),
+        body: JSON.stringify({ items: orderItems, total_cents: totalCents, ...(email ? { customer_email: email } : {}) }),
       });
       const data = await r.json();
       if (r.ok) {
@@ -142,6 +143,19 @@ export default function CheckoutPage() {
           <p className="mb-6 text-xl font-semibold text-slate-900">
             Total: ${(totalCents / 100).toFixed(2)}
           </p>
+          <div className="mb-6">
+            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+              Email <span className="text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:border-[#6a4ff5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/20"
+            />
+          </div>
           {error && (
             <p
               className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600"

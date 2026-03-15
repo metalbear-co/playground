@@ -1,0 +1,15 @@
+apiVersion: "queues.mirrord.metalbear.co/v1alpha"
+kind: MirrordWorkloadQueueRegistry
+metadata:
+  name: payments-queue-registry
+spec:
+  queues:
+    payments:
+      queueType: SQS
+      nameSource:
+        envVar: SQS_QUEUE_URL
+      tags:
+        tool: mirrord
+  consumer:
+    name: payment-service
+    workloadType: Deployment

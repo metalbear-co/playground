@@ -1,0 +1,19 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "payment-service"
+    }
+  },
+  "feature": {
+    "network": {
+      "outgoing": true
+    },
+    "split_queues": {
+      "payments": {
+        "queue_type": "SQS",
+        "jq_filter": ".Body | fromjson | .customer_email | test(\"metalbear\\\\.com\")"
+      }
+    }
+  }
+}
