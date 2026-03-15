@@ -58,15 +58,7 @@ async function consumeMessages(): Promise<void> {
         }, null, 2));
         console.log("[Payment] SQS message attributes:", JSON.stringify(message.MessageAttributes, null, 2));
 
-        // Propagate OTel headers to receipt service
-        const otelHeaders: Record<string, string> = {};
-        const traceparent = message.MessageAttributes?.["traceparent"]?.StringValue;
-        const tracestate = message.MessageAttributes?.["tracestate"]?.StringValue;
-        if (traceparent) otelHeaders["traceparent"] = traceparent;
-        if (tracestate) otelHeaders["tracestate"] = tracestate;
-
-        const outgoingHeaders = { "Content-Type": "application/json", ...otelHeaders };
-        console.log("[Payment] Outgoing headers to receipt-service:", JSON.stringify(outgoingHeaders, null, 2));
+        const outgoingHeaders = { "Content-Type": "application/json" };
 
         try {
           const receiptRes = await fetch(`${receiptServiceUrl}/receipts`, {
