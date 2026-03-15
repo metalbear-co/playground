@@ -651,6 +651,12 @@ const knownDeployments: KnownDeployment[] = [
     description: "Kafka consumer & delivery tracking",
     deployment: "delivery-service",
   },
+  {
+    id: "receipt-service",
+    name: "receipt-service",
+    description: "Receipt generation & delivery",
+    deployment: "receipt-service",
+  },
 ];
 
 /**
