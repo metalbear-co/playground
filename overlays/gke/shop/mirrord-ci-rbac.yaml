@@ -1,0 +1,38 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mirrord-ci
+  namespace: shop
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/status"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["mirrord.metalbear.co"]
+    resources: ["mirrordclustersessions"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["queues.mirrord.metalbear.co"]
+    resources: ["mirrordkafkaephemeraltopics", "mirrordsqssessions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policies.mirrord.metalbear.co"]
+    resources: ["mirrordpolicies"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mirrord-ci
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mirrord-ci
+subjects:
+  - kind: ServiceAccount
+    name: mirrord-ci
+    namespace: ip-visit-counter
