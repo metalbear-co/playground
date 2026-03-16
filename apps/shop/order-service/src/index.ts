@@ -203,12 +203,6 @@ async function createOrderDirect(
     new SendMessageCommand({
       QueueUrl: sqsQueueUrl,
       MessageBody: JSON.stringify({ orderId, amount: totalCents, items, customer_email: customer_email ?? null }),
-      MessageAttributes: {
-        "x-pg-tenant": {
-          DataType: "String",
-          StringValue: tenant || "unknown",
-        },
-      },
     })
   );
 

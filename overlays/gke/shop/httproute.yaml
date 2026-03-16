@@ -16,3 +16,19 @@ spec:
         - name: metal-mart-frontend
           namespace: shop
           port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /orders
+      backendRefs:
+        - name: order-service
+          namespace: shop
+          port: 80
+    - matches:
+        - path:
+            type: Exact
+            value: /banner
+      backendRefs:
+        - name: order-service
+          namespace: shop
+          port: 80
