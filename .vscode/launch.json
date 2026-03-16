@@ -119,6 +119,18 @@
             "cwd": "${workspaceFolder}/apps/temp-demo"
         },
         {
+            "name": "payment-service",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["tsx", "${workspaceFolder}/apps/shop/payment-service/src/index.ts"],
+            "env": {
+                "PORT": "80",
+                "RECEIPT_SERVICE_URL": "http://receipt-service"
+            },
+            "cwd": "${workspaceFolder}/apps/shop/payment-service"
+        },
+        {
             "name": "order-service",
             "type": "node",
             "request": "launch",

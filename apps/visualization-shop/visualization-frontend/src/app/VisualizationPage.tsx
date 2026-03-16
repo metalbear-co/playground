@@ -45,6 +45,7 @@ type NodeData = {
   description?: string;
   repoPath?: string;
   highlight?: boolean;
+  ciRunner?: boolean;
 };
 
 /** Module-level ref so ArchitectureNode (defined outside the component) can open the DB dialog. */
@@ -710,7 +711,8 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const isDynamicPreview = id.startsWith("preview-");
   const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
   const isOperator = id === "mirrord-operator";
-  const borderColor = isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
+  const isCiRunnerAgent = isDynamicAgent && data.ciRunner === true;
+  const borderColor = isCiRunnerAgent ? "#0D9488" : isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
@@ -915,10 +917,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     const palette = groupPalette.mirrord;
     return agentGroups.map((group, index) => {
       const agentId = `agent-${sanitizeHostname(group.targetName)}`;
+      const isCiRunner = group.owners.every((o) => o.username === "runner");
       return {
         id: agentId,
         data: {
           group: "mirrord" as const,
+          ciRunner: isCiRunner,
           label: (
             <div className="flex flex-col gap-1 text-left">
               <span className="text-sm font-semibold text-slate-900">
@@ -927,10 +931,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
               {group.owners.map((owner) => (
                 <div key={owner.hostname} className="flex flex-col">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    {owner.username}
+                    {owner.username === "runner" ? "mirrord CI" : owner.username}
                   </span>
                   <p className="text-xs leading-snug text-slate-600">
-                    {owner.hostname}
+                    {owner.username === "runner" ? "" : owner.hostname}
                   </p>
                 </div>
               ))}
@@ -942,7 +946,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           borderRadius: 18,
           backgroundColor: "transparent",
           color: palette.text,
-          boxShadow: "0px 30px 60px rgba(124,58,237,0.35)",
+          boxShadow: isCiRunner ? "0px 30px 60px rgba(13,148,136,0.35)" : "0px 30px 60px rgba(124,58,237,0.35)",
           width: nodeWidth,
           zIndex: 10,
         },
@@ -1568,7 +1572,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                 Developer machine
               </span>
               <p className="text-xs leading-snug text-slate-600">
-                {ownerName} ({hostname})
+                {ownerName === "runner" ? "mirrord CI" : `${ownerName} (${hostname})`}
               </p>
             </div>
           ),
@@ -1766,7 +1770,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
               </p>
               {branch.owners.map((owner) => (
                 <p key={owner.hostname} className="text-[11px] text-slate-500">
-                  {owner.username} ({owner.hostname})
+                  {owner.username === "runner" ? "mirrord CI" : `${owner.username} (${owner.hostname})`}
                 </p>
               ))}
               <button
