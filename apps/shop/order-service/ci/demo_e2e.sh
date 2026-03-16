@@ -6,6 +6,13 @@ set -euo pipefail
 MAX_RETRIES=30
 RETRY_INTERVAL=5
 
+# Optional baggage header for mirrord CI traffic routing
+HEADER_ARGS=()
+if [ -n "${BAGGAGE_HEADER:-}" ]; then
+  HEADER_ARGS=(-H "baggage: ${BAGGAGE_HEADER}")
+  echo "Using baggage header: ${BAGGAGE_HEADER}"
+fi
+
 echo "=== Shop E2E Test ==="
 echo "Target: ${SHOP_URL}"
 
@@ -13,7 +20,7 @@ echo "Target: ${SHOP_URL}"
 echo ""
 echo "--- Step 1: Health check ---"
 for i in $(seq 1 $MAX_RETRIES); do
-  if curl -sS --fail "${SHOP_URL}/banner" >/dev/null 2>&1; then
+  if curl -sS --fail "${HEADER_ARGS[@]}" "${SHOP_URL}/banner" >/dev/null 2>&1; then
     echo "Health check passed (attempt $i)"
     break
   fi
@@ -28,7 +35,7 @@ done
 # Step 2: GET /banner — verify banner text
 echo ""
 echo "--- Step 2: GET /banner ---"
-banner_resp="$(curl -sS "${SHOP_URL}/banner")"
+banner_resp="$(curl -sS "${HEADER_ARGS[@]}" "${SHOP_URL}/banner")"
 echo "$banner_resp" | jq .
 
 echo "$banner_resp" | jq -e '.text' >/dev/null || {
@@ -40,7 +47,7 @@ echo "Banner check passed"
 # Step 3: POST /orders — create an order
 echo ""
 echo "--- Step 3: POST /orders ---"
-order_resp="$(curl -sS -X POST "${SHOP_URL}/orders" \
+order_resp="$(curl -sS -X POST "${HEADER_ARGS[@]}" "${SHOP_URL}/orders" \
   -H "Content-Type: application/json" \
   -d '{"items": [{"productId": 1, "quantity": 1}], "total_cents": 1999}')"
 echo "$order_resp" | jq .
@@ -60,7 +67,7 @@ fi
 # Step 4: GET /orders/:id — verify order
 echo ""
 echo "--- Step 4: GET /orders/$order_id ---"
-get_resp="$(curl -sS "${SHOP_URL}/orders/${order_id}")"
+get_resp="$(curl -sS "${HEADER_ARGS[@]}" "${SHOP_URL}/orders/${order_id}")"
 echo "$get_resp" | jq .
 
 echo "$get_resp" | jq -e '.status == "confirmed"' >/dev/null || {
