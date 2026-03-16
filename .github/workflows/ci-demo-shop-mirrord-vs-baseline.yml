@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   baseline-kind:
-    name: Baseline (kind - Slow)
+    name: Full Environment Setup
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -196,7 +196,7 @@ jobs:
           kind delete cluster --name ci-shop-${GITHUB_SHA::8} || true
 
   mirrord-ci:
-    name: mirrord CI (GKE - Fast)
+    name: mirrord CI (Existing Staging)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
