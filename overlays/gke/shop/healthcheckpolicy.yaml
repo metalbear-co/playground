@@ -18,3 +18,24 @@ spec:
     group: ""
     kind: Service
     name: metal-mart-frontend
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: order-service-healthcheck
+  namespace: shop
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /health
+        port: 80
+  targetRef:
+    group: ""
+    kind: Service
+    name: order-service
