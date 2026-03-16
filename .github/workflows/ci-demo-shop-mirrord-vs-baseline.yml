@@ -39,7 +39,8 @@ jobs:
 
       - name: Create kind cluster
         run: |
-          cat <<EOF | kind create cluster --config=- --name ci-demo-shop-${{ github.sha }}
+          SHORT_SHA="${GITHUB_SHA::8}"
+          cat <<EOF | kind create cluster --config=- --name ci-shop-${SHORT_SHA}
           kind: Cluster
           apiVersion: kind.x-k8s.io/v1alpha4
           nodes:
@@ -124,7 +125,7 @@ jobs:
       - name: Load images into kind
         run: |
           export IMAGE_TAG="ci-demo-${{ github.sha }}"
-          export CLUSTER_NAME="ci-demo-shop-${{ github.sha }}"
+          export CLUSTER_NAME="ci-shop-${GITHUB_SHA::8}"
 
           kind load docker-image order-service:${IMAGE_TAG} --name ${CLUSTER_NAME}
           kind load docker-image inventory-service:${IMAGE_TAG} --name ${CLUSTER_NAME}
@@ -192,7 +193,7 @@ jobs:
       - name: Delete kind cluster
         if: always()
         run: |
-          kind delete cluster --name ci-demo-shop-${{ github.sha }} || true
+          kind delete cluster --name ci-shop-${GITHUB_SHA::8} || true
 
   mirrord-ci:
     name: mirrord CI (GKE - Fast)
@@ -221,7 +222,7 @@ jobs:
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
-          kubectl get ns shop >/dev/null
+          kubectl get deployments -n shop >/dev/null
 
       - name: Build order-service
         working-directory: apps/shop/order-service

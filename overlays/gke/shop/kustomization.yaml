@@ -4,3 +4,4 @@ resources:
   - httproute.yaml
   - healthcheckpolicy.yaml
   - mirrord-policy.yaml
+  - mirrord-ci-rbac.yaml

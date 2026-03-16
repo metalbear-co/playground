@@ -1,0 +1,25 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-service"
+    }
+  },
+  "ci": {
+    "output_dir": "/tmp/mirrord"
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord=mirrord-ci-shop\\b"
+        }
+      },
+      "outgoing": true
+    },
+    "fs": {
+      "mode": "read"
+    }
+  }
+}
