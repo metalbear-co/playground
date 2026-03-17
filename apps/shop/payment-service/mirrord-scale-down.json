@@ -1,0 +1,17 @@
+{
+  "key": "ari",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "payment-service"
+    }
+  },
+"feature": {
+        "network": {
+            "incoming": "steal"
+        },
+        "copy_target": {
+            "scale_down": true
+        }
+    }
+}

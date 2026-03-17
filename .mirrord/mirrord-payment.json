@@ -1,5 +1,5 @@
 {
-  "key": "ari",
+  "operator": true,
   "target": {
     "namespace": "shop",
     "path": {
@@ -7,7 +7,6 @@
     }
   },
   "feature": {
-    
     "network": {
       "outgoing": true
     },

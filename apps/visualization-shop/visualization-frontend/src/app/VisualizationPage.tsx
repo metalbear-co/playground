@@ -251,6 +251,11 @@ type OperatorSession = {
   createdAt: string;
   connectedAt?: string;
   durationSeconds?: number;
+  copyTarget?: {
+    scaleDown: boolean;
+    copyPodName?: string;
+    originalTargetDeployment?: string;
+  };
 };
 
 /**
@@ -320,6 +325,9 @@ type AgentGroup = {
   targetName: string;
   owners: { username: string; hostname: string }[];
   sessions: OperatorSession[];
+  isCopyTarget: boolean;
+  scaleDown: boolean;
+  originalDeployment?: string;
 };
 
 /**
@@ -898,10 +906,19 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           targetName: key,
           owners: [],
           sessions: [],
+          isCopyTarget: false,
+          scaleDown: false,
         });
       }
       const group = map.get(key)!;
       group.sessions.push(session);
+      if (session.copyTarget) {
+        group.isCopyTarget = true;
+        group.scaleDown = session.copyTarget.scaleDown;
+        if (session.copyTarget.originalTargetDeployment) {
+          group.originalDeployment = session.copyTarget.originalTargetDeployment;
+        }
+      }
       if (!group.owners.some((o) => o.hostname === session.owner.hostname)) {
         group.owners.push({
           username: session.owner.username,
@@ -918,16 +935,25 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     return agentGroups.map((group, index) => {
       const agentId = `agent-${sanitizeHostname(group.targetName)}`;
       const isCiRunner = group.owners.every((o) => o.username === "runner");
+      const isCopy = group.isCopyTarget;
+      const copyLabel = isCopy && group.originalDeployment
+        ? `Copy of ${group.originalDeployment}`
+        : isCopy ? "Copy Target" : undefined;
       return {
         id: agentId,
         data: {
           group: "mirrord" as const,
           ciRunner: isCiRunner,
           label: (
-            <div className="flex flex-col gap-1 text-left">
+            <div className={`flex flex-col gap-1 text-left${isCopy ? " mirrord-copy-pulse" : ""}`}>
               <span className="text-sm font-semibold text-slate-900">
                 mirrord Agent
               </span>
+              {copyLabel && (
+                <span className="text-[11px] font-bold uppercase tracking-wide text-[#E66479]">
+                  {copyLabel}
+                </span>
+              )}
               {group.owners.map((owner) => (
                 <div key={owner.hostname} className="flex flex-col">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -949,6 +975,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           boxShadow: isCiRunner ? "0px 30px 60px rgba(13,148,136,0.35)" : "0px 30px 60px rgba(124,58,237,0.35)",
           width: nodeWidth,
           zIndex: 10,
+          ...(isCopy ? { animation: "mirrordCopyPulse 2s ease-in-out infinite" } : {}),
         },
         position: dynamicNodePositions.get(agentId) ?? {
           x: dynamicAgentBasePosition.x,
@@ -1010,8 +1037,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
       });
 
-      // Agent -> Target (skip if a kafka split topic replaces this direct path)
-      if (!kafkaSplitTargets.has(group.targetName)) {
+      // Agent -> Target (skip if a kafka split topic replaces this direct path,
+      // or if this is a copy target — the agent IS the replacement for the original service)
+      if (!kafkaSplitTargets.has(group.targetName) && !group.isCopyTarget) {
         const sessionLabel = group.sessions
           .map((s) => s.sessionId.substring(0, 8))
           .join(", ");
@@ -1476,6 +1504,22 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   }, [sqsQueues]);
 
   const hasShopSessions = agentGroups.length > 0;
+
+  // Set of architecture node IDs whose deployment has been scaled down by a copy target.
+  // These nodes should appear "ghosted" and incoming edges should be redirected to the agent.
+  const scaleDownTargets = useMemo(() => {
+    const targets = new Map<string, string>(); // originalDeployment → agentId
+    for (const group of agentGroups) {
+      if (group.scaleDown && group.originalDeployment) {
+        const archNodeId = aliasIndex.get(group.originalDeployment.toLowerCase());
+        if (archNodeId) {
+          const agentId = `agent-${sanitizeHostname(group.targetName)}`;
+          targets.set(archNodeId, agentId);
+        }
+      }
+    }
+    return targets;
+  }, [agentGroups, aliasIndex]);
 
   // Build a set of static edges to hide when a kafka split topic replaces the direct path.
   // e.g. if a split topic sits between "kafka" and "delivery-service", hide "kafka-to-delivery".
@@ -1974,24 +2018,43 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   // Combine static edges with dynamic agent edges and kafka edges.
   // When multiple kafka topics exist, static local-to-layer and layer-to-agent are replaced
   // by per-topic dynamic local edges.
+  // When a copy target with scale-down is active, redirect producer edges to the agent node.
   const flowEdges = useMemo(() => {
-    const staticEdges = baseEdges.filter((edge) => {
-      if (kafkaReplacedEdges.has(edge.id)) return false;
-      if (sqsReplacedEdges.has(edge.id)) return false;
+    const staticEdges: Edge[] = [];
+    for (const edge of baseEdges) {
+      if (kafkaReplacedEdges.has(edge.id)) continue;
+      if (sqsReplacedEdges.has(edge.id)) continue;
       // Hide static local edges when dynamic local machines replace them
-      if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) return false;
-      if (edge.id === "local-to-layer") return hasShopSessions;
-      if (edge.id === "layer-to-agent") return hasShopSessions;
+      if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) continue;
+      if (edge.id === "local-to-layer" || edge.id === "layer-to-agent") {
+        if (!hasShopSessions) continue;
+        // These edges pass through — skip the SESSION_NODE_IDS filter below
+        staticEdges.push(edge);
+        continue;
+      }
       if (
         SESSION_NODE_IDS.has(edge.source) ||
         SESSION_NODE_IDS.has(edge.target)
       ) {
-        return false;
+        continue;
       }
-      return true;
-    });
+      // Redirect edges targeting a scaled-down service to its copy agent
+      const agentId = scaleDownTargets.get(edge.target);
+      if (agentId) {
+        staticEdges.push({
+          ...edge,
+          id: `${edge.id}-redirected`,
+          target: agentId,
+          targetHandle: `${agentId}-target-left`,
+        });
+        continue;
+      }
+      // Also hide edges whose *source* is a scaled-down target (it's ghosted, no outgoing traffic)
+      if (scaleDownTargets.has(edge.source)) continue;
+      staticEdges.push(edge);
+    }
     return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, sqsReplacedEdges, hasDynamicLocalMachines]);
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, sqsReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
@@ -2082,13 +2145,30 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       })
       .map((node) => {
         const zone = nodeZoneIndex.get(node.id);
+        let mapped = node;
         if (zone === "local" && localYShift > 0) {
-          return {
-            ...node,
-            position: { ...node.position, y: node.position.y + localYShift },
+          mapped = {
+            ...mapped,
+            position: { ...mapped.position, y: mapped.position.y + localYShift },
           };
         }
-        return node;
+        // Ghost nodes whose deployment has been scaled down by a copy target
+        if (scaleDownTargets.has(mapped.id)) {
+          mapped = {
+            ...mapped,
+            style: {
+              ...mapped.style,
+              opacity: 0.25,
+              border: "2px dashed #CBD5E1",
+              filter: "grayscale(100%)",
+            },
+            data: {
+              ...mapped.data,
+              description: mapped.data.description ? `${mapped.data.description} (scaled down)` : "(scaled down)",
+            },
+          };
+        }
+        return mapped;
       });
     nodes.push(...shiftedArchNodes);
     nodes.push(...dynamicAgentNodes);
@@ -2108,7 +2188,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =

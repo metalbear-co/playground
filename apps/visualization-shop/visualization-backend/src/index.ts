@@ -205,6 +205,11 @@ type OperatorSession = {
   createdAt: string;
   connectedAt?: string | undefined;
   durationSeconds?: number | undefined;
+  copyTarget?: {
+    scaleDown: boolean;
+    copyPodName?: string | undefined;
+    originalTargetDeployment?: string | undefined;
+  } | undefined;
 };
 
 type KafkaEphemeralTopic = {
@@ -270,6 +275,7 @@ const fetchOperatorSessions = async (
   kubeConfig: KubeConfig,
 ): Promise<OperatorSession[]> => {
   const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
   const result = await customApi.listClusterCustomObject({
     group: "mirrord.metalbear.co",
     version: "v1alpha",
@@ -280,13 +286,17 @@ const fetchOperatorSessions = async (
   const items = body.items ?? [];
   const now = Date.now();
 
-  return items.map((item) => {
+  const sessions: OperatorSession[] = [];
+
+  for (const item of items) {
     const metadata = (item.metadata ?? {}) as Record<string, unknown>;
     const spec = (item.spec ?? {}) as Record<string, unknown>;
     const status = (item.status ?? {}) as Record<string, unknown>;
     const target = (spec.target ?? {}) as Record<string, unknown>;
     const owner = (spec.owner ?? {}) as Record<string, unknown>;
     const jiraMetrics = (spec.jiraMetrics ?? {}) as Record<string, unknown>;
+    const specCopyTarget = spec.copyTarget as Record<string, unknown> | undefined;
+    const statusCopyTarget = status.copyTarget as Record<string, unknown> | undefined;
 
     const createdAt =
       (metadata.creationTimestamp as string) ?? new Date().toISOString();
@@ -295,7 +305,29 @@ const fetchOperatorSessions = async (
     const createdMs = new Date(createdAt).getTime();
     const durationSeconds = Math.floor((now - createdMs) / 1000);
 
-    return {
+    let copyTarget: OperatorSession["copyTarget"];
+    if (specCopyTarget) {
+      const copyPodName = (statusCopyTarget?.name as string) ?? (target.name as string);
+      const ns = (spec.namespace as string) ?? "default";
+      let originalTargetDeployment: string | undefined;
+      try {
+        const pod = await coreApi.readNamespacedPod({ name: copyPodName, namespace: ns });
+        const annotation = pod?.metadata?.annotations?.["operator.metalbear.co/copy-target-state"];
+        if (annotation) {
+          const parsed = JSON.parse(annotation);
+          originalTargetDeployment = parsed?.spec?.target?.deployment as string | undefined;
+        }
+      } catch (err) {
+        console.warn(`Failed to read copy pod ${copyPodName} in ${ns}:`, (err as Error).message ?? err);
+      }
+      copyTarget = {
+        scaleDown: Boolean(specCopyTarget.scaledown),
+        copyPodName,
+        originalTargetDeployment,
+      };
+    }
+
+    sessions.push({
       sessionId: (metadata.name as string) ?? "unknown",
       target: {
         kind: (target.kind as string) ?? "Unknown",
@@ -315,8 +347,11 @@ const fetchOperatorSessions = async (
       durationSeconds: Number.isFinite(durationSeconds)
         ? durationSeconds
         : undefined,
-    };
-  });
+      copyTarget,
+    });
+  }
+
+  return sessions;
 };
 
 /**

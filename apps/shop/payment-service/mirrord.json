@@ -1,12 +1,18 @@
 {
-  "target": "deployment/payment-service",
-  "feature": {
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "payment-service"
+    }
+  },
+  "feature": { 
+    "network": {
+      "outgoing": true
+    },
     "split_queues": {
       "payments": {
         "queue_type": "SQS",
-        "message_filter": {
-          "x-pg-tenant": "dev"
-        }
+        "jq_filter": ".Body | fromjson | .customer_email | test(\"metalbear\\\\.com\")"
       }
     }
   }
