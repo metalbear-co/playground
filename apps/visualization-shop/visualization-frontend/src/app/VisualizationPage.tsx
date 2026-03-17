@@ -762,6 +762,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
       {isDynamicAgent && (
         <>
           <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="target" position={Position.Top} id={`${id}-target-top`} style={handleStyle} />
           <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
         </>
       )}
@@ -2045,7 +2046,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           ...edge,
           id: `${edge.id}-redirected`,
           target: agentId,
-          targetHandle: `${agentId}-target-left`,
+          targetHandle: `${agentId}-target-top`,
         });
         continue;
       }
