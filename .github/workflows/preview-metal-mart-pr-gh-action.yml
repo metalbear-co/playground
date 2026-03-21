@@ -3,10 +3,9 @@
 # Uses the metalbear-co/mirrord-preview GitHub Action instead of manual CLI install.
 # Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT secrets, mirrord operator with Enterprise license.
 # Runs on any PR to any branch.
-name: Preview Environment - Metal Mart (PR) v2
+name: Preview Environment - Metal Mart (PR) GH
 
 on:
-  workflow_dispatch:
   pull_request:
     types: [opened,closed]
 
