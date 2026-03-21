@@ -7,7 +7,7 @@ name: Preview Environment - Metal Mart (PR) GH
 
 on:
   pull_request:
-    types: [opened,closed]
+    types: [opened,reopened,closed]
 
 concurrency:
   group: preview-metal-mart-${{ github.event.pull_request.number }}
