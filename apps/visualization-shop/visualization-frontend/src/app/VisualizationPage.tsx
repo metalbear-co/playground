@@ -682,14 +682,14 @@ const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
       boxSizing: "border-box",
     }}
   >
-    <div>
+    <div className={data.description ? "" : "text-center"}>
       <p
         className="text-xs font-bold uppercase tracking-[0.2em]"
         style={{ color: data.border }}
       >
         {data.label}
       </p>
-      <p className="mt-1 text-[13px] text-[#374151]">{data.description}</p>
+      {data.description && <p className="mt-1 text-[13px] text-[#374151]">{data.description}</p>}
     </div>
     <span
       className="h-1 w-12 rounded-full"
@@ -756,6 +756,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="target" position={Position.Top} id="operator-target-top" style={handleStyle} />
           <Handle type="target" position={Position.Bottom} id="operator-target-bottom" style={handleStyle} />
           <Handle type="source" position={Position.Right} id="operator-source-right" style={handleStyle} />
+          <Handle type="source" position={Position.Top} id="operator-source-top" style={handleStyle} />
           <Handle type="source" position={Position.Bottom} id="operator-source-bottom" style={handleStyle} />
         </>
       )}
@@ -811,7 +812,9 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
       {isDynamicPreview && (
         <>
           <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="target" position={Position.Bottom} id={`${id}-target-bottom`} style={handleStyle} />
           <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
+          <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
         </>
       )}
       {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview) ? (
@@ -1903,62 +1906,149 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   }, [pgBranches]);
 
   // Build dynamic nodes for PreviewSession resources.
+  // Group preview sessions by key so sessions sharing a key are positioned together.
   const previewSessionNodes = useMemo((): Node<NodeData>[] => {
     if (previewSessions.length === 0) return [];
     const palette = groupPalette.mirrord;
     const operatorPos = adjustedNodes.find((n) => n.id === "mirrord-operator")?.position ?? { x: 0, y: 0 };
 
-    return previewSessions.map((session, index) => {
-      const nodeId = `preview-${sanitizeHostname(session.name)}`;
-      const phaseColor = session.phase === "Ready" ? "text-green-600" : session.phase === "Failed" ? "text-red-600" : "text-yellow-600";
+    // Group sessions by key
+    const keyGroups = new Map<string, typeof previewSessions>();
+    for (const session of previewSessions) {
+      const group = keyGroups.get(session.key) ?? [];
+      group.push(session);
+      keyGroups.set(session.key, group);
+    }
 
-      return {
-        id: nodeId,
-        type: "mirrord",
-        data: {
-          group: "mirrord" as const,
-          label: (
-            <div className="flex flex-col gap-1 text-left">
-              <span className="text-sm font-semibold text-slate-900">
-                Preview Pod
-              </span>
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {session.target.name}
-              </span>
-              {session.podName && (
-                <p className="text-[11px] text-slate-500 break-all">
-                  {session.podName}
+    const nodes: Node<NodeData>[] = [];
+    const groupPadding = 40;
+    let groupIndex = 0;
+
+    for (const [, sessions] of keyGroups) {
+      const isGrouped = sessions.length > 1;
+
+      sessions.forEach((session, indexInGroup) => {
+        const nodeId = `preview-${sanitizeHostname(session.name)}`;
+        const phaseColor = session.phase === "Ready" ? "text-green-600" : session.phase === "Failed" ? "text-red-600" : "text-yellow-600";
+
+        // Position preview pods at operator's Y; operator gets shifted down in flowNodes
+        const baseX = operatorPos.x - 40;
+        const baseY = operatorPos.y + groupIndex * (nodeHeight + 60);
+        const position = dynamicNodePositions.get(nodeId) ?? {
+          x: isGrouped ? baseX + groupPadding + indexInGroup * (nodeWidth + 30) : baseX,
+          y: isGrouped ? baseY : baseY,
+        };
+
+        nodes.push({
+          id: nodeId,
+          type: "mirrord",
+          data: {
+            group: "mirrord" as const,
+            label: (
+              <div className="flex flex-col gap-1 text-left">
+                <span className="text-sm font-semibold text-slate-900">
+                  Preview Pod
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {session.target.name}
+                </span>
+                {session.podName && (
+                  <p className="text-[11px] text-slate-500 break-all">
+                    {session.podName}
+                  </p>
+                )}
+                <p className="text-xs leading-snug text-slate-600">
+                  Key: <span className="font-semibold">{session.key}</span>
                 </p>
-              )}
-              <p className="text-xs leading-snug text-slate-600">
-                Key: <span className="font-semibold">{session.key}</span>
-              </p>
-              <p className={`text-[11px] font-medium ${phaseColor}`}>
-                {session.phase}{session.failureMessage ? ` — ${session.failureMessage}` : ""}
-              </p>
-            </div>
-          ),
+                <p className={`text-[11px] font-medium ${phaseColor}`}>
+                  {session.phase}{session.failureMessage ? ` — ${session.failureMessage}` : ""}
+                </p>
+              </div>
+            ),
+          },
+          position,
+          style: {
+            borderRadius: 18,
+            backgroundColor: "transparent",
+            color: palette.text,
+            boxShadow: "0px 30px 60px rgba(14,165,233,0.25)",
+            width: nodeWidth,
+            zIndex: 10,
+          },
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          connectable: false,
+          draggable: true,
+          selectable: true,
+        });
+      });
+
+      groupIndex++;
+    }
+
+    return nodes;
+  }, [previewSessions, dynamicNodePositions]);
+
+  // Build zone overlay nodes for preview session groups (sessions sharing the same key).
+  const previewSessionZoneNodes = useMemo((): ClusterZoneNode[] => {
+    if (previewSessions.length === 0) return [];
+
+    // Group sessions by key
+    const keyGroups = new Map<string, typeof previewSessions>();
+    for (const session of previewSessions) {
+      const group = keyGroups.get(session.key) ?? [];
+      group.push(session);
+      keyGroups.set(session.key, group);
+    }
+
+    const zones: ClusterZoneNode[] = [];
+    const padding = 30;
+
+    for (const [key, sessions] of keyGroups) {
+      if (sessions.length < 2) continue;
+
+      // Find the preview nodes belonging to this group
+      const memberNodeIds = sessions.map((s) => `preview-${sanitizeHostname(s.name)}`);
+      const memberNodes = previewSessionNodes.filter((n) => memberNodeIds.includes(n.id));
+      if (memberNodes.length < 2) continue;
+
+      const xs = memberNodes.map((n) => n.position.x);
+      const ys = memberNodes.map((n) => n.position.y);
+      const maxXs = memberNodes.map((n) => n.position.x + nodeWidth);
+      const maxYs = memberNodes.map((n) => n.position.y + nodeHeight);
+
+      const zoneWidth = Math.max(...maxXs) - Math.min(...xs) + padding * 2;
+      const zoneHeight = Math.max(...maxYs) - Math.min(...ys) + padding * 2 + 20; // extra space for key label
+
+      zones.push({
+        id: `zone-preview-${sanitizeHostname(key)}`,
+        type: "zone",
+        position: {
+          x: Math.min(...xs) - padding,
+          y: Math.min(...ys) - padding - 20, // offset up for key label
         },
-        position: dynamicNodePositions.get(nodeId) ?? {
-          x: operatorPos.x + nodeWidth + 80,
-          y: operatorPos.y + (index + 1) * (nodeHeight + 40),
+        data: {
+          label: `Environment name -  ${key}`,
+          description: "",
+          background: "rgba(191, 219, 254, 0.25)",
+          border: "#3B82F6",
+          accent: "#2563EB",
+          zoneWidth,
+          zoneHeight,
         },
         style: {
-          borderRadius: 18,
-          backgroundColor: "transparent",
-          color: palette.text,
-          boxShadow: "0px 30px 60px rgba(14,165,233,0.25)",
-          width: nodeWidth,
-          zIndex: 10,
+          width: zoneWidth,
+          height: zoneHeight,
+          zIndex: 2,
+          pointerEvents: "none",
         },
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
-        connectable: false,
-        draggable: true,
-        selectable: true,
-      };
-    });
-  }, [previewSessions, dynamicNodePositions]);
+        draggable: false,
+        selectable: false,
+      });
+    }
+
+    return zones;
+  }, [previewSessions, previewSessionNodes]);
 
   // Build dynamic edges for PreviewSession nodes: operator → preview pod, operator → target service.
   const previewSessionEdges = useMemo((): Edge[] => {
@@ -1981,8 +2071,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         target: nodeId,
         label: "Preview pod",
         type: "bezier",
-        sourceHandle: "operator-source-right",
-        targetHandle: `${nodeId}-target-left`,
+        sourceHandle: "operator-source-top",
+        targetHandle: `${nodeId}-target-bottom`,
         animated: true,
         markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
         style: {
@@ -2001,7 +2091,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           target: targetArchNodeId,
           label: "Target service",
           type: "bezier",
-          sourceHandle: `${nodeId}-source-right`,
+          sourceHandle: `${nodeId}-source-top`,
           animated: true,
           markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
           style: {
@@ -2062,9 +2152,24 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     if (!clusterZoneNode) return null;
     if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
 
+    // Compute operator shift to account for preview pods placed above it
+    const operatorPreviewShift = previewSessionNodes.length > 0
+      ? (() => {
+          const previewMaxY = Math.max(...previewSessionNodes.map((n) => n.position.y)) + nodeHeight;
+          const opPos = adjustedNodes.find((n) => n.id === "mirrord-operator")?.position;
+          if (!opPos) return 0;
+          return Math.max(0, previewMaxY - opPos.y + 180);
+        })()
+      : 0;
+
     const clusterStaticNodes = adjustedNodes.filter((n) => {
       const zone = nodeZoneIndex.get(n.id);
       return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
+    }).map((n) => {
+      if (n.id === "mirrord-operator" && operatorPreviewShift > 0) {
+        return { ...n, position: { ...n.position, y: n.position.y + operatorPreviewShift } };
+      }
+      return n;
     });
     const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...pgBranchNodes, ...previewSessionNodes];
     const padding = 48;
@@ -2072,6 +2177,14 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     const ys = allClusterNodes.map((n) => n.position.y);
     const maxXs = allClusterNodes.map((n) => n.position.x + nodeWidth);
     const maxYs = allClusterNodes.map((n) => n.position.y + nodeHeight);
+
+    // Include preview session zone boxes in the bounds calculation
+    for (const zone of previewSessionZoneNodes) {
+      xs.push(zone.position.x);
+      ys.push(zone.position.y);
+      maxXs.push(zone.position.x + (zone.data as ZoneNodeData).zoneWidth);
+      maxYs.push(zone.position.y + (zone.data as ZoneNodeData).zoneHeight);
+    }
 
     const newWidth = Math.max(...maxXs) - Math.min(...xs) + padding * 2;
     const newHeight = Math.max(...maxYs) - Math.min(...ys) + padding * 2;
@@ -2092,7 +2205,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -2135,6 +2248,17 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     }
     // Shift local architecture nodes down by the same amount
     // When multiple kafka topics exist, hide static local nodes (replaced by dynamic ones)
+    // Compute how much to shift the operator down to make room for preview session nodes above it
+    const operatorPreviewShift = previewSessionNodes.length > 0
+      ? (() => {
+          const previewMaxY = Math.max(...previewSessionNodes.map((n) => n.position.y)) + nodeHeight;
+          const operatorPos = visibleArchitectureNodes.find((n) => n.id === "mirrord-operator")?.position;
+          if (!operatorPos) return 0;
+          const overlap = previewMaxY - operatorPos.y + 180; // 180px gap
+          return Math.max(0, overlap);
+        })()
+      : 0;
+
     const shiftedArchNodes = visibleArchitectureNodes
       .filter((node) => {
         if (hasDynamicLocalMachines && (node.id === "local-process" || node.id === "mirrord-layer")) {
@@ -2147,6 +2271,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       .map((node) => {
         const zone = nodeZoneIndex.get(node.id);
         let mapped = node;
+        // Shift operator down to make room for preview pods
+        if (mapped.id === "mirrord-operator" && operatorPreviewShift > 0) {
+          mapped = {
+            ...mapped,
+            position: { ...mapped.position, y: mapped.position.y + operatorPreviewShift },
+          };
+        }
         if (zone === "local" && localYShift > 0) {
           mapped = {
             ...mapped,
@@ -2176,6 +2307,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     nodes.push(...kafkaTopicNodes);
     nodes.push(...sqsQueueNodes);
     nodes.push(...pgBranchNodes);
+    nodes.push(...previewSessionZoneNodes);
     nodes.push(...previewSessionNodes);
     // Add dynamic local machine nodes with localYShift applied
     if (hasDynamicLocalMachines) {
@@ -2189,7 +2321,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -2292,6 +2424,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         return;
       }
       const body = (await response.json()) as Partial<OperatorStatusResponse>;
+      console.log("Operator status response:", body);
       if (isMountedRef.current) {
         setOperatorSessions(body.sessions ?? []);
         setKafkaTopics(body.kafkaTopics ?? []);
