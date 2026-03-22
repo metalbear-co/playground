@@ -1,5 +1,5 @@
 {
-  "key": "ari",
+  "key": "baggage:mirrord=ari",
   "target": {
     "namespace": "shop",
     "path": {
