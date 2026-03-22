@@ -30,28 +30,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Detect path changes
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            metal-mart-frontend:
-              - 'apps/shop/metal-mart-frontend/**'
-            order-service:
-              - 'apps/shop/order-service/**'
-            delivery-service:
-              - 'apps/shop/delivery-service/**'
-            inventory-service:
-              - 'apps/shop/inventory-service/**'
-            payment-service:
-              - 'apps/shop/payment-service/**'
-            receipt-service:
-              - 'apps/shop/receipt-service/**'
-
-      - name: Build matrix from changed services
+      - name: Detect changed services via git diff
         id: build-matrix
         run: |
-          CHANGES='${{ steps.filter.outputs.changes }}'
+          git fetch origin ${{ github.base_ref }} --depth=1
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          CHANGES='[]'
+          for path in $(jq -r '.services[].path' .github/preview-services.json); do
+            name=$(jq -r --arg p "$path" '.services[] | select(.path == $p) | .name' .github/preview-services.json)
+            if echo "$CHANGED_FILES" | grep -q "^${path}/"; then
+              CHANGES=$(echo "$CHANGES" | jq -c --arg n "$name" '. + [$n]')
+            fi
+          done
           MATRIX=$(jq -c --argjson changes "$CHANGES" \
             '{include: [.services[] | select(.name as $n | $changes | index($n))]}' \
             .github/preview-services.json)
