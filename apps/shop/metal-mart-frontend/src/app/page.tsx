@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
 import ProductImage from "@/components/ProductImage";
+import ProductDialog from "@/components/ProductDialog";
 import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -15,23 +16,24 @@ function ProductTile({
   variant,
   delay = 0,
   elevated = false,
+  onSelect,
 }: {
   product: Product;
   variant: "featured" | "standard" | "wide";
   delay?: number;
-  /** Above mascot on home page so card stays opaque */
   elevated?: boolean;
+  onSelect: (product: Product) => void;
 }) {
-  const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
 
   const elevatedClass = elevated ? "relative z-30" : "";
 
   if (variant === "featured") {
     return (
-      <Link
-        href={href}
-        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
+      <button
+        type="button"
+        onClick={() => onSelect(product)}
+        className={`group relative flex h-full min-h-[280px] w-full flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
@@ -60,15 +62,16 @@ function ProductTile({
             Shop now →
           </span>
         </div>
-      </Link>
+      </button>
     );
   }
 
   if (variant === "wide") {
     return (
-      <Link
-        href={href}
-        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
+      <button
+        type="button"
+        onClick={() => onSelect(product)}
+        className={`group relative flex w-full flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
@@ -98,15 +101,16 @@ function ProductTile({
             </p>
           )}
         </div>
-      </Link>
+      </button>
     );
   }
 
   // standard
   return (
-    <Link
-      href={href}
-      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
+    <button
+      type="button"
+      onClick={() => onSelect(product)}
+      className={`group relative flex w-full flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
@@ -131,7 +135,7 @@ function ProductTile({
         </h2>
         <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
       </div>
-    </Link>
+    </button>
   );
 }
 
@@ -139,6 +143,7 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     fetch(`${basePath}/api/products`)
@@ -207,7 +212,7 @@ export default function Home() {
                           : ""
                       }
                     >
-                      <ProductTile product={featured} variant="featured" delay={0} elevated />
+                      <ProductTile product={featured} variant="featured" delay={0} elevated onSelect={setSelectedProduct} />
                     </div>
                   )}
                   {/* Side tiles - products 2 and 3 stacked on the right (or single tile spans 2 rows) */}
@@ -215,18 +220,18 @@ export default function Home() {
                     <div
                       className={`md:col-span-2 ${rest[1] ? "md:row-span-1" : "md:row-span-2"}`}
                     >
-                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated />
+                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated onSelect={setSelectedProduct} />
                     </div>
                   )}
                   {rest[1] && (
                     <div className="md:col-span-2 md:row-span-1">
-                      <ProductTile product={rest[1]} variant="standard" delay={0.12} elevated />
+                      <ProductTile product={rest[1]} variant="standard" delay={0.12} elevated onSelect={setSelectedProduct} />
                     </div>
                   )}
                   {/* Bottom row - product 4 as wide horizontal tile */}
                   {rest[2] && (
                     <div className="md:col-span-4">
-                      <ProductTile product={rest[2]} variant="wide" delay={0.18} elevated />
+                      <ProductTile product={rest[2]} variant="wide" delay={0.18} elevated onSelect={setSelectedProduct} />
                     </div>
                   )}
                   {/* Products 5+ in a grid */}
@@ -239,6 +244,7 @@ export default function Home() {
                           variant="standard"
                           delay={0.24 + i * 0.06}
                           elevated
+                          onSelect={setSelectedProduct}
                         />
                       ))}
                     </div>
@@ -268,6 +274,13 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      {selectedProduct && (
+        <ProductDialog
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
     </div>
   );
 }
