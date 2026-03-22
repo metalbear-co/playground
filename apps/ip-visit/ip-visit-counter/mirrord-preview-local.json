@@ -1,0 +1,21 @@
+{
+  "target": {
+    "path": "deployment/ip-visit-counter",
+    "namespace": "ip-visit-counter"
+  },
+  "feature": {
+    "preview": {
+      "image": "ghcr.io/metalbear-co/playground-ip-visit-counter:preview-demo",
+      "ttl_mins": 120,
+      "creation_timeout_secs": 600
+    },
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "X-PG-Tenant: {{ key }}"
+        }
+      }
+    }
+  }
+}
