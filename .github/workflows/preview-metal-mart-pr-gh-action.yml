@@ -6,8 +6,7 @@
 name: Preview Environment - Metal Mart (PR) GH
 
 on:
-  pull_request:
-    types: [opened,reopened,closed]
+  workflow_dispatch: # Disabled: replaced by preview-shop-pr.yml
 
 concurrency:
   group: preview-metal-mart-${{ github.event.pull_request.number }}

@@ -1,0 +1,46 @@
+{
+  "services": [
+    {
+      "name": "metal-mart-frontend",
+      "path": "apps/shop/metal-mart-frontend",
+      "deployment": "metal-mart-frontend",
+      "namespace": "shop",
+      "build_args": "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxas4fpir"
+    },
+    {
+      "name": "order-service",
+      "path": "apps/shop/order-service",
+      "deployment": "order-service",
+      "namespace": "shop",
+      "build_args": ""
+    },
+    {
+      "name": "delivery-service",
+      "path": "apps/shop/delivery-service",
+      "deployment": "delivery-service",
+      "namespace": "shop",
+      "build_args": ""
+    },
+    {
+      "name": "inventory-service",
+      "path": "apps/shop/inventory-service",
+      "deployment": "inventory-service",
+      "namespace": "shop",
+      "build_args": ""
+    },
+    {
+      "name": "payment-service",
+      "path": "apps/shop/payment-service",
+      "deployment": "payment-service",
+      "namespace": "shop",
+      "build_args": ""
+    },
+    {
+      "name": "receipt-service",
+      "path": "apps/shop/receipt-service",
+      "deployment": "receipt-service",
+      "namespace": "shop",
+      "build_args": ""
+    }
+  ]
+}
