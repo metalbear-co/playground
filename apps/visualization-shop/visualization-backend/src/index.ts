@@ -905,17 +905,6 @@ const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
   pgBranches: [],
   previewSessions: [
     {
-      name: "preview-session-deployment-metal-mart-frontend-11cf356f",
-      namespace: "shop",
-      key: "redesign",
-      target: { kind: "Deployment", name: "metal-mart-frontend", container: "main" },
-      image: "ghcr.io/metalbear-co/metalmart-redesign:latest",
-      ttlSecs: 300,
-      phase: "Ready",
-      podName: "preview-pod-deployment-metal-mart-frontend-11cf356f",
-      startedAt: "2026-02-25T12:17:31.405462Z",
-    },
-    {
       name: "preview-session-deployment-metal-mart-frontend-4c0c7e57",
       namespace: "shop",
       key: "demo-gh-env",
