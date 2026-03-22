@@ -80,6 +80,14 @@ jobs:
           filter: 'baggage:\s*[^\n]*\bmirrord={{ key }}\b'
           ttl_mins: '120'
           key: ${{ env.PREVIEW_KEY }}
+          extra_config: |
+            {
+              "feature": {
+                "preview": {
+                  "creation_timeout_secs": 600
+                }
+              }
+            }
 
       - name: Post PR comment with preview link and header
         uses: actions/github-script@v7
