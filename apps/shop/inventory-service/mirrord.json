@@ -1,4 +1,5 @@
 {
+  "key":"ari",
   "target": {
     "path": "deploy/inventory-service",
     "namespace": "shop"
@@ -8,27 +9,10 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "X-PG-Tenant: dev"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
         }
       },
       "outgoing": true
-    },
-    "db_branches": [
-      {
-        "id": "metal-mart-dev",
-        "type": "pg",
-        "version": "16",
-        "ttl_secs": 30,   
-        "connection": {
-          "url": {
-            "type": "env",
-            "variable": "DATABASE_URL"
-          }
-        },
-      "copy": {
-        "mode": "schema"                   
-      }
-      }
-    ]
+    }
   }
 }
