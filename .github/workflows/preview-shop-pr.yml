@@ -29,11 +29,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect changed services via git diff
         id: build-matrix
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
           CHANGES='[]'
           for path in $(jq -r '.services[].path' .github/preview-services.json); do
