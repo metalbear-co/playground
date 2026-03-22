@@ -1,4 +1,5 @@
 {
+  "key":"ari",
   "target": {
     "namespace": "shop",
     "path": {
@@ -11,7 +12,7 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "X-PG-Tenant: Ari"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
         }
       },
       "outgoing":true

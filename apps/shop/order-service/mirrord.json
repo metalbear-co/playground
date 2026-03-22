@@ -1,10 +1,19 @@
 {
-  "target": {"namespace": "shop", "path": {"deployment": "order-service"}},
+   "key":"ari",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-service"
+    }
+  },
   "feature": {
-    "fs": "read",
-    "env": true,
     "network": {
-      "incoming": {"mode": "mirror", "http_filter": {"header_filter": "X-PG-Tenant: dev"}},
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
+        }
+      },
       "outgoing": true
     }
   }
