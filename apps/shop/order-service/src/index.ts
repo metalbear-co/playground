@@ -213,7 +213,7 @@ async function createOrderDirect(
     tenant,
   });
 
-  return { orderId, status: "confirmed" };
+  return { orderId, status: "confirmed Liron" };
 }
 
 app.post("/orders", async (req, res) => {
