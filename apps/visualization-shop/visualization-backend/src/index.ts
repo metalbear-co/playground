@@ -919,7 +919,7 @@ const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
       name: "preview-session-deployment-order-service-53b43acb",
       namespace: "shop",
       key: "demo-gh-env",
-      target: { kind: "Deployment", name: "order-service", container: "main" },
+      target: { kind: "Deployment", name: "payment-service", container: "main" },
       image: "ghcr.io/metalbear-co/playground-order-service:preview-demo-gh-env-42f9da14b055016b0796534c4d320eb95df08dd5",
       ttlSecs: 7200,
       phase: "Ready",
