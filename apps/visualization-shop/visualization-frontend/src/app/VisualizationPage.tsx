@@ -2262,12 +2262,22 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       }));
       nodes.push(...shiftedDynamicLocalZones);
     } else if (localZoneNode) {
+      // When a single session exists, append the owner's name to the zone label
+      const singleShopSession = !hasDynamicLocalMachines
+        ? operatorSessions.find((s) => s.namespace === "shop")
+        : undefined;
       const shifted = {
         ...localZoneNode,
         position: {
           ...localZoneNode.position,
           y: localZoneNode.position.y + localYShift,
         },
+        ...(singleShopSession && {
+          data: {
+            ...localZoneNode.data,
+            label: `Local Machine – ${singleShopSession.owner.username}`,
+          },
+        }),
       };
       nodes.push(shifted);
     }
@@ -2277,6 +2287,17 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     const operatorBottomShift = sortedAgentGroups.length > 0
       ? (sortedAgentGroups.length - 1) * DYNAMIC_AGENT_SPACING_Y
       : 0;
+
+    // Resolve owner info for single-session local-process node
+    const singleSessionOwner = (() => {
+      if (hasDynamicLocalMachines) return undefined;
+      const session = operatorSessions.find((s) => s.namespace === "shop");
+      if (!session) return undefined;
+      const owner = session.owner;
+      return owner.username === "runner"
+        ? "mirrord CI"
+        : `${owner.username} (${owner.hostname})`;
+    })();
 
     const shiftedArchNodes = visibleArchitectureNodes
       .filter((node) => {
@@ -2290,6 +2311,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       .map((node) => {
         const zone = nodeZoneIndex.get(node.id);
         let mapped = node;
+        // Show session owner on the local-process node when a single session is active
+        if (mapped.id === "local-process" && singleSessionOwner) {
+          mapped = {
+            ...mapped,
+            data: { ...mapped.data, description: singleSessionOwner },
+          };
+        }
         // Push operator to the bottom, aligned with the last agent
         if (mapped.id === "mirrord-operator" && operatorBottomShift > 0) {
           mapped = {
@@ -2340,7 +2368,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, operatorSessions]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =

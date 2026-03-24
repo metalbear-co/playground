@@ -1111,31 +1111,35 @@ const resolvePgBranchConnection = async (
   const user =
     envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
 
-  // Get the database name from the branch pod's POSTGRES_DB env.
-  // If not set, connect to the default "postgres" database and discover
-  // the actual user database (mirrord copies data using the original DB name).
-  let dbName =
-    envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? undefined;
+  // Discover the actual user database name by querying the branch pod.
+  // We always run the discovery query rather than trusting POSTGRES_DB, because
+  // the pod may set POSTGRES_DB to "postgres" (the Docker default) while the
+  // branched data lives in a separate database (e.g. "orders").
+  const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
+  const discoverPool = new pg.Pool({
+    connectionString: discoverUrl,
+    max: 1,
+    connectionTimeoutMillis: 10000,
+  });
+  let dbName: string | undefined;
+  try {
+    const result = await discoverPool.query(
+      `SELECT datname FROM pg_database
+       WHERE datistemplate = false AND datname != 'postgres'
+       ORDER BY datname LIMIT 1`,
+    );
+    dbName = result.rows[0]?.datname;
+  } catch {
+    // Pod may still be starting — return undefined so the caller retries
+    // on the next request instead of caching a wrong fallback.
+    return undefined;
+  } finally {
+    discoverPool.end().catch(() => {});
+  }
 
   if (!dbName) {
-    const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
-    const discoverPool = new pg.Pool({
-      connectionString: discoverUrl,
-      max: 1,
-      connectionTimeoutMillis: 10000,
-    });
-    try {
-      const result = await discoverPool.query(
-        `SELECT datname FROM pg_database
-         WHERE datistemplate = false AND datname != 'postgres'
-         ORDER BY datname LIMIT 1`,
-      );
-      dbName = result.rows[0]?.datname ?? "postgres";
-    } catch {
-      dbName = "postgres";
-    } finally {
-      discoverPool.end().catch(() => {});
-    }
+    // No user database found yet (schema copy may still be in progress)
+    return undefined;
   }
 
   const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
