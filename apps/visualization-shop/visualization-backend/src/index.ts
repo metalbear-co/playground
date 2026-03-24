@@ -535,14 +535,12 @@ const sanitizeHostname = (raw: string): string =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-const refreshDynamicPgConnections = (branches: PgBranchDatabase[]) => {
+const refreshDynamicPgConnections = (_branches: PgBranchDatabase[]) => {
+  // Clear cached connections so the next "View Data" click always goes through
+  // resolvePgBranchConnection(), which discovers the correct database name from
+  // the branch pod instead of relying on the CRD's connectionUrl (which may
+  // omit or default the database name, causing queries to hit the wrong DB).
   dynamicPgConnections.clear();
-  for (const branch of branches) {
-    if (branch.connectionUrl) {
-      const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
-      dynamicPgConnections.set(nodeId, branch.connectionUrl);
-    }
-  }
 };
 
 /**
