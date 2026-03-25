@@ -212,7 +212,7 @@ async function createOrderDirect(
   await sqsClient.send(
     new SendMessageCommand({
       QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ orderId, amount: totalCents, items, customer_email: customer_email ?? null, jwt: token }),
+      MessageBody: JSON.stringify({ jwt: token }),
     })
   );
 
