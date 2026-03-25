@@ -12,6 +12,7 @@ import {
   Position,
   ReactFlow,
   applyNodeChanges,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeChange,
@@ -46,6 +47,8 @@ type NodeData = {
   repoPath?: string;
   highlight?: boolean;
   ciRunner?: boolean;
+  /** When true, render data.label directly instead of looking up static architectureNodes info */
+  focusedCombined?: boolean;
 };
 
 /** Module-level ref so ArchitectureNode (defined outside the component) can open the DB dialog. */
@@ -678,7 +681,7 @@ const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
       width: data.zoneWidth,
       height: data.zoneHeight,
       borderColor: data.border,
-      background: data.background,
+      backgroundColor: data.background,
       color: "#0F172A",
       boxSizing: "border-box",
     }}
@@ -732,7 +735,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
       className="flex h-full w-full flex-col justify-between whitespace-normal rounded-[18px] border border-solid px-4 py-4 text-left shadow-md"
       style={{
         border: `${borderWidth}px solid ${borderColor}`,
-        background: palette.background,
+        backgroundColor: palette.background,
         color: palette.text,
       }}
     >
@@ -819,7 +822,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
         </>
       )}
-      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview) ? (
+      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || data.focusedCombined) ? (
         data.label
       ) : (
         <div className="flex flex-col gap-0.5 text-left">
@@ -841,6 +844,48 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
     </div>
   );
 };
+
+/**
+ * Type representing an active focused session in the visualization.
+ */
+type FocusedSession = {
+  targetName: string;
+  agentId: string;
+  ownerUsername: string;
+  ownerHostname: string;
+};
+
+/**
+ * Inner component rendered inside <ReactFlow> to programmatically fit the view
+ * to the focused node set whenever the focused session changes.
+ */
+function FocusedFitView({ visibleNodeIds }: { visibleNodeIds: string[] | null }) {
+  const { fitView } = useReactFlow();
+  const prevKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!visibleNodeIds || visibleNodeIds.length === 0) {
+      // Focused mode closed — reset to full graph view
+      if (prevKeyRef.current !== null) {
+        prevKeyRef.current = null;
+        setTimeout(() => fitView({ padding: 0.1, duration: 700 }), 50);
+      }
+      return;
+    }
+    const key = [...visibleNodeIds].sort().join(",");
+    if (key === prevKeyRef.current) return;
+    prevKeyRef.current = key;
+    setTimeout(() => {
+      fitView({
+        nodes: visibleNodeIds.map((id) => ({ id })),
+        padding: 0.25,
+        duration: 700,
+      });
+    }, 50);
+  }, [visibleNodeIds, fitView]);
+
+  return null;
+}
 
 // Legend entries rendered in the top-left panel.
 const legendItems = [
@@ -891,6 +936,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     Map<string, { x: number; y: number }>
   >(() => new Map());
   const [dbDialogId, setDbDialogId] = useState<string | null>(null);
+  const [focusedSession, setFocusedSession] = useState<FocusedSession | null>(null);
+  const [focusedMode, setFocusedMode] = useState<"mirror" | "steal">("mirror");
 
   // Keep the module-level ref in sync so ArchitectureNode can open the dialog.
   useEffect(() => {
@@ -1027,6 +1074,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           boxShadow: isCiRunner ? "0px 30px 60px rgba(13,148,136,0.35)" : "0px 30px 60px rgba(124,58,237,0.35)",
           width: nodeWidth,
           zIndex: 10,
+          cursor: "pointer",
           ...(isCopy ? { animation: "mirrordCopyPulse 2s ease-in-out infinite" } : {}),
         },
         position: dynamicNodePositions.get(agentId) ?? {
@@ -1639,6 +1687,100 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   }, [kafkaTopics, operatorSessions, hasMultipleKafkaTopics]);
 
   const hasDynamicLocalMachines = localMachineEntries.length > 1;
+
+  /**
+   * Derive which nodes are relevant to the focused session so we can dim everything else.
+   * Returns null when no session is focused.
+   */
+  const focusedViewData = useMemo(() => {
+    if (!focusedSession) return null;
+    const targetArchId = aliasIndex.get(focusedSession.targetName.toLowerCase());
+    if (!targetArchId) return null;
+
+    const upstreamIds = new Set<string>();
+    const downstreamIds = new Set<string>();
+    for (const edge of architectureEdges) {
+      if (edge.target === targetArchId) upstreamIds.add(edge.source);
+      if (edge.source === targetArchId) downstreamIds.add(edge.target);
+    }
+
+    const localIndex = hasDynamicLocalMachines
+      ? localMachineEntries.findIndex((e) => e.hostname === focusedSession.ownerHostname)
+      : -1;
+    const localId = localIndex >= 0 ? `dynamic-local-${localIndex}` : "local-process";
+    const layerId = localIndex >= 0 ? `dynamic-layer-${localIndex}` : "mirrord-layer";
+
+    const visibleIds = new Set([
+      targetArchId,
+      ...upstreamIds,
+      ...downstreamIds,
+      focusedSession.agentId,
+      localId,
+      layerId,
+    ]);
+
+    const targetNode = architectureNodes.find((n) => n.id === targetArchId);
+    const targetLabel =
+      typeof targetNode?.label === "string" ? targetNode.label : targetArchId;
+
+    return { targetArchId, upstreamIds, downstreamIds, visibleIds, localId, layerId, targetLabel };
+  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries]);
+
+  /**
+   * Enter focused view when the user clicks an agent node or a local process node.
+   */
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      if (node.id.startsWith("agent-")) {
+        const group = agentGroups.find(
+          (g) => `agent-${sanitizeHostname(g.targetName)}` === node.id,
+        );
+        if (group) {
+          const firstSession = group.sessions[0];
+          setFocusedSession({
+            targetName: group.targetName,
+            agentId: node.id,
+            ownerUsername:
+              firstSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
+            ownerHostname:
+              firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown",
+          });
+          setFocusedMode("mirror");
+        }
+        return;
+      }
+
+      if (node.id === "local-process" || node.id.startsWith("dynamic-local-")) {
+        if (agentGroups.length === 0) return;
+        let group: AgentGroup | undefined;
+        if (node.id === "local-process" && agentGroups.length === 1) {
+          group = agentGroups[0];
+        } else if (node.id.startsWith("dynamic-local-")) {
+          const idx = parseInt(node.id.replace("dynamic-local-", ""), 10);
+          const entry = localMachineEntries[idx];
+          if (entry) {
+            group = agentGroups.find((g) =>
+              g.sessions.some((s) => s.owner.hostname === entry.hostname),
+            );
+          }
+        }
+        if (group) {
+          const agentId = `agent-${sanitizeHostname(group.targetName)}`;
+          const firstSession = group.sessions[0];
+          setFocusedSession({
+            targetName: group.targetName,
+            agentId,
+            ownerUsername:
+              firstSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
+            ownerHostname:
+              firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown",
+          });
+          setFocusedMode("mirror");
+        }
+      }
+    },
+    [agentGroups, localMachineEntries],
+  );
 
   const dynamicLocalMachineNodes = useMemo((): Node<NodeData>[] => {
     if (!hasDynamicLocalMachines) return [];
@@ -2601,12 +2743,373 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     );
   }, [hasShopSessions]);
 
+  // Auto-close the focused view when its session disappears.
+  useEffect(() => {
+    if (!focusedSession) return;
+    const stillActive = agentGroups.some(
+      (g) => `agent-${sanitizeHostname(g.targetName)}` === focusedSession.agentId,
+    );
+    if (!stillActive) setFocusedSession(null);
+  }, [agentGroups, focusedSession]);
+
+  /**
+   * In focused mode: filter edges to only those directly relevant to the story
+   * (upstream→target, target→downstream, agent↔target, mirrord infra).
+   * In steal mode: dim upstream→target and replace with bold steal arrows.
+   */
+  const focusedFlowEdges = useMemo((): Edge[] => {
+    if (!focusedSession || !focusedViewData) return flowEdges;
+
+    const { targetArchId, upstreamIds, downstreamIds, localId, layerId } = focusedViewData;
+    const agentId = focusedSession.agentId;
+    const edgeLabelDefaults = {
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 10,
+      labelShowBg: true,
+    };
+
+    // Exclude the existing agent→target edge in all focused modes — we replace it
+    // with a correctly-directed edge that tells the right story.
+    const isRelevantEdge = (edge: Edge): boolean => {
+      if (upstreamIds.has(edge.source) && edge.target === targetArchId) return true;
+      if (edge.source === targetArchId && downstreamIds.has(edge.target)) return true;
+      // agent→target and local↔layer edges are excluded:
+      // agent→target is replaced with a corrected direction edge below;
+      // local→layer is internal to the combined local node.
+      return false;
+    };
+
+    // Handles for the layer node — static and dynamic variants use different ids.
+    const layerSourceHandle =
+      layerId === "mirrord-layer" ? "layer-source-right" : `${layerId}-source-right`;
+    const layerTargetHandle =
+      layerId === "mirrord-layer" ? "layer-target-left" : `${layerId}-target-left`;
+
+    // Tunnel edge: agent → mirrord-layer.
+    // The mirrord-layer is the actual tunnel endpoint on the local side — it receives
+    // intercepted/copied traffic from the agent and delivers it to the local process
+    // via LD_PRELOAD syscall interception.
+    const tunnelEdge: Edge = {
+      id: `focused-tunnel-${agentId}-to-${layerId}`,
+      source: agentId,
+      target: layerId,
+      sourceHandle: `${agentId}-source-right`,
+      targetHandle: layerTargetHandle,
+      label: "mirrord tunnel",
+      type: "bezier",
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+      style: { stroke: "#E66479", strokeWidth: 2.5, strokeDasharray: "6 4" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#E66479" },
+      labelBgStyle: { fill: "#FFF1F3" },
+      ...edgeLabelDefaults,
+    };
+
+    // Outbound edges: mirrord-layer → downstream services.
+    // The local process's outbound syscalls are intercepted by the layer and forwarded
+    // through the tunnel to the real cluster services.
+    const layerToDownstreamEdges: Edge[] = [...downstreamIds].map((downstreamId) => ({
+      id: `focused-layer-to-${downstreamId}`,
+      source: layerId,
+      target: downstreamId,
+      sourceHandle: layerSourceHandle,
+      label: "outbound via mirrord",
+      type: "bezier",
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+      style: { stroke: "#E66479", strokeWidth: 2, strokeDasharray: "6 4" },
+      labelStyle: { fontSize: 11, fontWeight: 600, fill: "#E66479" },
+      labelBgStyle: { fill: "#FFF1F3" },
+      ...edgeLabelDefaults,
+    }));
+
+    if (focusedMode === "mirror") {
+      // Mirror: traffic hits the service normally AND the agent sniffs a copy from
+      // the pod's network interface and sends it through the tunnel to mirrord-layer.
+      // Both the cluster service and the local process (via layer) talk to downstream services.
+      const mirrorCopyEdge: Edge = {
+        id: `focused-mirror-${targetArchId}-to-${agentId}`,
+        source: targetArchId,
+        target: agentId,
+        targetHandle: `${agentId}-target-top`,
+        label: "traffic copy",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: "#4F46E5", strokeWidth: 2.5, strokeDasharray: "6 4" },
+        labelStyle: { fontSize: 12, fontWeight: 700, fill: "#4F46E5" },
+        labelBgStyle: { fill: "#EEF2FF" },
+        ...edgeLabelDefaults,
+      };
+      return [
+        ...flowEdges.filter(isRelevantEdge),
+        mirrorCopyEdge,
+        tunnelEdge,
+        ...layerToDownstreamEdges,
+      ];
+    }
+
+    // Steal mode: traffic is intercepted by the agent BEFORE reaching the service.
+    // upstream → agent (stolen), service receives nothing and makes no outbound calls.
+    // Only the local process talks to downstream services.
+    const result: Edge[] = [];
+    for (const edge of flowEdges) {
+      if (!isRelevantEdge(edge)) continue;
+
+      const isUpstreamToTarget =
+        upstreamIds.has(edge.source) && edge.target === targetArchId;
+      const isTargetToDownstream =
+        edge.source === targetArchId && downstreamIds.has(edge.target);
+
+      if (isUpstreamToTarget) {
+        // Dim the original upstream→target edge — traffic no longer flows through it
+        result.push({
+          ...edge,
+          animated: false,
+          label: "no traffic",
+          style: { stroke: "#CBD5E1", strokeWidth: 1.5, strokeDasharray: "4 4" },
+          labelStyle: { fontSize: 11, fill: "#94A3B8" },
+          labelBgStyle: { fill: "#F9FAFB" },
+        });
+        // Bold steal edge: upstream → agent (traffic intercepted before reaching service)
+        result.push({
+          id: `focused-steal-${edge.source}-to-${agentId}`,
+          source: edge.source,
+          target: agentId,
+          targetHandle: `${agentId}-target-top`,
+          label: "traffic stolen",
+          type: "bezier",
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+          style: { stroke: "#EA580C", strokeWidth: 3 },
+          labelStyle: { fontSize: 12, fontWeight: 700, fill: "#EA580C" },
+          labelBgStyle: { fill: "#FFF7ED" },
+          ...edgeLabelDefaults,
+        });
+        continue;
+      }
+
+      // Service→downstream edges are skipped in steal mode — the service gets no
+      // traffic so it makes no outbound calls. Local process edges added below.
+      if (isTargetToDownstream) continue;
+
+      result.push(edge);
+    }
+    return [...result, tunnelEdge, ...layerToDownstreamEdges];
+  }, [focusedSession, focusedViewData, focusedMode, flowEdges]);
+
+  /**
+   * Compute a fresh dagre layout for the focused nodes so they fill the screen
+   * cleanly instead of inheriting the full-graph positions.
+   * Uses a stable edge set (independent of mirror/steal mode) so the layout
+   * doesn't jump when the presenter toggles the mode toggle.
+   */
+  const focusedNodePositions = useMemo(() => {
+    if (!focusedViewData || !focusedSession) return null;
+    const { visibleIds, targetArchId, upstreamIds, downstreamIds, localId, layerId } =
+      focusedViewData;
+    const agentId = focusedSession.agentId;
+
+    // Layout the main horizontal flow: upstreams → target → downstreams.
+    // Agent and local node are placed manually BELOW the main row so:
+    //   - the agent doesn't block the target→downstream edge
+    //   - the local zone sits below (and outside) the cluster zone bounds
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: "LR", nodesep: 60, ranksep: 160 });
+
+    // Only the service-mesh nodes go into dagre — agent and local are manual.
+    const dagreIds = [...visibleIds].filter((id) => id !== localId && id !== layerId && id !== agentId);
+    for (const id of dagreIds) {
+      g.setNode(id, { width: nodeWidth, height: nodeHeight });
+    }
+    for (const upId of upstreamIds) g.setEdge(upId, targetArchId);
+    for (const downId of downstreamIds) g.setEdge(targetArchId, downId);
+
+    dagre.layout(g);
+
+    const positions = new Map<string, { x: number; y: number }>();
+    for (const id of dagreIds) {
+      const node = g.node(id);
+      if (node) {
+        positions.set(id, { x: node.x - nodeWidth / 2, y: node.y - nodeHeight / 2 });
+      }
+    }
+
+    // Shift all downstream positions right to open a full column for agent+local.
+    const agentColumnWidth = nodeWidth + 60;
+    for (const downId of downstreamIds) {
+      const pos = positions.get(downId);
+      if (pos) positions.set(downId, { x: pos.x + agentColumnWidth, y: pos.y });
+    }
+
+    // Place agent in the new gap column, 220px below the main horizontal row.
+    const targetPos = positions.get(targetArchId);
+    const firstDownId = [...downstreamIds][0];
+    const firstDownPos = firstDownId ? positions.get(firstDownId) : undefined;
+
+    if (targetPos) {
+      const agentX = firstDownPos
+        ? (targetPos.x + nodeWidth + firstDownPos.x) / 2 - nodeWidth / 2
+        : targetPos.x + nodeWidth + 80;
+      const agentY = targetPos.y + nodeHeight + 220;
+      positions.set(agentId, { x: agentX, y: agentY });
+
+      // Local node: below ALL cluster nodes so the local zone clears the cluster zone bottom.
+      // localGap must be > localPadTop + zonePadBot (92 + 44 = 136) to avoid zone overlap.
+      const maxClusterBottom = Math.max(...[...positions.values()].map((p) => p.y + nodeHeight));
+      const localGap = 160;
+      positions.set(layerId, { x: agentX, y: maxClusterBottom + localGap });
+    }
+
+    return positions;
+  }, [focusedViewData, focusedSession]);
+
+  /**
+   * In focused mode: hide everything else, re-layout visible nodes using
+   * focusedNodePositions, and apply mode-specific visual treatments.
+   * In normal mode: add pointer cursor to clickable nodes.
+   */
+  const displayNodes = useMemo(() => {
+    if (!focusedViewData || !focusedNodePositions) {
+      // Normal mode — add pointer cursor to clickable nodes when sessions are active
+      if (!hasShopSessions) return flowNodes;
+      return flowNodes.map((node) => {
+        if (
+          node.id === "local-process" ||
+          node.id.startsWith("dynamic-local-") ||
+          node.id.startsWith("agent-")
+        ) {
+          return { ...node, style: { ...node.style, cursor: "pointer" } };
+        }
+        return node;
+      });
+    }
+
+    const { layerId, visibleIds } = focusedViewData;
+    const zonePadX = 48;   // horizontal padding
+    const zonePadTop = 72; // extra top padding so zone header label clears nodes
+    const zonePadBot = 44; // bottom padding
+
+    // Focused mode: re-layout visible nodes, hide everything else
+    return flowNodes.map((node) => {
+      // Reposition zone backgrounds around the focused nodes instead of hiding them
+      if (node.type === "zone") {
+        // Local Machine zone: wraps just the combined local node (layerId)
+        if (node.id === "zone-local") {
+          const pos = focusedNodePositions.get(layerId);
+          if (!pos) return { ...node, hidden: true };
+          const localPadTop = zonePadTop + 20;
+          const w = nodeWidth + zonePadX * 2;
+          const h = nodeHeight + localPadTop + zonePadBot;
+          return {
+            ...node,
+            hidden: false,
+            position: { x: pos.x - zonePadX, y: pos.y - localPadTop },
+            data: { ...node.data, zoneWidth: w, zoneHeight: h },
+            style: { ...node.style, width: w, height: h },
+          };
+        }
+        // Cluster zone: wraps all visible nodes that are NOT the local node
+        if (node.id === "zone-cluster") {
+          const clusterPositions = [...visibleIds]
+            .filter((id) => id !== layerId)
+            .map((id) => focusedNodePositions.get(id))
+            .filter((p): p is { x: number; y: number } => !!p);
+          if (!clusterPositions.length) return { ...node, hidden: true };
+          const minX = Math.min(...clusterPositions.map((p) => p.x)) - zonePadX;
+          const minY = Math.min(...clusterPositions.map((p) => p.y)) - zonePadTop;
+          const maxX = Math.max(...clusterPositions.map((p) => p.x + nodeWidth)) + zonePadX;
+          const maxY = Math.max(...clusterPositions.map((p) => p.y + nodeHeight)) + zonePadBot;
+          const w = maxX - minX;
+          const h = maxY - minY;
+          return {
+            ...node,
+            hidden: false,
+            position: { x: minX, y: minY },
+            data: { ...node.data, zoneWidth: w, zoneHeight: h },
+            style: { ...node.style, width: w, height: h },
+          };
+        }
+        // Any other zone (e.g. preview zones) — hide in focused mode
+        return { ...node, hidden: true };
+      }
+
+      // local-process is merged into the combined local node — hide it
+      if (node.id === focusedViewData.localId) return { ...node, hidden: true };
+
+      // Hide non-relevant nodes entirely (cleaner than dimming with a new layout)
+      if (!focusedViewData.visibleIds.has(node.id)) {
+        return { ...node, hidden: true };
+      }
+
+      // Apply the focused layout position (localId is excluded from dagre, so no position for it)
+      const newPosition = focusedNodePositions.get(node.id);
+      let mapped = {
+        ...node,
+        draggable: false,
+        ...(newPosition ? { position: newPosition } : {}),
+      };
+
+      // Transform the mirrord-layer node into the combined "local service" node.
+      // It represents both the local process and the mirrord-layer as a single entity.
+      if (node.id === focusedViewData.layerId && focusedSession) {
+        const combinedLabel = (
+          <div className="flex flex-col gap-1.5 text-left">
+            <span className="text-base font-bold text-[#111827] leading-tight">
+              {focusedViewData.targetLabel}
+            </span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#3B82F6]">
+              Running locally
+            </span>
+            <p className="text-xs text-slate-600 leading-snug">
+              {focusedSession.ownerUsername}
+              {focusedSession.ownerHostname ? ` · ${focusedSession.ownerHostname}` : ""}
+            </p>
+          </div>
+        );
+        const glowAnimation =
+          focusedMode === "mirror"
+            ? "mirrordFocusMirrorPulse 2s ease-in-out infinite"
+            : "mirrordFocusStealPulse 2s ease-in-out infinite";
+        mapped = {
+          ...mapped,
+          data: { ...(mapped.data as NodeData), label: combinedLabel, focusedCombined: true },
+          style: {
+            ...mapped.style,
+            border: "2.5px solid #3B82F6",
+            backgroundColor: "rgba(191, 219, 254, 0.25)",
+            animation: glowAnimation,
+          },
+        };
+        return mapped;
+      }
+
+      // Glow on the agent — the cluster-side end of the mirrord tunnel
+      if (node.id === focusedSession?.agentId) {
+        const animation =
+          focusedMode === "mirror"
+            ? "mirrordFocusMirrorPulse 2s ease-in-out infinite"
+            : "mirrordFocusStealPulse 2s ease-in-out infinite";
+        mapped = { ...mapped, style: { ...mapped.style, animation } };
+      }
+
+      // Steal mode: only dim the target service itself (it receives no traffic).
+      // Downstream services stay fully visible — the local process still calls them via the layer.
+      if (focusedMode === "steal" && node.id === focusedViewData.targetArchId) {
+        mapped = { ...mapped, style: { ...mapped.style, opacity: 0.35, filter: "grayscale(60%)" } };
+      }
+
+      return mapped;
+    });
+  }, [flowNodes, focusedViewData, focusedSession, focusedMode, focusedNodePositions, hasShopSessions]);
+
   return (
-    <div style={{ width: "100vw", height: "100vh", background: "#F5F5F5", color: "#111827" }}>
+    <div style={{ width: "100vw", height: "100vh", background: "#F5F5F5", color: "#111827", position: "relative" }}>
       <ReactFlow
         style={{ width: "100%", height: "100%" }}
-        nodes={flowNodes}
-        edges={flowEdges}
+        nodes={displayNodes}
+        edges={focusedFlowEdges}
         fitView
         minZoom={0.3}
         maxZoom={1.5}
@@ -2616,6 +3119,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         proOptions={{ hideAttribution: true }}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
+        onNodeClick={handleNodeClick}
         defaultMarkerColor="#374151"
       >
         <Background color="#E9E4FF" gap={24} size={2} />
@@ -2625,6 +3129,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           showZoom
           showFitView
           className="border border-[#E5E7EB] bg-white/90 text-[#4F46E5] shadow-lg"
+        />
+        <FocusedFitView
+          visibleNodeIds={focusedViewData ? [...focusedViewData.visibleIds] : null}
         />
         <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
           <p className="text-sm font-semibold uppercase tracking-wide text-[#6B7280]">
@@ -2741,6 +3248,122 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           </Panel>
         )}
       </ReactFlow>
+
+      {/* Focused session overlay panel */}
+      {focusedSession && focusedViewData && (
+        <div
+          className="absolute top-6 right-6 z-50 w-[380px] rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden"
+          style={{ pointerEvents: "auto" }}
+        >
+          {/* Header */}
+          <div
+            className="px-6 pt-5 pb-4"
+            style={{
+              borderBottom: `1px solid ${focusedMode === "mirror" ? "#E0E7FF" : "#FFEDD5"}`,
+              background: focusedMode === "mirror" ? "#F5F3FF" : "#FFF7ED",
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p
+                  className="text-[11px] font-bold uppercase tracking-[0.2em] mb-1"
+                  style={{ color: focusedMode === "mirror" ? "#4F46E5" : "#EA580C" }}
+                >
+                  {focusedMode === "mirror" ? "Mirroring Session" : "Steal Session"}
+                </p>
+                <p className="text-xl font-bold text-[#111827] leading-tight">
+                  {focusedViewData.targetLabel}
+                </p>
+                <p className="text-sm text-[#6B7280] mt-0.5">
+                  {focusedSession.ownerUsername}
+                  {focusedSession.ownerHostname ? ` · ${focusedSession.ownerHostname}` : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setFocusedSession(null)}
+                className="ml-4 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#374151] transition-colors text-sm font-medium flex-shrink-0"
+                title="Exit focused view"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Traffic mode toggle */}
+          <div className="px-6 pt-4 pb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">
+              Traffic mode
+            </p>
+            <div className="flex rounded-xl border border-[#E5E7EB] overflow-hidden">
+              <button
+                className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                style={
+                  focusedMode === "mirror"
+                    ? { background: "#4F46E5", color: "#fff" }
+                    : { background: "#fff", color: "#6B7280" }
+                }
+                onClick={() => setFocusedMode("mirror")}
+              >
+                Mirror
+              </button>
+              <button
+                className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                style={
+                  focusedMode === "steal"
+                    ? { background: "#EA580C", color: "#fff" }
+                    : { background: "#fff", color: "#6B7280" }
+                }
+                onClick={() => setFocusedMode("steal")}
+              >
+                Steal
+              </button>
+            </div>
+          </div>
+
+          {/* Plain-English explanation */}
+          <div className="px-6 pb-6">
+            <div
+              className="rounded-xl p-4 text-sm leading-relaxed"
+              style={
+                focusedMode === "mirror"
+                  ? { background: "#EEF2FF", color: "#3730A3" }
+                  : { background: "#FFF7ED", color: "#9A3412" }
+              }
+            >
+              {focusedMode === "mirror" ? (
+                <p>
+                  Traffic continues to flow to{" "}
+                  <strong>{focusedViewData.targetLabel}</strong> in the cluster as
+                  normal. A copy of every incoming request is also delivered to{" "}
+                  <strong>{focusedSession.ownerUsername}</strong>&apos;s local process.
+                  The cluster service is unaware of the mirroring.
+                </p>
+              ) : (
+                <p>
+                  All traffic that would normally reach{" "}
+                  <strong>{focusedViewData.targetLabel}</strong> is being redirected to{" "}
+                  <strong>{focusedSession.ownerUsername}</strong>&apos;s local machine
+                  instead. The cluster service receives no requests while this session
+                  is active.
+                </p>
+              )}
+            </div>
+            <p className="mt-3 text-[11px] text-[#9CA3AF] text-center">
+              Click an agent or local machine node to switch sessions
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Hint shown on agent/local nodes when sessions are active but no focused view */}
+      {hasShopSessions && !focusedSession && (
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+          <div className="rounded-full border border-[#E5E7EB] bg-white/95 px-4 py-2 text-xs font-medium text-[#6B7280] shadow-md">
+            Click an agent or local machine node to focus a session
+          </div>
+        </div>
+      )}
+
       {dbDialogId && (
         <DatabaseViewerDialog
           dbId={dbDialogId}
