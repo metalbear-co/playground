@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
 import express from "express";
 import rateLimit from "express-rate-limit";
+import jwt from "jsonwebtoken";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import { Connection, Client } from "@temporalio/client";
 import { orderMode } from "./config.js";
@@ -13,6 +14,8 @@ import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
 import * as activities from "./activities.js";
 import { CheckoutWorkflow } from "./workflows/checkout.js";
+
+const JWT_SECRET = process.env.JWT_SECRET || "demo-secret-key";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workflowBundlePath = path.join(__dirname, "workflow-bundle.js");
@@ -199,10 +202,17 @@ async function createOrderDirect(
     client.release();
   }
 
+  const token = jwt.sign(
+    { orderId, amount: totalCents, customer_email: customer_email ?? null },
+    JWT_SECRET,
+    { expiresIn: "1h" }
+  );
+  console.log("[Order] JWT created for order %d: %s", orderId, token);
+
   await sqsClient.send(
     new SendMessageCommand({
       QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ orderId, amount: totalCents, items, customer_email: customer_email ?? null }),
+      MessageBody: JSON.stringify({ orderId, amount: totalCents, items, customer_email: customer_email ?? null, jwt: token }),
     })
   );
 
