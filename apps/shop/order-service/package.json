@@ -20,11 +20,13 @@
     "@temporalio/workflow": "^1.11.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
+    "jsonwebtoken": "^9.0.3",
     "kafkajs": "^2.2.4",
     "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.4",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.0",

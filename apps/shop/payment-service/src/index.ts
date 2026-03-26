@@ -1,4 +1,5 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import {
   SQSClient,
   ReceiveMessageCommand,
@@ -7,6 +8,7 @@ import {
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
+const JWT_SECRET = process.env.JWT_SECRET || "demo-secret-key";
 
 const sqsClient = new SQSClient({
   region: process.env.AWS_REGION || "eu-north-1",
@@ -57,6 +59,19 @@ async function consumeMessages(): Promise<void> {
           messageId: message.MessageId,
         }, null, 2));
         console.log("[Payment] SQS message attributes:", JSON.stringify(message.MessageAttributes, null, 2));
+
+        // JWT decryption
+        if (body.jwt) {
+          console.log("[Payment] Raw JWT token: %s", body.jwt);
+          try {
+            const decoded = jwt.verify(body.jwt, JWT_SECRET);
+            console.log("[Payment] Decrypted JWT payload:", JSON.stringify(decoded, null, 2));
+          } catch (jwtErr) {
+            console.error("[Payment] JWT verification failed:", jwtErr);
+          }
+        } else {
+          console.log("[Payment] No JWT token found in message");
+        }
 
         const outgoingHeaders = { "Content-Type": "application/json" };
 
