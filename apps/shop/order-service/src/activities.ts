@@ -5,8 +5,8 @@ import { sendOrderToKafka } from "./kafka.js";
 export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
-  tenant?: string;
   customer_email?: string;
+  baggage?: string;
 };
 
 export type CheckoutResult = {
@@ -43,9 +43,9 @@ export async function chargePayment(input: CheckoutInput & { orderId?: number })
       QueueUrl: sqsQueueUrl,
       MessageBody: JSON.stringify({ orderId: input.orderId, amount: input.total_cents, items: input.items, customer_email: input.customer_email ?? null }),
       MessageAttributes: {
-        "x-pg-tenant": {
+        "baggage": {
           DataType: "String",
-          StringValue: input.tenant || "unknown",
+          StringValue: input.baggage || "unknown",
         },
       },
     })
@@ -73,12 +73,12 @@ export async function publishOrderToKafka(input: {
   orderId: number;
   items: Array<{ productId: number; quantity: number }>;
   status: string;
-  tenant?: string;
+  baggage?: string;
 }): Promise<void> {
   await sendOrderToKafka({
     orderId: input.orderId,
     items: input.items,
     status: input.status,
-    tenant: input.tenant,
+    baggage: input.baggage,
   });
 }
