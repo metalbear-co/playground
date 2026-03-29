@@ -81,7 +81,6 @@ app.get("/banner", (_req, res) => {
 type OrderInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
-  tenant?: string;
   customer_email?: string;
   baggage?: string;
 };
@@ -161,7 +160,7 @@ async function createOrderViaTemporal(
 async function createOrderDirect(
   input: OrderInput
 ): Promise<{ orderId: number; status: string }> {
-  const { items, total_cents: totalCents, tenant, customer_email, baggage } = input;
+  const { items, total_cents: totalCents, customer_email, baggage } = input;
 
   for (const item of items) {
     const productId = encodeURIComponent(String(item.productId));
@@ -228,12 +227,11 @@ async function createOrderDirect(
 }
 
 app.post("/orders", async (req, res) => {
-  const tenant = req.headers["x-pg-tenant"] as string | undefined;
   const baggage = req.headers["baggage"] as string | undefined;
   const body = req.body as { items?: unknown; total_cents?: number; customer_email?: string };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
   const customer_email = typeof body.customer_email === "string" ? body.customer_email : undefined;
-  console.log("Order request:", JSON.stringify({ tenant, total_cents, customer_email, items: body.items }, null, 2));
+  console.log("Order request:", JSON.stringify({ baggage, total_cents, customer_email, items: body.items }, null, 2));
 
   const validated = validateOrderItems(body.items);
   if ("error" in validated) {
@@ -245,7 +243,7 @@ app.post("/orders", async (req, res) => {
   }
   const { items } = validated;
 
-  const input: OrderInput = { items, total_cents, tenant, customer_email, baggage };
+  const input: OrderInput = { items, total_cents, customer_email, baggage };
 
   try {
     const result =
