@@ -438,17 +438,38 @@ const fetchPgBranchDatabases = async (
   kubeConfig: KubeConfig,
 ): Promise<PgBranchDatabase[]> => {
   const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-  const result = await customApi.listNamespacedCustomObject({
-    group: "dbs.mirrord.metalbear.co",
-    version: "v1alpha1",
-    namespace: defaultNamespace,
-    plural: "pgbranchdatabases",
-  });
+  // Fetch from both the new "branchdatabases" and legacy "pgbranchdatabases" CRDs
+  const [newResult, legacyResult] = await Promise.all([
+    customApi.listNamespacedCustomObject({
+      group: "dbs.mirrord.metalbear.co",
+      version: "v1alpha1",
+      namespace: defaultNamespace,
+      plural: "branchdatabases",
+    }).catch((err) => {
+      console.error(`[db-branches] ERROR fetching branchdatabases:`, err instanceof Error ? err.message : err);
+      return { items: [] };
+    }),
+    customApi.listNamespacedCustomObject({
+      group: "dbs.mirrord.metalbear.co",
+      version: "v1alpha1",
+      namespace: defaultNamespace,
+      plural: "pgbranchdatabases",
+    }).catch((err) => {
+      console.error(`[db-branches] ERROR fetching pgbranchdatabases:`, err instanceof Error ? err.message : err);
+      return { items: [] };
+    }),
+  ]);
 
-  const body = result as { items?: Array<Record<string, unknown>> };
-  const items = body.items ?? [];
+  const newItems = (newResult as { items?: Array<Record<string, unknown>> }).items ?? [];
+  const legacyItems = (legacyResult as { items?: Array<Record<string, unknown>> }).items ?? [];
+  console.log(`[db-branches] CRD query: ${newItems.length} new (branchdatabases), ${legacyItems.length} legacy (pgbranchdatabases), namespace: ${defaultNamespace}`);
+  if (newItems.length > 0) console.log(`[db-branches] new CRD raw items:`, JSON.stringify(newItems.map(i => ({ name: (i.metadata as any)?.name, spec: i.spec, status: i.status })), null, 2));
+  if (newItems.length === 0 && legacyItems.length === 0) {
+    console.log(`[db-branches] raw newResult keys:`, Object.keys(newResult as object));
+    console.log(`[db-branches] raw newResult:`, JSON.stringify(newResult).substring(0, 500));
+  }
 
-  return items.map((item) => {
+  const mapItem = (item: Record<string, unknown>, isNew: boolean): PgBranchDatabase => {
     const metadata = (item.metadata ?? {}) as Record<string, unknown>;
     const spec = (item.spec ?? {}) as Record<string, unknown>;
     const status = (item.status ?? {}) as Record<string, unknown>;
@@ -468,19 +489,34 @@ const fetchPgBranchDatabases = async (
       (status.connectionString as string) ??
       undefined;
 
+    const pgOpts = (spec.postgresOptions ?? {}) as Record<string, unknown>;
+    const pgCopy = (pgOpts.copy ?? {}) as Record<string, unknown>;
+    const legacyCopy = (spec.copy ?? {}) as Record<string, unknown>;
+
     return {
       name: (metadata.name as string) ?? "unknown",
       namespace: (metadata.namespace as string) ?? defaultNamespace,
       branchId: (spec.id as string) ?? "unknown",
-      targetDeployment: (target.deployment as string) ?? "unknown",
-      copyMode: ((spec.copy as Record<string, unknown>)?.mode as string) ?? "unknown",
-      postgresVersion: (spec.postgresVersion as string) ?? "unknown",
+      targetDeployment: isNew
+        ? (target.name as string) ?? "unknown"
+        : (target.deployment as string) ?? "unknown",
+      copyMode: isNew
+        ? (pgCopy.mode as string) ?? "unknown"
+        : (legacyCopy.mode as string) ?? "unknown",
+      postgresVersion: isNew
+        ? (spec.version as string) ?? "unknown"
+        : (spec.postgresVersion as string) ?? "unknown",
       phase: (status.phase as string) ?? "unknown",
       expireTime: (status.expireTime as string) ?? undefined,
       connectionUrl,
       owners,
     };
-  });
+  };
+
+  return [
+    ...newItems.map((item) => mapItem(item, true)),
+    ...legacyItems.map((item) => mapItem(item, false)),
+  ];
 };
 
 /**
@@ -610,6 +646,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     const allSessions = requestUseDbBranchMock
       ? [...sessions, mockDbBranchSession]
       : sessions;
+    console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
     refreshDynamicPgConnections(pgBranches);
     const response: OperatorStatusResponse = {
       sessions: allSessions,
@@ -1075,21 +1112,37 @@ const resolvePgBranchConnection = async (
   const coreApi = kubeConfigRef.makeApiClient(CoreV1Api);
   const customApi = kubeConfigRef.makeApiClient(CustomObjectsApi);
 
-  // Find the PgBranchDatabase CR whose sanitized name matches dbId
-  const result = await customApi.listNamespacedCustomObject({
-    group: "dbs.mirrord.metalbear.co",
-    version: "v1alpha1",
-    namespace: defaultNamespace,
-    plural: "pgbranchdatabases",
-  });
-  const body = result as { items?: Array<Record<string, unknown>> };
-  const items = body.items ?? [];
+  // Find the BranchDatabase CR whose sanitized name matches dbId
+  // Query both new "branchdatabases" and legacy "pgbranchdatabases" CRDs
+  const [newResult, legacyResult] = await Promise.all([
+    customApi.listNamespacedCustomObject({
+      group: "dbs.mirrord.metalbear.co",
+      version: "v1alpha1",
+      namespace: defaultNamespace,
+      plural: "branchdatabases",
+    }).catch(() => ({ items: [] })),
+    customApi.listNamespacedCustomObject({
+      group: "dbs.mirrord.metalbear.co",
+      version: "v1alpha1",
+      namespace: defaultNamespace,
+      plural: "pgbranchdatabases",
+    }).catch(() => ({ items: [] })),
+  ]);
+  const newItems = (newResult as { items?: Array<Record<string, unknown>> }).items ?? [];
+  const legacyItems = (legacyResult as { items?: Array<Record<string, unknown>> }).items ?? [];
+  const items = [...newItems, ...legacyItems];
+  console.log(`[db-resolve] looking for dbId="${dbId}", found ${items.length} CRD(s):`, items.map(i => ((i.metadata as any)?.name)));
 
   const branch = items.find((item) => {
     const name = ((item.metadata as Record<string, unknown>)?.name as string) ?? "";
-    return `pg-branch-${sanitizeHostname(name)}` === dbId;
+    const sanitized = `pg-branch-${sanitizeHostname(name)}`;
+    console.log(`[db-resolve] comparing: "${sanitized}" === "${dbId}" → ${sanitized === dbId}`);
+    return sanitized === dbId;
   });
-  if (!branch) return undefined;
+  if (!branch) {
+    console.warn(`[db-resolve] no matching branch found for dbId="${dbId}"`);
+    return undefined;
+  }
 
   const metadata = (branch.metadata ?? {}) as Record<string, unknown>;
   const branchName = metadata.name as string;
@@ -1100,9 +1153,13 @@ const resolvePgBranchConnection = async (
     labelSelector: `db-owner-name=${branchName}`,
   });
   const pod = podList.items?.[0];
-  if (!pod?.status?.podIP) return undefined;
+  if (!pod?.status?.podIP) {
+    console.warn(`[db-resolve] branch pod for "${branchName}" has no IP yet`);
+    return undefined;
+  }
 
   const podIp = pod.status.podIP;
+  console.log(`[db-resolve] found branch pod: ${pod.metadata?.name}, IP: ${podIp}`);
   const container = pod.spec?.containers?.[0];
   const envVars = container?.env ?? [];
   const password =
@@ -1129,9 +1186,11 @@ const resolvePgBranchConnection = async (
        ORDER BY datname LIMIT 1`,
     );
     dbName = result.rows[0]?.datname;
-  } catch {
+    console.log(`[db-resolve] discovered database name: "${dbName}" from branch pod ${podIp}`);
+  } catch (err) {
     // Pod may still be starting — return undefined so the caller retries
     // on the next request instead of caching a wrong fallback.
+    console.warn(`[db-resolve] failed to discover db name from ${podIp}:`, err instanceof Error ? err.message : err);
     return undefined;
   } finally {
     discoverPool.end().catch(() => {});
@@ -1143,6 +1202,7 @@ const resolvePgBranchConnection = async (
   }
 
   const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
+  console.log(`[db-resolve] resolved connection for "${dbId}": postgresql://${user}:***@${podIp}:5432/${dbName}`);
   dynamicPgConnections.set(dbId, connectionUrl);
   return connectionUrl;
 };

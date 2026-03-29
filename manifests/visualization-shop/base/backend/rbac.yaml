@@ -21,7 +21,7 @@ rules:
   resources: ["mirrordkafkaephemeraltopics", "mirrordsqssessions"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["dbs.mirrord.metalbear.co"]
-  resources: ["pgbranchdatabases"]
+  resources: ["pgbranchdatabases", "branchdatabases"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["preview.mirrord.metalbear.co"]
   resources: ["previewsessions"]

@@ -15,7 +15,9 @@
       "override": {
         "DB_BRANCH_MOCK_DATA": "false",
         "QUEUE_SPLITTING_MOCK_DATA": "false",
-        "MULTIPLE_SESSION_MOCK_DATA": "false"
+        "MULTIPLE_SESSION_MOCK_DATA": "false",
+         "NEXT_PUBLIC_VISUALIZATION_BACKEND_URL":"http://localhost:8080"
+
       }
     },
     "network": {
