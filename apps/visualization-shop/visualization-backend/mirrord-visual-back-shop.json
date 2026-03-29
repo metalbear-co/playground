@@ -1,4 +1,5 @@
 {
+  "key":"ari",
   "target": {
     "namespace": "visualization-shop",
     "path": {
@@ -10,15 +11,11 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord=ari\\b"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
         }
       },
       "outgoing": true
     }
-  },
-  "internal_proxy": {
-    "log_destination": "/tmp/mirrord.log",
-    "log_level": "mirrord=trace"
   }
 
 }

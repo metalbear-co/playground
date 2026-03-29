@@ -1,0 +1,38 @@
+{
+  "key":"ari",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-service"
+    }
+  },
+  "feature": {
+    "fs": "read",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
+        }
+      },
+      "outgoing":true
+    },"db_branches": [
+    {
+      "id": "ari09-branch-db",
+      "type": "pg",
+      "ttl_secs": 30,    
+      "version": "16.0",
+      "connection": {
+        "url": {
+          "type": "env",
+          "variable": "DATABASE_URL"
+        }
+      },
+      "copy": {
+        "mode": "schema"                 
+      }
+    }
+  ]
+  
+  }
+}

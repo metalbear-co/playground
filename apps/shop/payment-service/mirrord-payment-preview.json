@@ -1,0 +1,25 @@
+{
+  "key": "preview-123",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "payment-service"
+    }
+  },
+  "feature": {
+    "network": {
+      "outgoing": true
+    },
+    "split_queues": {
+      "payments": {
+        "queue_type": "SQS",
+        "jq_filter": ".Body | fromjson | .jwt | split(\".\") | .[1] | gsub(\"-\"; \"+\") | gsub(\"_\"; \"/\") | . as $s | $s + (\"=\" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .customer_email | test(\"metalbear\\\\.com\")"
+      }
+    },
+  "preview": {
+      "image": "ghcr.io/metalbear-co/playground/payment-service:latest", 
+      "ttl_mins": 60,
+      "creation_timeout_secs": 120
+    }
+  }
+}

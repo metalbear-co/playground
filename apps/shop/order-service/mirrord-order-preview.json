@@ -1,5 +1,5 @@
 {
-  "key":"ari",
+  "key":"preview-123",
   "target": {
     "namespace": "shop",
     "path": {
@@ -18,7 +18,7 @@
       "outgoing":true
     },"db_branches": [
     {
-      "id": "ari09-branch-db",
+      "id": "preview-branch-db",
       "type": "pg",
       "ttl_secs": 30,    
       "version": "16.0",
@@ -32,7 +32,12 @@
         "mode": "schema"                 
       }
     }
-  ]
+  ],
+  "preview": {
+      "image": "ghcr.io/metalbear-co/playground/order-service:latest",
+      "ttl_mins": 60,
+      "creation_timeout_secs": 60
+    }
   
   },
   "internal_proxy": {
