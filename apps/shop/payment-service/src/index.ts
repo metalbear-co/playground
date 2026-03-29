@@ -47,11 +47,11 @@ async function consumeMessages(): Promise<void> {
       if (!response.Messages || response.Messages.length === 0) continue;
 
       for (const message of response.Messages) {
-        const tenant =
-          message.MessageAttributes?.["x-pg-tenant"]?.StringValue ?? "unknown";
+        const baggage =
+          message.MessageAttributes?.["baggage"]?.StringValue ?? "unknown";
         const body = JSON.parse(message.Body || "{}");
         console.log("[Payment] Received SQS message:", JSON.stringify({
-          tenant,
+          baggage,
           orderId: body.orderId,
           amount: body.amount,
           customer_email: body.customer_email ?? null,

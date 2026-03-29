@@ -13,7 +13,7 @@ const {
 export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
-  tenant?: string;
+  baggage?: string;
 };
 
 export type CheckoutResult = {
@@ -32,7 +32,7 @@ export async function CheckoutWorkflow(
     orderId,
     items: input.items,
     status: "confirmed",
-    tenant: input.tenant,
+    baggage: input.baggage,
   });
   return { orderId, status: "confirmed" };
 }
