@@ -83,6 +83,7 @@ type OrderInput = {
   total_cents: number;
   tenant?: string;
   customer_email?: string;
+  baggage?: string;
 };
 
 const MAX_PRODUCT_ID = 2 ** 31 - 1; // safe integer, prevents URL injection
@@ -160,7 +161,7 @@ async function createOrderViaTemporal(
 async function createOrderDirect(
   input: OrderInput
 ): Promise<{ orderId: number; status: string }> {
-  const { items, total_cents: totalCents, tenant, customer_email } = input;
+  const { items, total_cents: totalCents, tenant, customer_email, baggage } = input;
 
   for (const item of items) {
     const productId = encodeURIComponent(String(item.productId));
@@ -220,7 +221,7 @@ async function createOrderDirect(
     orderId,
     items,
     status: "confirmed",
-    tenant,
+    baggage,
   });
 
   return { orderId, status: "confirmed" };
@@ -228,6 +229,7 @@ async function createOrderDirect(
 
 app.post("/orders", async (req, res) => {
   const tenant = req.headers["x-pg-tenant"] as string | undefined;
+  const baggage = req.headers["baggage"] as string | undefined;
   const body = req.body as { items?: unknown; total_cents?: number; customer_email?: string };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
   const customer_email = typeof body.customer_email === "string" ? body.customer_email : undefined;
@@ -243,7 +245,7 @@ app.post("/orders", async (req, res) => {
   }
   const { items } = validated;
 
-  const input: OrderInput = { items, total_cents, tenant, customer_email };
+  const input: OrderInput = { items, total_cents, tenant, customer_email, baggage };
 
   try {
     const result =
