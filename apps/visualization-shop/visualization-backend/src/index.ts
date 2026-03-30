@@ -1168,10 +1168,10 @@ const resolvePgBranchConnection = async (
   const user =
     envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
 
-  // Discover the actual user database name by querying the branch pod.
-  // We always run the discovery query rather than trusting POSTGRES_DB, because
-  // the pod may set POSTGRES_DB to "postgres" (the Docker default) while the
-  // branched data lives in a separate database (e.g. "orders").
+  // Discover the actual database name by querying the branch pod.
+  // The schema may be copied into a named database (e.g. "orders") but mirrord
+  // may route app connections to "postgres", so we check which database actually
+  // has data in user tables, falling back to the first with user tables.
   const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
   const discoverPool = new pg.Pool({
     connectionString: discoverUrl,
@@ -1182,10 +1182,48 @@ const resolvePgBranchConnection = async (
   try {
     const result = await discoverPool.query(
       `SELECT datname FROM pg_database
-       WHERE datistemplate = false AND datname != 'postgres'
-       ORDER BY datname LIMIT 1`,
+       WHERE datistemplate = false
+       ORDER BY datname`,
     );
-    dbName = result.rows[0]?.datname;
+    const candidates: string[] = result.rows.map((r: { datname: string }) => r.datname);
+    console.log(`[db-resolve] candidate databases: ${candidates.join(", ")}`);
+
+    // Check each candidate for user tables with actual data
+    for (const candidate of candidates) {
+      const checkPool = new pg.Pool({
+        connectionString: `postgresql://${user}:${password}@${podIp}:5432/${candidate}`,
+        max: 1,
+        connectionTimeoutMillis: 5000,
+      });
+      try {
+        const tableCheck = await checkPool.query(
+          `SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables t
+            JOIN pg_stat_user_tables s ON s.relname = t.table_name AND s.schemaname = t.table_schema
+            WHERE t.table_schema = 'public' AND s.n_tup_ins > 0
+          ) AS has_data`,
+        );
+        if (tableCheck.rows[0]?.has_data) {
+          dbName = candidate;
+          console.log(`[db-resolve] found database with data: "${candidate}"`);
+          break;
+        }
+        // Track first DB with user tables as fallback
+        if (!dbName) {
+          const hasTables = await checkPool.query(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'public'
+            ) AS has_tables`,
+          );
+          if (hasTables.rows[0]?.has_tables) {
+            dbName = candidate;
+          }
+        }
+      } finally {
+        checkPool.end().catch(() => {});
+      }
+    }
     console.log(`[db-resolve] discovered database name: "${dbName}" from branch pod ${podIp}`);
   } catch (err) {
     // Pod may still be starting — return undefined so the caller retries
