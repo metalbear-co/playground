@@ -1188,7 +1188,11 @@ const resolvePgBranchConnection = async (
     const candidates: string[] = result.rows.map((r: { datname: string }) => r.datname);
     console.log(`[db-resolve] candidate databases: ${candidates.join(", ")}`);
 
-    // Check each candidate for user tables with actual data
+    // Check each candidate for user tables with actual data.
+    // We query tables directly instead of relying on pg_stat_user_tables
+    // because stats counters (n_tup_ins) may be 0 in branch pods where data
+    // was loaded via file copy rather than INSERT.
+    let foundData = false;
     for (const candidate of candidates) {
       const checkPool = new pg.Pool({
         connectionString: `postgresql://${user}:${password}@${podIp}:5432/${candidate}`,
@@ -1196,30 +1200,31 @@ const resolvePgBranchConnection = async (
         connectionTimeoutMillis: 5000,
       });
       try {
-        const tableCheck = await checkPool.query(
-          `SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables t
-            JOIN pg_stat_user_tables s ON s.relname = t.table_name AND s.schemaname = t.table_schema
-            WHERE t.table_schema = 'public' AND s.n_tup_ins > 0
-          ) AS has_data`,
+        const tablesResult = await checkPool.query(
+          `SELECT table_name FROM information_schema.tables
+           WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+           ORDER BY table_name LIMIT 5`,
         );
-        if (tableCheck.rows[0]?.has_data) {
-          dbName = candidate;
-          console.log(`[db-resolve] found database with data: "${candidate}"`);
-          break;
-        }
+        if (tablesResult.rows.length === 0) continue;
+
         // Track first DB with user tables as fallback
         if (!dbName) {
-          const hasTables = await checkPool.query(
-            `SELECT EXISTS (
-              SELECT 1 FROM information_schema.tables
-              WHERE table_schema = 'public'
-            ) AS has_tables`,
+          dbName = candidate;
+        }
+
+        // Check if any table actually has rows
+        for (const row of tablesResult.rows) {
+          const dataCheck = await checkPool.query(
+            `SELECT EXISTS(SELECT 1 FROM "${row.table_name}" LIMIT 1) AS has_rows`,
           );
-          if (hasTables.rows[0]?.has_tables) {
+          if (dataCheck.rows[0]?.has_rows) {
             dbName = candidate;
+            foundData = true;
+            console.log(`[db-resolve] found database with data: "${candidate}" (table: ${row.table_name})`);
+            break;
           }
         }
+        if (foundData) break;
       } finally {
         checkPool.end().catch(() => {});
       }
