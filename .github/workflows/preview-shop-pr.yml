@@ -126,14 +126,7 @@ jobs:
           filter: 'baggage:\s*[^\n]*\bmirrord={{ key }}\b'
           ttl_mins: '120'
           key: ${{ env.PREVIEW_KEY }}
-          extra_config: |
-            {
-              "feature": {
-                "preview": {
-                  "creation_timeout_secs": 600
-                }
-              }
-            }
+          extra_config: ${{ matrix.extra_config }}
 
       - name: Write result artifact
         if: success()

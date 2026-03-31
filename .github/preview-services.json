@@ -5,42 +5,48 @@
       "path": "apps/shop/metal-mart-frontend",
       "deployment": "metal-mart-frontend",
       "namespace": "shop",
-      "build_args": "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxas4fpir"
+      "build_args": "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxas4fpir",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     },
     {
       "name": "order-service",
       "path": "apps/shop/order-service",
       "deployment": "order-service",
       "namespace": "shop",
-      "build_args": ""
+      "build_args": "",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}},\"db_branches\":[{\"id\":\"{{ key }}\",\"type\":\"pg\",\"ttl_secs\":30,\"version\":\"16.0\",\"connection\":{\"url\":\"DATABASE_URL\"},\"copy\":{\"mode\":\"schema\"}}]}"
     },
     {
       "name": "delivery-service",
       "path": "apps/shop/delivery-service",
       "deployment": "delivery-service",
       "namespace": "shop",
-      "build_args": ""
+      "build_args": "",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     },
     {
       "name": "inventory-service",
       "path": "apps/shop/inventory-service",
       "deployment": "inventory-service",
       "namespace": "shop",
-      "build_args": ""
+      "build_args": "",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     },
     {
       "name": "payment-service",
       "path": "apps/shop/payment-service",
       "deployment": "payment-service",
       "namespace": "shop",
-      "build_args": ""
+      "build_args": "",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     },
     {
       "name": "receipt-service",
       "path": "apps/shop/receipt-service",
       "deployment": "receipt-service",
       "namespace": "shop",
-      "build_args": ""
+      "build_args": "",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     }
   ]
 }
