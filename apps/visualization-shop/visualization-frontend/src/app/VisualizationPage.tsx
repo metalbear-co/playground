@@ -1606,7 +1606,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     return replaced;
   }, [sqsQueues]);
 
-  const hasShopSessions = agentGroups.length > 0;
+  const hasShopSessions = agentGroups.some(g => g.sessions.length > 0);
 
   // Set of architecture node IDs whose deployment has been scaled down by a copy target.
   // These nodes should appear "ghosted" and incoming edges should be redirected to the agent.
