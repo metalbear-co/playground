@@ -52,3 +52,12 @@ body {
     box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.5), 0px 30px 60px rgba(234, 88, 12, 0.35);
   }
 }
+
+@keyframes mirrordFocusDbBranchPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.3), 0px 30px 60px rgba(220, 38, 38, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.55), 0px 30px 60px rgba(220, 38, 38, 0.35);
+  }
+}

@@ -770,6 +770,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="target" position={Position.Top} id={`${id}-target-top`} style={handleStyle} />
           <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
           <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
+          <Handle type="source" position={Position.Bottom} id={`${id}-source-bottom`} style={handleStyle} />
         </>
       )}
       {isDynamicKafkaTopic && (
@@ -811,6 +812,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
       {isDynamicPgBranch && (
         <>
           <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="target" position={Position.Top} id={`${id}-target-top`} style={handleStyle} />
           <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
         </>
       )}
@@ -929,7 +931,16 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [operatorSessions, setOperatorSessions] = useState<OperatorSession[]>([]);
   const [kafkaTopics, setKafkaTopics] = useState<KafkaEphemeralTopic[]>([]);
   const [sqsQueues, setSqsQueues] = useState<SqsEphemeralQueue[]>([]);
-  const [pgBranches, setPgBranches] = useState<PgBranchDatabase[]>([]);
+  const [pgBranchesRaw, setPgBranches] = useState<PgBranchDatabase[]>([]);
+  const pgBranches = useMemo(() => {
+    const seen = new Set<string>();
+    return pgBranchesRaw.filter((b) => {
+      const key = sanitizeHostname(b.name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [pgBranchesRaw]);
   const [previewSessions, setPreviewSessions] = useState<PreviewSession[]>([]);
   const aliasIndex = useMemo(() => buildAliasIndex(), []);
   const [dynamicNodePositions, setDynamicNodePositions] = useState<
@@ -938,6 +949,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [dbDialogId, setDbDialogId] = useState<string | null>(null);
   const [focusedSession, setFocusedSession] = useState<FocusedSession | null>(null);
   const [focusedMode, setFocusedMode] = useState<"mirror" | "steal">("mirror");
+  const [focusPanelTab, setFocusPanelTab] = useState<"db-branch" | "mirror" | "steal">("mirror");
 
   // Keep the module-level ref in sync so ArchitectureNode can open the dialog.
   useEffect(() => {
@@ -1710,6 +1722,24 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     const localId = localIndex >= 0 ? `dynamic-local-${localIndex}` : "local-process";
     const layerId = localIndex >= 0 ? `dynamic-layer-${localIndex}` : "mirrord-layer";
 
+    // Find a pg-branch active for this developer on this target.
+    // Match first by both hostname and target (most specific), then fall back to
+    // hostname-only in case targetDeployment naming differs from session target name.
+    const activeBranch =
+      pgBranches.find(
+        (b) =>
+          b.owners.some((o) => o.hostname === focusedSession.ownerHostname) &&
+          (b.targetDeployment === focusedSession.targetName ||
+            aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
+      ) ??
+      pgBranches.find((b) =>
+        b.owners.some((o) => o.hostname === focusedSession.ownerHostname),
+      ) ??
+      null;
+    const pgBranchId = activeBranch
+      ? `pg-branch-${sanitizeHostname(activeBranch.name)}`
+      : null;
+
     const visibleIds = new Set([
       targetArchId,
       ...upstreamIds,
@@ -1717,14 +1747,15 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       focusedSession.agentId,
       localId,
       layerId,
+      ...(pgBranchId ? [pgBranchId] : []),
     ]);
 
     const targetNode = architectureNodes.find((n) => n.id === targetArchId);
     const targetLabel =
       typeof targetNode?.label === "string" ? targetNode.label : targetArchId;
 
-    return { targetArchId, upstreamIds, downstreamIds, visibleIds, localId, layerId, targetLabel };
-  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries]);
+    return { targetArchId, upstreamIds, downstreamIds, visibleIds, localId, layerId, targetLabel, activeBranch, pgBranchId };
+  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches]);
 
   /**
    * Enter focused view when the user clicks an agent node or a local process node.
@@ -1737,15 +1768,23 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         );
         if (group) {
           const firstSession = group.sessions[0];
+          const ownerHostname = firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
           setFocusedSession({
             targetName: group.targetName,
             agentId: node.id,
             ownerUsername:
               firstSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
-            ownerHostname:
-              firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown",
+            ownerHostname,
           });
           setFocusedMode("mirror");
+          const targetArchId = aliasIndex.get(group.targetName.toLowerCase());
+          const hasBranch = pgBranches.some(
+            (b) =>
+              b.owners.some((o) => o.hostname === ownerHostname) &&
+              (b.targetDeployment === group.targetName ||
+                aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
+          );
+          setFocusPanelTab(hasBranch ? "db-branch" : "mirror");
         }
         return;
       }
@@ -1767,19 +1806,27 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         if (group) {
           const agentId = `agent-${sanitizeHostname(group.targetName)}`;
           const firstSession = group.sessions[0];
+          const ownerHostname = firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
           setFocusedSession({
             targetName: group.targetName,
             agentId,
             ownerUsername:
               firstSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
-            ownerHostname:
-              firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown",
+            ownerHostname,
           });
           setFocusedMode("mirror");
+          const targetArchId = aliasIndex.get(group.targetName.toLowerCase());
+          const hasBranch = pgBranches.some(
+            (b) =>
+              b.owners.some((o) => o.hostname === ownerHostname) &&
+              (b.targetDeployment === group.targetName ||
+                aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
+          );
+          setFocusPanelTab(hasBranch ? "db-branch" : "mirror");
         }
       }
     },
-    [agentGroups, localMachineEntries],
+    [agentGroups, localMachineEntries, pgBranches, aliasIndex],
   );
 
   const dynamicLocalMachineNodes = useMemo((): Node<NodeData>[] => {
@@ -2062,17 +2109,25 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
     for (const branch of pgBranches) {
       const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
-      const postgresNodeId = `postgres-orders`;
+      // Derive the postgres node for this branch's target deployment from architecture edges
+      const targetArchId = aliasIndex.get(branch.targetDeployment.toLowerCase());
+      const postgresNodeId =
+        (targetArchId
+          ? architectureEdges.find(
+              (e) => e.source === targetArchId && e.target.startsWith("postgres-"),
+            )?.target
+          : undefined) ?? "postgres-orders";
       const agentId = `agent-${sanitizeHostname(branch.targetDeployment)}`;
 
-      // PgBranch → Postgres
+      // Postgres → PgBranch (branch is a copy of the original DB)
       edges.push({
-        id: `${nodeId}-to-${postgresNodeId}`,
-        source: nodeId,
-        target: postgresNodeId,
-        label: "branch copy",
+        id: `${postgresNodeId}-to-${nodeId}`,
+        source: postgresNodeId,
+        target: nodeId,
+        label: `Copy mode: ${branch.copyMode}`,
         type: "bezier",
-        sourceHandle: `${nodeId}-source-right`,
+        sourceHandle: "source-bottom",
+        targetHandle: `${nodeId}-target-top`,
         animated: true,
         markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
         style: edgeStyle,
@@ -2096,7 +2151,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     }
 
     return edges;
-  }, [pgBranches]);
+  }, [pgBranches, aliasIndex, architectureEdges]);
 
   // Build dynamic nodes for PreviewSession resources.
   // Group preview sessions by key so sessions sharing a key are positioned together.
@@ -2760,7 +2815,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const focusedFlowEdges = useMemo((): Edge[] => {
     if (!focusedSession || !focusedViewData) return flowEdges;
 
-    const { targetArchId, upstreamIds, downstreamIds, localId, layerId } = focusedViewData;
+    const { targetArchId, upstreamIds, downstreamIds, layerId, pgBranchId } = focusedViewData;
     const agentId = focusedSession.agentId;
     const edgeLabelDefaults = {
       labelBgPadding: [6, 3] as [number, number],
@@ -2771,6 +2826,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     // Exclude the existing agent→target edge in all focused modes — we replace it
     // with a correctly-directed edge that tells the right story.
     const isRelevantEdge = (edge: Edge): boolean => {
+      // Always exclude any edge that touches a pg-branch node — those are handled
+      // separately by dbBranchEdges so the non-focused versions don't float in space.
+      if (
+        edge.source.startsWith("pg-branch-") ||
+        edge.target.startsWith("pg-branch-")
+      ) return false;
       if (upstreamIds.has(edge.source) && edge.target === targetArchId) return true;
       if (edge.source === targetArchId && downstreamIds.has(edge.target)) return true;
       // agent→target and local↔layer edges are excluded:
@@ -2782,19 +2843,22 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     // Handles for the layer node — static and dynamic variants use different ids.
     const layerSourceHandle =
       layerId === "mirrord-layer" ? "layer-source-right" : `${layerId}-source-right`;
-    const layerTargetHandle =
-      layerId === "mirrord-layer" ? "layer-target-left" : `${layerId}-target-left`;
 
     // Tunnel edge: agent → mirrord-layer.
     // The mirrord-layer is the actual tunnel endpoint on the local side — it receives
     // intercepted/copied traffic from the agent and delivers it to the local process
     // via LD_PRELOAD syscall interception.
+    // Handles for the agent → layer tunnel — agent exits from bottom, layer receives on top.
+    const agentSourceHandle = `${agentId}-source-bottom`;
+    const layerTargetHandleForTunnel =
+      layerId === "mirrord-layer" ? "layer-target-top" : `${layerId}-target-top`;
+
     const tunnelEdge: Edge = {
       id: `focused-tunnel-${agentId}-to-${layerId}`,
       source: agentId,
       target: layerId,
-      sourceHandle: `${agentId}-source-right`,
-      targetHandle: layerTargetHandle,
+      sourceHandle: agentSourceHandle,
+      targetHandle: layerTargetHandleForTunnel,
       label: "mirrord tunnel",
       type: "bezier",
       animated: true,
@@ -2805,23 +2869,67 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       ...edgeLabelDefaults,
     };
 
+    // When a db-branch is active, the local service uses the branched DB instead of the
+    // original. Find the postgres downstream that the branch targets.
+    const pgPostgresId = pgBranchId
+      ? [...downstreamIds].find((id) => id.startsWith("postgres-"))
+      : null;
+
     // Outbound edges: mirrord-layer → downstream services.
-    // The local process's outbound syscalls are intercepted by the layer and forwarded
-    // through the tunnel to the real cluster services.
-    const layerToDownstreamEdges: Edge[] = [...downstreamIds].map((downstreamId) => ({
-      id: `focused-layer-to-${downstreamId}`,
-      source: layerId,
-      target: downstreamId,
-      sourceHandle: layerSourceHandle,
-      label: "outbound via mirrord",
-      type: "bezier",
-      animated: true,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-      style: { stroke: "#E66479", strokeWidth: 2, strokeDasharray: "6 4" },
-      labelStyle: { fontSize: 11, fontWeight: 600, fill: "#E66479" },
-      labelBgStyle: { fill: "#FFF1F3" },
-      ...edgeLabelDefaults,
-    }));
+    // When db-branch is active, skip postgres (replaced by layer→pgBranch below).
+    const layerToDownstreamEdges: Edge[] = [...downstreamIds]
+      .filter((id) => !(pgBranchId && id === pgPostgresId))
+      .map((downstreamId) => ({
+        id: `focused-layer-to-${downstreamId}`,
+        source: layerId,
+        target: downstreamId,
+        sourceHandle: layerSourceHandle,
+        label: "outbound via mirrord",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: "#E66479", strokeWidth: 2, strokeDasharray: "6 4" },
+        labelStyle: { fontSize: 11, fontWeight: 600, fill: "#E66479" },
+        labelBgStyle: { fill: "#FFF1F3" },
+        ...edgeLabelDefaults,
+      }));
+
+    // Db-branch edges: layer → pg-branch (local uses branch) + postgres → pg-branch (copy from top).
+    const activeBranch = focusedViewData.activeBranch;
+    const dbBranchEdges: Edge[] = pgBranchId && pgPostgresId && activeBranch
+      ? [
+          {
+            id: `focused-layer-to-${pgBranchId}`,
+            source: layerId,
+            target: pgBranchId,
+            sourceHandle: layerSourceHandle,
+            targetHandle: `${pgBranchId}-target-left`,
+            label: "use branch DB",
+            type: "bezier",
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+            style: { stroke: "#DC2626", strokeWidth: 2.5, strokeDasharray: "6 4" },
+            labelStyle: { fontSize: 12, fontWeight: 700, fill: "#DC2626" },
+            labelBgStyle: { fill: "#FEF2F2" },
+            ...edgeLabelDefaults,
+          },
+          {
+            id: `focused-${pgPostgresId}-to-${pgBranchId}`,
+            source: pgPostgresId,
+            target: pgBranchId,
+            sourceHandle: "source-bottom",
+            targetHandle: `${pgBranchId}-target-top`,
+            label: `Copy mode: ${activeBranch.copyMode}`,
+            type: "smoothstep",
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+            style: { stroke: "#DC2626", strokeWidth: 2.5, strokeDasharray: "6 4" },
+            labelStyle: { fontSize: 12, fontWeight: 600, fill: "#DC2626" },
+            labelBgStyle: { fill: "#FEF2F2" },
+            ...edgeLabelDefaults,
+          },
+        ]
+      : [];
 
     if (focusedMode === "mirror") {
       // Mirror: traffic hits the service normally AND the agent sniffs a copy from
@@ -2841,11 +2949,15 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         labelBgStyle: { fill: "#EEF2FF" },
         ...edgeLabelDefaults,
       };
+      // Keep pgBranchEdges in the array but hidden so React Flow doesn't orphan DOM elements.
+      const hiddenPgBranchEdges = pgBranchEdges.map((e) => ({ ...e, hidden: true }));
       return [
         ...flowEdges.filter(isRelevantEdge),
+        ...hiddenPgBranchEdges,
         mirrorCopyEdge,
         tunnelEdge,
         ...layerToDownstreamEdges,
+        ...dbBranchEdges,
       ];
     }
 
@@ -2895,8 +3007,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
       result.push(edge);
     }
-    return [...result, tunnelEdge, ...layerToDownstreamEdges];
-  }, [focusedSession, focusedViewData, focusedMode, flowEdges]);
+    // Keep pgBranchEdges in the array but hidden so React Flow doesn't orphan DOM elements.
+    const hiddenPgBranchEdges = pgBranchEdges.map((e) => ({ ...e, hidden: true }));
+    return [...result, ...hiddenPgBranchEdges, tunnelEdge, ...layerToDownstreamEdges, ...dbBranchEdges];
+  }, [focusedSession, focusedViewData, focusedMode, flowEdges, pgBranchEdges]);
 
   /**
    * Compute a fresh dagre layout for the focused nodes so they fill the screen
@@ -2906,7 +3020,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
    */
   const focusedNodePositions = useMemo(() => {
     if (!focusedViewData || !focusedSession) return null;
-    const { visibleIds, targetArchId, upstreamIds, downstreamIds, localId, layerId } =
+    const { visibleIds, targetArchId, upstreamIds, downstreamIds, localId, layerId, pgBranchId } =
       focusedViewData;
     const agentId = focusedSession.agentId;
 
@@ -2918,8 +3032,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: "LR", nodesep: 60, ranksep: 160 });
 
-    // Only the service-mesh nodes go into dagre — agent and local are manual.
-    const dagreIds = [...visibleIds].filter((id) => id !== localId && id !== layerId && id !== agentId);
+    // Only the service-mesh nodes go into dagre — agent, local, and pg-branch are manual.
+    const dagreIds = [...visibleIds].filter(
+      (id) => id !== localId && id !== layerId && id !== agentId && id !== pgBranchId,
+    );
     for (const id of dagreIds) {
       g.setNode(id, { width: nodeWidth, height: nodeHeight });
     }
@@ -2959,7 +3075,17 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       // localGap must be > localPadTop + zonePadBot (92 + 44 = 136) to avoid zone overlap.
       const maxClusterBottom = Math.max(...[...positions.values()].map((p) => p.y + nodeHeight));
       const localGap = 160;
-      positions.set(layerId, { x: agentX, y: maxClusterBottom + localGap });
+      const layerY = maxClusterBottom + localGap;
+      positions.set(layerId, { x: agentX, y: layerY });
+
+      // Place pg-branch inside the cluster zone: same row as the agent, horizontally
+      // aligned with the postgres downstream so the branch copy edge reads naturally.
+      if (pgBranchId) {
+        const pgPostgresId = [...downstreamIds].find((id) => id.startsWith("postgres-"));
+        const postgresPos = pgPostgresId ? positions.get(pgPostgresId) : undefined;
+        const pgBranchX = postgresPos ? postgresPos.x : agentX + nodeWidth + 80;
+        positions.set(pgBranchId, { x: pgBranchX, y: agentY });
+      }
     }
 
     return positions;
@@ -2986,7 +3112,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       });
     }
 
-    const { layerId, visibleIds } = focusedViewData;
+    const { layerId, visibleIds, pgBranchId } = focusedViewData;
     const zonePadX = 48;   // horizontal padding
     const zonePadTop = 72; // extra top padding so zone header label clears nodes
     const zonePadBot = 44; // bottom padding
@@ -3092,6 +3218,17 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
             ? "mirrordFocusMirrorPulse 2s ease-in-out infinite"
             : "mirrordFocusStealPulse 2s ease-in-out infinite";
         mapped = { ...mapped, style: { ...mapped.style, animation } };
+      }
+
+      // Glow on the pg-branch node when db-branch is active
+      if (pgBranchId && node.id === pgBranchId) {
+        mapped = {
+          ...mapped,
+          style: {
+            ...mapped.style,
+            animation: "mirrordFocusDbBranchPulse 2s ease-in-out infinite",
+          },
+        };
       }
 
       // Steal mode: only dim the target service itself (it receives no traffic).
@@ -3250,110 +3387,193 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       </ReactFlow>
 
       {/* Focused session overlay panel */}
-      {focusedSession && focusedViewData && (
-        <div
-          className="absolute top-6 right-6 z-50 w-[380px] rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden"
-          style={{ pointerEvents: "auto" }}
-        >
-          {/* Header */}
+      {focusedSession && focusedViewData && (() => {
+        const activeBranch = focusedViewData.activeBranch;
+        const headerBg =
+          focusPanelTab === "db-branch"
+            ? "#FEF2F2"
+            : focusPanelTab === "mirror"
+            ? "#F5F3FF"
+            : "#FFF7ED";
+        const headerBorder =
+          focusPanelTab === "db-branch"
+            ? "#FECACA"
+            : focusPanelTab === "mirror"
+            ? "#E0E7FF"
+            : "#FFEDD5";
+        const headerAccent =
+          focusPanelTab === "db-branch"
+            ? "#DC2626"
+            : focusPanelTab === "mirror"
+            ? "#4F46E5"
+            : "#EA580C";
+        const headerLabel =
+          focusPanelTab === "db-branch"
+            ? "DB Branch Active"
+            : focusPanelTab === "mirror"
+            ? "Mirroring Session"
+            : "Steal Session";
+
+        return (
           <div
-            className="px-6 pt-5 pb-4"
-            style={{
-              borderBottom: `1px solid ${focusedMode === "mirror" ? "#E0E7FF" : "#FFEDD5"}`,
-              background: focusedMode === "mirror" ? "#F5F3FF" : "#FFF7ED",
-            }}
+            className="absolute top-6 right-6 z-50 w-[380px] rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden"
+            style={{ pointerEvents: "auto" }}
           >
-            <div className="flex items-start justify-between">
-              <div>
-                <p
-                  className="text-[11px] font-bold uppercase tracking-[0.2em] mb-1"
-                  style={{ color: focusedMode === "mirror" ? "#4F46E5" : "#EA580C" }}
-                >
-                  {focusedMode === "mirror" ? "Mirroring Session" : "Steal Session"}
-                </p>
-                <p className="text-xl font-bold text-[#111827] leading-tight">
-                  {focusedViewData.targetLabel}
-                </p>
-                <p className="text-sm text-[#6B7280] mt-0.5">
-                  {focusedSession.ownerUsername}
-                  {focusedSession.ownerHostname ? ` · ${focusedSession.ownerHostname}` : ""}
-                </p>
-              </div>
-              <button
-                onClick={() => setFocusedSession(null)}
-                className="ml-4 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#374151] transition-colors text-sm font-medium flex-shrink-0"
-                title="Exit focused view"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* Traffic mode toggle */}
-          <div className="px-6 pt-4 pb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">
-              Traffic mode
-            </p>
-            <div className="flex rounded-xl border border-[#E5E7EB] overflow-hidden">
-              <button
-                className="flex-1 py-2.5 text-sm font-semibold transition-all"
-                style={
-                  focusedMode === "mirror"
-                    ? { background: "#4F46E5", color: "#fff" }
-                    : { background: "#fff", color: "#6B7280" }
-                }
-                onClick={() => setFocusedMode("mirror")}
-              >
-                Mirror
-              </button>
-              <button
-                className="flex-1 py-2.5 text-sm font-semibold transition-all"
-                style={
-                  focusedMode === "steal"
-                    ? { background: "#EA580C", color: "#fff" }
-                    : { background: "#fff", color: "#6B7280" }
-                }
-                onClick={() => setFocusedMode("steal")}
-              >
-                Steal
-              </button>
-            </div>
-          </div>
-
-          {/* Plain-English explanation */}
-          <div className="px-6 pb-6">
+            {/* Header */}
             <div
-              className="rounded-xl p-4 text-sm leading-relaxed"
-              style={
-                focusedMode === "mirror"
-                  ? { background: "#EEF2FF", color: "#3730A3" }
-                  : { background: "#FFF7ED", color: "#9A3412" }
-              }
+              className="px-6 pt-5 pb-4"
+              style={{ borderBottom: `1px solid ${headerBorder}`, background: headerBg }}
             >
-              {focusedMode === "mirror" ? (
-                <p>
-                  Traffic continues to flow to{" "}
-                  <strong>{focusedViewData.targetLabel}</strong> in the cluster as
-                  normal. A copy of every incoming request is also delivered to{" "}
-                  <strong>{focusedSession.ownerUsername}</strong>&apos;s local process.
-                  The cluster service is unaware of the mirroring.
-                </p>
-              ) : (
-                <p>
-                  All traffic that would normally reach{" "}
-                  <strong>{focusedViewData.targetLabel}</strong> is being redirected to{" "}
-                  <strong>{focusedSession.ownerUsername}</strong>&apos;s local machine
-                  instead. The cluster service receives no requests while this session
-                  is active.
-                </p>
-              )}
+              <div className="flex items-start justify-between">
+                <div>
+                  <p
+                    className="text-[11px] font-bold uppercase tracking-[0.2em] mb-1"
+                    style={{ color: headerAccent }}
+                  >
+                    {headerLabel}
+                  </p>
+                  <p className="text-xl font-bold text-[#111827] leading-tight">
+                    {focusedViewData.targetLabel}
+                  </p>
+                  <p className="text-sm text-[#6B7280] mt-0.5">
+                    {focusedSession.ownerUsername}
+                    {focusedSession.ownerHostname ? ` · ${focusedSession.ownerHostname}` : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setFocusedSession(null)}
+                  className="ml-4 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#374151] transition-colors text-sm font-medium flex-shrink-0"
+                  title="Exit focused view"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <p className="mt-3 text-[11px] text-[#9CA3AF] text-center">
-              Click an agent or local machine node to switch sessions
-            </p>
+
+            {/* Tab bar — three tabs when db-branch is active, two otherwise */}
+            <div className="px-6 pt-4 pb-3">
+              <div className="flex rounded-xl border border-[#E5E7EB] overflow-hidden">
+                {activeBranch && (
+                  <button
+                    className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                    style={
+                      focusPanelTab === "db-branch"
+                        ? { background: "#DC2626", color: "#fff" }
+                        : { background: "#fff", color: "#6B7280" }
+                    }
+                    onClick={() => setFocusPanelTab("db-branch")}
+                  >
+                    DB Branch
+                  </button>
+                )}
+                <button
+                  className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                  style={
+                    focusPanelTab === "mirror"
+                      ? { background: "#4F46E5", color: "#fff" }
+                      : { background: "#fff", color: "#6B7280" }
+                  }
+                  onClick={() => { setFocusPanelTab("mirror"); setFocusedMode("mirror"); }}
+                >
+                  Mirror
+                </button>
+                <button
+                  className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                  style={
+                    focusPanelTab === "steal"
+                      ? { background: "#EA580C", color: "#fff" }
+                      : { background: "#fff", color: "#6B7280" }
+                  }
+                  onClick={() => { setFocusPanelTab("steal"); setFocusedMode("steal"); }}
+                >
+                  Steal
+                </button>
+              </div>
+            </div>
+
+            {/* Panel content */}
+            <div className="px-6 pb-6">
+              {focusPanelTab === "db-branch" && activeBranch ? (
+                <>
+                  <div className="rounded-xl p-4 text-sm leading-relaxed bg-[#FEF2F2] text-[#7F1D1D]">
+                    <p>
+                      <strong>{focusedSession.ownerUsername}</strong>&apos;s local service is
+                      connected to a branched copy of the database. The cluster service continues
+                      to use the original database unaffected.
+                    </p>
+                  </div>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7280]">Branch ID</span>
+                      <span className="font-medium text-[#111827] font-mono text-xs">{activeBranch.branchId}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7280]">Phase</span>
+                      <span
+                        className="font-semibold text-xs px-2 py-0.5 rounded-full"
+                        style={{
+                          background: activeBranch.phase === "Ready" ? "#DCFCE7" : "#FEF9C3",
+                          color: activeBranch.phase === "Ready" ? "#166534" : "#854D0E",
+                        }}
+                      >
+                        {activeBranch.phase}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7280]">Copy mode</span>
+                      <span className="font-medium text-[#111827]">{activeBranch.copyMode}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B7280]">Postgres version</span>
+                      <span className="font-medium text-[#111827]">{activeBranch.postgresVersion}</span>
+                    </div>
+                    {activeBranch.expireTime && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Expires</span>
+                        <span className="font-medium text-[#111827]">
+                          {new Date(activeBranch.expireTime).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div
+                    className="rounded-xl p-4 text-sm leading-relaxed"
+                    style={
+                      focusedMode === "mirror"
+                        ? { background: "#EEF2FF", color: "#3730A3" }
+                        : { background: "#FFF7ED", color: "#9A3412" }
+                    }
+                  >
+                    {focusedMode === "mirror" ? (
+                      <p>
+                        Traffic continues to flow to{" "}
+                        <strong>{focusedViewData.targetLabel}</strong> in the cluster as
+                        normal. A copy of every incoming request is also delivered to{" "}
+                        <strong>{focusedSession.ownerUsername}</strong>&apos;s local process.
+                        The cluster service is unaware of the mirroring.
+                      </p>
+                    ) : (
+                      <p>
+                        All traffic that would normally reach{" "}
+                        <strong>{focusedViewData.targetLabel}</strong> is being redirected to{" "}
+                        <strong>{focusedSession.ownerUsername}</strong>&apos;s local machine
+                        instead. The cluster service receives no requests while this session
+                        is active.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+              <p className="mt-3 text-[11px] text-[#9CA3AF] text-center">
+                Click an agent or local machine node to switch sessions
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Hint shown on agent/local nodes when sessions are active but no focused view */}
       {hasShopSessions && !focusedSession && (
