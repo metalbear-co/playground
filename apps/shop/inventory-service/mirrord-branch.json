@@ -16,7 +16,7 @@
     },
     "db_branches": [
       {
-        "id": "dan01-branch-db",
+        "id": "{{key}}01-branch-db",
         "type": "pg",
         "ttl_secs": 30,
         "version": "16.0",
