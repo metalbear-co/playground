@@ -949,7 +949,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [dbDialogId, setDbDialogId] = useState<string | null>(null);
   const [focusedSession, setFocusedSession] = useState<FocusedSession | null>(null);
   const [focusedMode, setFocusedMode] = useState<"mirror" | "steal">("mirror");
-  const [focusPanelTab, setFocusPanelTab] = useState<"db-branch" | "mirror" | "steal">("mirror");
+  const [focusPanelTab, setFocusPanelTab] = useState<"db-branch" | "queue-split" | "mirror" | "steal">("mirror");
 
   // Keep the module-level ref in sync so ArchitectureNode can open the dialog.
   useEffect(() => {
@@ -1740,6 +1740,72 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       ? `pg-branch-${sanitizeHostname(activeBranch.name)}`
       : null;
 
+    // --- Queue split detection ---------------------------------------------------
+    // Find operator sessions belonging to the focused user+target. Then collect any
+    // Kafka topic / SQS queue whose sessionId belongs to one of those sessions.
+    // Each entry is normalized to a generic shape so the rest of focus mode can
+    // treat Kafka and SQS uniformly. The user has guaranteed at most one queue
+    // type is active for a given target at a time.
+    const matchingSessionIds = new Set(
+      operatorSessions
+        .filter((s) => {
+          if (s.owner.hostname !== focusedSession.ownerHostname) return false;
+          const sTargetArchId = aliasIndex.get((s.target.name ?? "").toLowerCase());
+          return sTargetArchId === targetArchId;
+        })
+        .map((s) => s.sessionId),
+    );
+
+    type ActiveQueueSplit = {
+      kind: "kafka" | "sqs";
+      producerId: string;       // architecture node id of the producer (e.g. "kafka", "sqs")
+      filteredId: string;       // dynamic node id of the filtered/ephemeral split
+      fallbackId: string;       // dynamic node id of the fallback/original split
+      label: string;            // user-facing identifier (topic/queue name)
+      filter?: string;          // jq filter (sqs only)
+      sessionId: string;
+    };
+
+    const activeQueueSplits: ActiveQueueSplit[] = [];
+
+    // Kafka — pair Filtered+Fallback topics by sessionId.
+    const kafkaBySession = new Map<string, { filtered?: KafkaEphemeralTopic; fallback?: KafkaEphemeralTopic }>();
+    for (const t of kafkaTopics) {
+      if (!matchingSessionIds.has(t.sessionId)) continue;
+      const entry = kafkaBySession.get(t.sessionId) ?? {};
+      if (t.topicType === "Filtered") entry.filtered = t;
+      else if (t.topicType === "Fallback") entry.fallback = t;
+      kafkaBySession.set(t.sessionId, entry);
+    }
+    for (const [sessionId, { filtered, fallback }] of kafkaBySession) {
+      if (!filtered || !fallback) continue;
+      activeQueueSplits.push({
+        kind: "kafka",
+        producerId: "kafka",
+        filteredId: `kafka-topic-${filtered.topicName}`,
+        fallbackId: `kafka-deployed-topic-${fallback.topicName}`,
+        label: filtered.topicName,
+        sessionId,
+      });
+    }
+
+    // SQS — each queue is self-contained (filtered + original both live on the row).
+    for (const q of sqsQueues) {
+      if (!matchingSessionIds.has(q.sessionId)) continue;
+      activeQueueSplits.push({
+        kind: "sqs",
+        producerId: "sqs",
+        filteredId: `sqs-queue-${q.queueName}`,
+        fallbackId: `sqs-deployed-queue-${q.originalQueueName}`,
+        label: q.queueName,
+        filter: q.jqFilter,
+        sessionId: q.sessionId,
+      });
+    }
+
+    const hasQueueSplit = activeQueueSplits.length > 0;
+    const queueSplitNodeIds = activeQueueSplits.flatMap((s) => [s.filteredId, s.fallbackId]);
+
     const visibleIds = new Set([
       targetArchId,
       ...upstreamIds,
@@ -1748,14 +1814,27 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       localId,
       layerId,
       ...(pgBranchId ? [pgBranchId] : []),
+      ...(hasQueueSplit ? ["mirrord-operator", ...queueSplitNodeIds] : []),
     ]);
 
     const targetNode = architectureNodes.find((n) => n.id === targetArchId);
     const targetLabel =
       typeof targetNode?.label === "string" ? targetNode.label : targetArchId;
 
-    return { targetArchId, upstreamIds, downstreamIds, visibleIds, localId, layerId, targetLabel, activeBranch, pgBranchId };
-  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches]);
+    return {
+      targetArchId,
+      upstreamIds,
+      downstreamIds,
+      visibleIds,
+      localId,
+      layerId,
+      targetLabel,
+      activeBranch,
+      pgBranchId,
+      activeQueueSplits,
+      hasQueueSplit,
+    };
+  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches, operatorSessions, kafkaTopics, sqsQueues]);
 
   /**
    * Enter focused view when the user clicks an agent node or a local process node.
@@ -1784,7 +1863,20 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
               (b.targetDeployment === group.targetName ||
                 aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
           );
-          setFocusPanelTab(hasBranch ? "db-branch" : "mirror");
+          // Detect a queue split (kafka or sqs) for this user+target.
+          const sessionIdsForFocus = new Set(
+            operatorSessions
+              .filter(
+                (s) =>
+                  s.owner.hostname === ownerHostname &&
+                  aliasIndex.get((s.target.name ?? "").toLowerCase()) === targetArchId,
+              )
+              .map((s) => s.sessionId),
+          );
+          const hasQueueSplit =
+            kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
+            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+          setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
         }
         return;
       }
@@ -1822,11 +1914,24 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
               (b.targetDeployment === group.targetName ||
                 aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
           );
-          setFocusPanelTab(hasBranch ? "db-branch" : "mirror");
+          // Detect a queue split (kafka or sqs) for this user+target.
+          const sessionIdsForFocus = new Set(
+            operatorSessions
+              .filter(
+                (s) =>
+                  s.owner.hostname === ownerHostname &&
+                  aliasIndex.get((s.target.name ?? "").toLowerCase()) === targetArchId,
+              )
+              .map((s) => s.sessionId),
+          );
+          const hasQueueSplit =
+            kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
+            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+          setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
         }
       }
     },
-    [agentGroups, localMachineEntries, pgBranches, aliasIndex],
+    [agentGroups, localMachineEntries, pgBranches, aliasIndex, operatorSessions, kafkaTopics, sqsQueues],
   );
 
   const dynamicLocalMachineNodes = useMemo((): Node<NodeData>[] => {
@@ -2823,6 +2928,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       labelShowBg: true,
     };
 
+    const activeQueueSplits = focusedViewData.activeQueueSplits;
+    const queueSplitProducerIds = new Set(activeQueueSplits.map((s) => s.producerId));
+
     // Exclude the existing agent→target edge in all focused modes — we replace it
     // with a correctly-directed edge that tells the right story.
     const isRelevantEdge = (edge: Edge): boolean => {
@@ -2831,6 +2939,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       if (
         edge.source.startsWith("pg-branch-") ||
         edge.target.startsWith("pg-branch-")
+      ) return false;
+      // When a queue split is active for this session, hide the direct producer→target
+      // edge — it's replaced by the producer→operator→{filtered,fallback}→{layer,target}
+      // story rendered by queueSplitEdges below.
+      if (
+        queueSplitProducerIds.has(edge.source) &&
+        edge.target === targetArchId
       ) return false;
       if (upstreamIds.has(edge.source) && edge.target === targetArchId) return true;
       if (edge.source === targetArchId && downstreamIds.has(edge.target)) return true;
@@ -2931,6 +3046,95 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         ]
       : [];
 
+    // --- Focused queue split edges ----------------------------------------------
+    // Reuse the existing "mirrored" intent palette so the visual language matches
+    // the non-focused queue split rendering.
+    const queueSplitEdges: Edge[] = [];
+    const queueMirroredColor = intentStyles.mirrored.color;
+    const queueMirroredDash = intentStyles.mirrored.dash;
+    for (const split of activeQueueSplits) {
+      // producer → operator
+      queueSplitEdges.push({
+        id: `focused-${split.producerId}-to-operator`,
+        source: split.producerId,
+        target: "mirrord-operator",
+        sourceHandle: "source-bottom",
+        targetHandle: "operator-target-top",
+        label: "consume messages",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: queueMirroredColor, strokeWidth: 2.5, strokeDasharray: queueMirroredDash },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+        labelBgStyle: { fill: "#FFFFFF" },
+        ...edgeLabelDefaults,
+      });
+      // operator → filtered
+      queueSplitEdges.push({
+        id: `focused-operator-to-${split.filteredId}`,
+        source: "mirrord-operator",
+        target: split.filteredId,
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${split.filteredId}-target-top`,
+        label: "matching filter",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: queueMirroredColor, strokeWidth: 2.5, strokeDasharray: queueMirroredDash },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+        labelBgStyle: { fill: "#FFFFFF" },
+        ...edgeLabelDefaults,
+      });
+      // filtered → layer (combined local node)
+      queueSplitEdges.push({
+        id: `focused-${split.filteredId}-to-${layerId}`,
+        source: split.filteredId,
+        target: layerId,
+        sourceHandle: `${split.filteredId}-source-bottom`,
+        targetHandle: layerId === "mirrord-layer" ? "layer-target-top" : `${layerId}-target-top`,
+        label: "consume messages",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: queueMirroredColor, strokeWidth: 2.5, strokeDasharray: queueMirroredDash },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+        labelBgStyle: { fill: "#FFFFFF" },
+        ...edgeLabelDefaults,
+      });
+      // operator → fallback
+      queueSplitEdges.push({
+        id: `focused-operator-to-${split.fallbackId}`,
+        source: "mirrord-operator",
+        target: split.fallbackId,
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${split.fallbackId}-target-left`,
+        label: "not matching filter",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: queueMirroredColor, strokeWidth: 2.5, strokeDasharray: queueMirroredDash },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+        labelBgStyle: { fill: "#FFFFFF" },
+        ...edgeLabelDefaults,
+      });
+      // fallback → target service
+      queueSplitEdges.push({
+        id: `focused-${split.fallbackId}-to-${targetArchId}`,
+        source: split.fallbackId,
+        target: targetArchId,
+        sourceHandle: `${split.fallbackId}-source-top`,
+        targetHandle: "target-bottom",
+        label: "consume messages",
+        type: "bezier",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: queueMirroredColor, strokeWidth: 2.5, strokeDasharray: queueMirroredDash },
+        labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+        labelBgStyle: { fill: "#FFFFFF" },
+        ...edgeLabelDefaults,
+      });
+    }
+
     if (focusedMode === "mirror") {
       // Mirror: traffic hits the service normally AND the agent sniffs a copy from
       // the pod's network interface and sends it through the tunnel to mirrord-layer.
@@ -2958,6 +3162,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         tunnelEdge,
         ...layerToDownstreamEdges,
         ...dbBranchEdges,
+        ...queueSplitEdges,
       ];
     }
 
@@ -3009,7 +3214,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     }
     // Keep pgBranchEdges in the array but hidden so React Flow doesn't orphan DOM elements.
     const hiddenPgBranchEdges = pgBranchEdges.map((e) => ({ ...e, hidden: true }));
-    return [...result, ...hiddenPgBranchEdges, tunnelEdge, ...layerToDownstreamEdges, ...dbBranchEdges];
+    return [...result, ...hiddenPgBranchEdges, tunnelEdge, ...layerToDownstreamEdges, ...dbBranchEdges, ...queueSplitEdges];
   }, [focusedSession, focusedViewData, focusedMode, flowEdges, pgBranchEdges]);
 
   /**
@@ -3020,9 +3225,21 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
    */
   const focusedNodePositions = useMemo(() => {
     if (!focusedViewData || !focusedSession) return null;
-    const { visibleIds, targetArchId, upstreamIds, downstreamIds, localId, layerId, pgBranchId } =
-      focusedViewData;
+    const {
+      visibleIds,
+      targetArchId,
+      upstreamIds,
+      downstreamIds,
+      localId,
+      layerId,
+      pgBranchId,
+      activeQueueSplits,
+    } = focusedViewData;
     const agentId = focusedSession.agentId;
+    const queueSplitNodeIdSet = new Set<string>([
+      ...activeQueueSplits.flatMap((s) => [s.filteredId, s.fallbackId]),
+    ]);
+    const hasQueueSplit = activeQueueSplits.length > 0;
 
     // Layout the main horizontal flow: upstreams → target → downstreams.
     // Agent and local node are placed manually BELOW the main row so:
@@ -3032,9 +3249,16 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: "LR", nodesep: 60, ranksep: 160 });
 
-    // Only the service-mesh nodes go into dagre — agent, local, and pg-branch are manual.
+    // Only the service-mesh nodes go into dagre — agent, local, pg-branch, and the
+    // queue split satellite nodes (operator + filtered + fallback) are placed manually.
     const dagreIds = [...visibleIds].filter(
-      (id) => id !== localId && id !== layerId && id !== agentId && id !== pgBranchId,
+      (id) =>
+        id !== localId &&
+        id !== layerId &&
+        id !== agentId &&
+        id !== pgBranchId &&
+        id !== "mirrord-operator" &&
+        !queueSplitNodeIdSet.has(id),
     );
     for (const id of dagreIds) {
       g.setNode(id, { width: nodeWidth, height: nodeHeight });
@@ -3071,13 +3295,6 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       const agentY = targetPos.y + nodeHeight + 220;
       positions.set(agentId, { x: agentX, y: agentY });
 
-      // Local node: below ALL cluster nodes so the local zone clears the cluster zone bottom.
-      // localGap must be > localPadTop + zonePadBot (92 + 44 = 136) to avoid zone overlap.
-      const maxClusterBottom = Math.max(...[...positions.values()].map((p) => p.y + nodeHeight));
-      const localGap = 160;
-      const layerY = maxClusterBottom + localGap;
-      positions.set(layerId, { x: agentX, y: layerY });
-
       // Place pg-branch inside the cluster zone: same row as the agent, horizontally
       // aligned with the postgres downstream so the branch copy edge reads naturally.
       if (pgBranchId) {
@@ -3086,6 +3303,48 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         const pgBranchX = postgresPos ? postgresPos.x : agentX + nodeWidth + 80;
         positions.set(pgBranchId, { x: pgBranchX, y: agentY });
       }
+
+      // --- Queue split node placement -----------------------------------------
+      // Place the operator + filtered + fallback split nodes BELOW the kafka/sqs
+      // producer (still inside the cluster zone). The producer sits in the main
+      // upstream column on the left; we stack the operator directly under it and
+      // put the filtered + fallback nodes in a row underneath the operator.
+      if (hasQueueSplit) {
+        const firstSplit = activeQueueSplits[0];
+        const producerPos = positions.get(firstSplit.producerId);
+
+        // Anchor the split column on the producer, falling back to a spot left
+        // of the target if the producer isn't laid out for some reason.
+        const anchorX = producerPos ? producerPos.x : targetPos.x - (nodeWidth + 80);
+        const anchorY = producerPos ? producerPos.y : targetPos.y;
+
+        const operatorY = anchorY + nodeHeight + 60;
+        const splitRowY = operatorY + nodeHeight + 60;
+
+        positions.set("mirrord-operator", { x: anchorX, y: operatorY });
+
+        // Filtered nodes go on the left of the column, fallback nodes to their
+        // right. With multiple splits we stack each pair downward so the cluster
+        // zone simply grows to contain them.
+        activeQueueSplits.forEach((split, i) => {
+          const rowY = splitRowY + i * (nodeHeight + 40);
+          positions.set(split.filteredId, { x: anchorX, y: rowY });
+          positions.set(split.fallbackId, { x: anchorX + nodeWidth + 40, y: rowY });
+        });
+      }
+
+      // Local node: below ALL cluster nodes so the local zone clears the cluster zone bottom.
+      // Computed AFTER pg-branch and queue-split placement so it tracks the true cluster bottom.
+      // localGap must be > localPadTop + zonePadBot (92 + 44 = 136) to avoid zone overlap.
+      const clusterBottomCandidates = [...positions.entries()]
+        .filter(([id]) => id !== layerId && id !== agentId)
+        .map(([, p]) => p.y + nodeHeight);
+      const maxClusterBottom = clusterBottomCandidates.length
+        ? Math.max(...clusterBottomCandidates)
+        : targetPos.y + nodeHeight;
+      const localGap = 160;
+      const layerY = maxClusterBottom + localGap;
+      positions.set(layerId, { x: agentX, y: layerY });
     }
 
     return positions;
@@ -3227,6 +3486,22 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           style: {
             ...mapped.style,
             animation: "mirrordFocusDbBranchPulse 2s ease-in-out infinite",
+          },
+        };
+      }
+
+      // Glow on the filtered queue/topic node(s) when a queue split is active
+      // for the focused session. Per spec the pulse lives on the *filtered* node
+      // (the one that routes matching messages to the local process).
+      if (
+        focusedViewData.hasQueueSplit &&
+        focusedViewData.activeQueueSplits.some((s) => s.filteredId === node.id)
+      ) {
+        mapped = {
+          ...mapped,
+          style: {
+            ...mapped.style,
+            animation: "mirrordFocusQueueSplitPulse 2s ease-in-out infinite",
           },
         };
       }
@@ -3389,27 +3664,37 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       {/* Focused session overlay panel */}
       {focusedSession && focusedViewData && (() => {
         const activeBranch = focusedViewData.activeBranch;
+        const activeQueueSplits = focusedViewData.activeQueueSplits;
+        const hasQueueSplit = focusedViewData.hasQueueSplit;
         const headerBg =
           focusPanelTab === "db-branch"
             ? "#FEF2F2"
+            : focusPanelTab === "queue-split"
+            ? "#FEFCE8"
             : focusPanelTab === "mirror"
             ? "#F5F3FF"
             : "#FFF7ED";
         const headerBorder =
           focusPanelTab === "db-branch"
             ? "#FECACA"
+            : focusPanelTab === "queue-split"
+            ? "#FDE68A"
             : focusPanelTab === "mirror"
             ? "#E0E7FF"
             : "#FFEDD5";
         const headerAccent =
           focusPanelTab === "db-branch"
             ? "#DC2626"
+            : focusPanelTab === "queue-split"
+            ? "#CA8A04"
             : focusPanelTab === "mirror"
             ? "#4F46E5"
             : "#EA580C";
         const headerLabel =
           focusPanelTab === "db-branch"
             ? "DB Branch Active"
+            : focusPanelTab === "queue-split"
+            ? "Queue Split Active"
             : focusPanelTab === "mirror"
             ? "Mirroring Session"
             : "Steal Session";
@@ -3450,7 +3735,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
               </div>
             </div>
 
-            {/* Tab bar — three tabs when db-branch is active, two otherwise */}
+            {/* Tab bar — extra tabs appear when db-branch and/or queue-split are active */}
             <div className="px-6 pt-4 pb-3">
               <div className="flex rounded-xl border border-[#E5E7EB] overflow-hidden">
                 {activeBranch && (
@@ -3464,6 +3749,19 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                     onClick={() => setFocusPanelTab("db-branch")}
                   >
                     DB Branch
+                  </button>
+                )}
+                {hasQueueSplit && (
+                  <button
+                    className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                    style={
+                      focusPanelTab === "queue-split"
+                        ? { background: "#CA8A04", color: "#fff" }
+                        : { background: "#fff", color: "#6B7280" }
+                    }
+                    onClick={() => setFocusPanelTab("queue-split")}
+                  >
+                    Queue Split
                   </button>
                 )}
                 <button
@@ -3493,7 +3791,48 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
 
             {/* Panel content */}
             <div className="px-6 pb-6">
-              {focusPanelTab === "db-branch" && activeBranch ? (
+              {focusPanelTab === "queue-split" && hasQueueSplit ? (
+                <>
+                  <div className="rounded-xl p-4 text-sm leading-relaxed bg-[#FEFCE8] text-[#713F12]">
+                    <p>
+                      The mirrord operator is splitting incoming messages for{" "}
+                      <strong>{focusedViewData.targetLabel}</strong>. Messages matching
+                      the active filter are routed to{" "}
+                      <strong>{focusedSession.ownerUsername}</strong>&apos;s local
+                      process; everything else continues to flow to the cluster service
+                      unchanged. The producer and consumers are unaware of the split.
+                    </p>
+                  </div>
+                  <div className="mt-3 space-y-3 text-sm">
+                    {activeQueueSplits.map((split) => (
+                      <div
+                        key={`${split.kind}-${split.label}`}
+                        className="rounded-lg border border-[#FDE68A] bg-white p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#CA8A04]">
+                            {split.kind === "kafka" ? "Kafka topic" : "SQS queue"}
+                          </span>
+                          <span className="font-mono text-[10px] text-[#9CA3AF]">
+                            {split.sessionId.substring(0, 8)}
+                          </span>
+                        </div>
+                        <p className="mt-1 font-semibold text-[#111827] break-all">
+                          {split.label}
+                        </p>
+                        {split.filter && (
+                          <p
+                            className="mt-2 font-mono text-[11px] text-[#6B7280] truncate"
+                            title={split.filter}
+                          >
+                            filter: {split.filter}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : focusPanelTab === "db-branch" && activeBranch ? (
                 <>
                   <div className="rounded-xl p-4 text-sm leading-relaxed bg-[#FEF2F2] text-[#7F1D1D]">
                     <p>
