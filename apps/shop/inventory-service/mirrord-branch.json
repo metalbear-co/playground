@@ -1,0 +1,32 @@
+{
+  "key": "dan",
+  "target": {
+    "path": "deploy/inventory-service",
+    "namespace": "shop"
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
+        }
+      },
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "id": "{{key}}01-branch-db",
+        "type": "pg",
+        "ttl_secs": 30,
+        "version": "16.0",
+        "connection": {
+          "url": "DATABASE_URL"
+        },
+        "copy": {
+          "mode": "schema"
+        }
+      }
+    ]
+  }
+}
