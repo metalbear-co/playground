@@ -1,4 +1,5 @@
 {
+  "key":"ari",
   "target": {
     "namespace": "shop",
     "path": {
@@ -7,19 +8,13 @@
   },
   "feature": {
     "network": {
-      "incoming": {
-        "mode": "steal",
-        "http_filter": {
-          "header_filter": "X-PG-Tenant: Ari"
-        }
-      },
       "outgoing": true
     },
     "split_queues": {
       "orders": {
         "queue_type": "Kafka",
         "message_filter": {
-          "baggage": "^mirrord=ari$"
+          "baggage": "^mirrord={{key}}$"
         }
       }
     }
