@@ -3337,7 +3337,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       // Computed AFTER pg-branch and queue-split placement so it tracks the true cluster bottom.
       // localGap must be > localPadTop + zonePadBot (92 + 44 = 136) to avoid zone overlap.
       const clusterBottomCandidates = [...positions.entries()]
-        .filter(([id]) => id !== layerId && id !== agentId)
+        .filter(([id]) => id !== layerId)
         .map(([, p]) => p.y + nodeHeight);
       const maxClusterBottom = clusterBottomCandidates.length
         ? Math.max(...clusterBottomCandidates)
