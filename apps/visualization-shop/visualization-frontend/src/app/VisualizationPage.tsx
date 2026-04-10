@@ -49,6 +49,8 @@ type NodeData = {
   ciRunner?: boolean;
   /** When true, render data.label directly instead of looking up static architectureNodes info */
   focusedCombined?: boolean;
+  /** When true, DB branch matches a preview session key — use blue styling */
+  matchesPreview?: boolean;
 };
 
 /** Module-level ref so ArchitectureNode (defined outside the component) can open the DB dialog. */
@@ -724,7 +726,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
   const isOperator = id === "mirrord-operator";
   const isCiRunnerAgent = isDynamicAgent && data.ciRunner === true;
-  const borderColor = isCiRunnerAgent ? "#0D9488" : isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
+  const borderColor = isCiRunnerAgent ? "#0D9488" : isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : (isDynamicPgBranch && data.matchesPreview) ? "#0EA5E9" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
@@ -2130,14 +2132,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const pgBranchNodes = useMemo((): Node<NodeData>[] => {
     if (pgBranches.length === 0) return [];
     const palette = groupPalette.mirrord;
-    const sharedStyle = {
-      borderRadius: 18,
-      backgroundColor: "transparent",
-      color: palette.text,
-      boxShadow: "0px 30px 60px rgba(220,38,38,0.25)",
-      width: nodeWidth,
-      zIndex: 10,
-    };
+
+    // Collect all preview session keys for matching
+    const previewKeys = new Set(previewSessions.map((s) => s.key));
 
     return pgBranches.map((branch, index) => {
       const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
@@ -2145,11 +2142,21 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       const postgresNodeId = `postgres-orders`;
       const postgresPos = adjustedNodes.find((n) => n.id === postgresNodeId)?.position ?? { x: 0, y: 0 };
 
+      // Use blue (preview) styling when branchId matches a preview session key
+      const matchesPreview = previewKeys.has(branch.branchId);
+      const boxShadow = matchesPreview
+        ? "0px 30px 60px rgba(14,165,233,0.25)"
+        : "0px 30px 60px rgba(220,38,38,0.25)";
+      const buttonClass = matchesPreview
+        ? "mt-1 inline-flex items-center gap-1 self-start rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+        : "mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors cursor-pointer";
+
       return {
         id: nodeId,
         type: "mirrord",
         data: {
           group: "mirrord" as const,
+          matchesPreview,
           label: (
             <div className="flex flex-col gap-1 text-left">
               <span className="text-sm font-semibold text-slate-900">
@@ -2167,7 +2174,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                 </p>
               ))}
               <button
-                className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors cursor-pointer"
+                className={buttonClass}
                 onClick={(e) => {
                   e.stopPropagation();
                   setDbDialogId(nodeId);
@@ -2183,7 +2190,14 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           x: postgresPos.x - nodeWidth - 60,
           y: postgresPos.y + index * (nodeHeight + 40),
         },
-        style: sharedStyle,
+        style: {
+          borderRadius: 18,
+          backgroundColor: "transparent",
+          color: palette.text,
+          boxShadow,
+          width: nodeWidth,
+          zIndex: 10,
+        },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         connectable: false,
@@ -2191,7 +2205,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         selectable: true,
       };
     });
-  }, [pgBranches, dynamicNodePositions]);
+  }, [pgBranches, dynamicNodePositions, previewSessions]);
 
   // Build dynamic edges for PgBranchDatabase nodes.
   // Each branch connects from its target postgres node.
@@ -2357,17 +2371,22 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     const padding = 30;
 
     for (const [key, sessions] of keyGroups) {
-      if (sessions.length < 2) continue;
-
       // Find the preview nodes belonging to this group
       const memberNodeIds = sessions.map((s) => `preview-${sanitizeHostname(s.name)}`);
-      const memberNodes = previewSessionNodes.filter((n) => memberNodeIds.includes(n.id));
-      if (memberNodes.length < 2) continue;
+      const memberNodes: Node<NodeData>[] = previewSessionNodes.filter((n) => memberNodeIds.includes(n.id));
 
-      const xs = memberNodes.map((n) => n.position.x);
-      const ys = memberNodes.map((n) => n.position.y);
-      const maxXs = memberNodes.map((n) => n.position.x + nodeWidth);
-      const maxYs = memberNodes.map((n) => n.position.y + nodeHeight);
+      // Include DB branch nodes whose branchId matches this preview key
+      const matchingBranchNodes = pgBranchNodes.filter((n) => {
+        const branch = pgBranches.find((b) => `pg-branch-${sanitizeHostname(b.name)}` === n.id);
+        return branch && branch.branchId === key;
+      });
+      const allZoneNodes = [...memberNodes, ...matchingBranchNodes];
+      if (allZoneNodes.length < 2) continue;
+
+      const xs = allZoneNodes.map((n) => n.position.x);
+      const ys = allZoneNodes.map((n) => n.position.y);
+      const maxXs = allZoneNodes.map((n) => n.position.x + nodeWidth);
+      const maxYs = allZoneNodes.map((n) => n.position.y + nodeHeight);
 
       const zoneWidth = Math.max(...maxXs) - Math.min(...xs) + padding * 2;
       const zoneHeight = Math.max(...maxYs) - Math.min(...ys) + padding * 2 + 20; // extra space for key label
@@ -2400,7 +2419,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     }
 
     return zones;
-  }, [previewSessions, previewSessionNodes]);
+  }, [previewSessions, previewSessionNodes, pgBranchNodes, pgBranches]);
 
   // Build dynamic edges for PreviewSession nodes: preview pod → operator.
   // The operator → agent → target path is handled by dynamicEdges via agentGroups integration.
@@ -2656,7 +2675,6 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     nodes.push(...kafkaTopicNodes);
     nodes.push(...sqsQueueNodes);
     nodes.push(...pgBranchNodes);
-    nodes.push(...previewSessionZoneNodes);
     nodes.push(...previewSessionNodes);
     // Add dynamic local machine nodes with localYShift applied
     if (hasDynamicLocalMachines) {
