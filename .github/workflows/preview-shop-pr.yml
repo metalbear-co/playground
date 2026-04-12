@@ -237,7 +237,7 @@ jobs:
                 {
                   "type": "section",
                   "fields": [
-                    { "type": "mrkdwn", "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }} ${{ github.event.pull_request.title }}>" },
+                    { "type": "mrkdwn", "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>" },
                     { "type": "mrkdwn", "text": "*Services:*\n${{ needs.detect-changes.outputs.services_list }}" },
                     { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
                     { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord=${{ env.PREVIEW_KEY }}`" }
