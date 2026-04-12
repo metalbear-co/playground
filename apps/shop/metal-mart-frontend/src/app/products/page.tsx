@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
+import ProductDialog from "@/components/ProductDialog";
 import ProductImage from "@/components/ProductImage";
 import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
@@ -14,6 +14,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     fetch(`${basePath}/api/products`)
@@ -56,10 +57,11 @@ export default function ProductsPage() {
           </h1>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {products.map((p, i) => (
-              <Link
+              <button
                 key={p.id}
-                href={`/products/${p.id}`}
-                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+                type="button"
+                onClick={() => setSelectedProduct(p)}
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal text-left"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
                 {p.is_new && <NewBadge size="default" />}
@@ -85,11 +87,17 @@ export default function ProductsPage() {
                   <p className="mt-2 text-lg font-semibold text-[#6a4ff5]">${(p.price_cents / 100).toFixed(2)}</p>
                   <p className="mt-auto pt-3 text-xs text-slate-500">In stock: {p.stock}</p>
                 </div>
-              </Link>
+              </button>
             ))}
           </div>
         </div>
       </main>
+      {selectedProduct && (
+        <ProductDialog
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
     </div>
   );
 }

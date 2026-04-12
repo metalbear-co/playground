@@ -109,6 +109,28 @@ a, button {
   opacity: 0.9;
 }
 
+/* Dialog animations */
+@keyframes dialogBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dialogPanel {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-dialog-backdrop {
+  animation: dialogBackdrop 0.2s ease-out forwards;
+}
+.animate-dialog-panel {
+  animation: dialogPanel 0.25s ease-out forwards;
+}
+
 /* Decorative wave above footer */
 .footer-wave {
   display: block;
