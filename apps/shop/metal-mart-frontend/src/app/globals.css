@@ -109,6 +109,28 @@ a, button {
   opacity: 0.9;
 }
 
+/* Dialog animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dialogEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+.animate-dialog-enter {
+  animation: dialogEnter 0.25s ease-out forwards;
+}
+
 /* Decorative wave above footer */
 .footer-wave {
   display: block;
