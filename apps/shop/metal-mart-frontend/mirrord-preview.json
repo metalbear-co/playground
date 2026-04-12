@@ -8,6 +8,7 @@
   },
   "feature": {
     "preview": {
+       "image": "ghcr.io/metalbear-co/playground-metal-mart-frontend:latest",
       "ttl_mins": 120,
       "creation_timeout_secs": 600
     },
@@ -17,15 +18,6 @@
         "http_filter": {
           "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
         }
-      },
-      "outgoing": {
-        "ignore_localhost": true
-      }
-    },
-    "env": {
-      "exclude": "NODE_ENV",
-      "override": {
-        "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
       }
     }
   }

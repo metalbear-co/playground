@@ -60,36 +60,55 @@ Follow these steps in order:
    git push -u origin <branch-name>
    ```
 
-5. **Create PR** using GitHub CLI:
+5. **Create PR** using GitHub CLI (if available) or git + GitHub API:
+
+   Preferred (if `gh` is available):
    ```bash
    gh pr create --title "<PR title>" --body "<description>" --base main --head <branch-name>
    ```
+
+   Fallback (if `gh` is not available — e.g. on claude.ai/code web):
+   Use the WebFetch tool to create the PR via the GitHub REST API:
+   ```
+   POST https://api.github.com/repos/metalbear-co/playground/pulls
+   Headers: Authorization: Bearer <GITHUB_TOKEN>, Accept: application/vnd.github+json
+   Body: {"title": "<PR title>", "body": "<description>", "head": "<branch-name>", "base": "main"}
+   ```
+   Or ask the user to create the PR manually if no auth token is available.
 
 6. **Wait for the Preview Workflow to Finish**
 
    After the PR is created, the **Preview Shop PR** GitHub Action (`preview-shop-pr.yml`) starts building the preview environment. **DO NOT show the preview URL/header to the PM yet** — the environment isn't ready until this workflow succeeds.
 
-   Tell the PM once: *"mirrord is creating your preview environment — I'll keep you posted and ping you the moment it's ready (~5-10 min)."* Then poll the workflow and surface themed progress messages.
+   Tell the PM once: *"mirrord is creating your preview environment — I'll keep you posted and ping you the moment it's ready (~5-10 min)."*
 
-   **Step 6a — Find the run:**
-   ```bash
-   sleep 10
-   RUN_ID=$(gh run list \
-     --branch "<branch-name>" \
-     --workflow "Preview Shop PR" \
-     --limit 1 \
-     --json databaseId \
-     --jq '.[0].databaseId')
-   echo "Watching run $RUN_ID"
+   **Step 6a — Find the workflow run.**
+
+   Wait ~15 seconds for GitHub to register the run, then use the **WebFetch** tool (NOT `gh` CLI, which may not be available) to query the GitHub Actions API. The repo is public so no auth is needed for reads:
+
+   ```
+   GET https://api.github.com/repos/metalbear-co/playground/actions/runs?branch=<branch-name>&event=pull_request&per_page=1
    ```
 
-   If `RUN_ID` is empty, wait another 10 seconds and retry (up to 3 times).
+   Parse the JSON response to extract:
+   - `workflow_runs[0].id` — the run ID
+   - `workflow_runs[0].status` — `queued`, `in_progress`, or `completed`
+   - `workflow_runs[0].conclusion` — `success`, `failure`, etc. (only present when completed)
 
-   **Step 6b — Poll with themed progress updates, ONE iteration at a time.**
+   If no runs are found, wait 15 more seconds and retry (up to 3 times).
 
-   Critical UX requirement: the PM must see messages appear live, every 20 seconds. Do NOT run the polling loop as a single long-running bash script. Instead, run one short bash command per tick: check status, print ONE themed message, sleep 20, return. Then repeat as a new bash call.
+   **Step 6b — Poll with themed progress updates, every ~60 seconds.**
 
-   **The themed message pool** (cycle through in order, one per tick):
+   Do NOT poll more frequently than every 60 seconds — the build takes 5-10 minutes so frequent polling wastes resources and clutters the output.
+
+   On each poll, use WebFetch to check a single run:
+   ```
+   GET https://api.github.com/repos/metalbear-co/playground/actions/runs/<RUN_ID>
+   ```
+
+   Parse `status` and `conclusion` from the response.
+
+   **Between polls**, show the PM one themed progress message (cycle through in order):
    ```
    mirrord is spinning up your preview environment...
    Building your preview pod image — mirrord will route traffic to it shortly...
@@ -100,43 +119,19 @@ Follow these steps in order:
    Preview environment is almost done — mirrord is doing its magic...
    ```
 
-   **Per-tick command:**
-   ```bash
-   TICK=<TICK>
-   MESSAGES=(
-     "mirrord is spinning up your preview environment..."
-     "Building your preview pod image — mirrord will route traffic to it shortly..."
-     "Deploying your changes into the preview environment..."
-     "mirrord is wiring up traffic splitting for your branch..."
-     "Preview environment is warming up — almost ready to intercept requests..."
-     "Finalizing the mirrord baggage header routing for your preview..."
-     "Preview environment is almost done — mirrord is doing its magic..."
-   )
-   STATUS=$(gh run view "$RUN_ID" --json status,conclusion --jq '.status + "|" + (.conclusion // "")')
-   RUN_STATUS="${STATUS%|*}"
-   RUN_CONCLUSION="${STATUS#*|}"
-   if [ "$RUN_STATUS" = "completed" ]; then
-     echo "DONE|$RUN_CONCLUSION"
-   else
-     echo "${MESSAGES[$((TICK % 7))]}"
-     sleep 20
-     echo "WAITING"
-   fi
-   ```
-
    **How to drive the loop:**
-   1. Start with `TICK=0`. Run the per-tick command.
-   2. If output starts with `DONE|` — stop polling. Jump to Step 6c.
-   3. Otherwise, surface the themed message to the PM, then run again with `TICK=1`, `TICK=2`, etc.
-   4. Hard cap: stop after 90 ticks (~30 min). Tell PM: *"Preview environment is taking unusually long — you can check directly with `gh run view $RUN_ID`."*
+   1. Start with tick 0. Show themed message `tick % 7`, then wait ~60 seconds, then poll via WebFetch.
+   2. If `status` is `completed` — stop polling. Check `conclusion`.
+   3. Otherwise, increment tick and repeat.
+   4. Hard cap: stop after 20 ticks (~20 min). Tell PM: *"Preview environment is taking unusually long — check the PR's Actions tab on GitHub."*
 
    **Step 6c — Branch on the result:**
    - `conclusion = success` — proceed to Step 7.
-   - `conclusion` in `failure`, `cancelled`, `timed_out`, `startup_failure` — do NOT present the preview URL. Fetch failed logs:
-     ```bash
-     gh run view "$RUN_ID" --log-failed
+   - `conclusion` in `failure`, `cancelled`, `timed_out` — do NOT present the preview URL. Fetch the failed run's jobs:
      ```
-     Summarize the failure for the PM and offer to help debug or re-run.
+     GET https://api.github.com/repos/metalbear-co/playground/actions/runs/<RUN_ID>/jobs
+     ```
+     Look at `jobs[].steps[]` for failed steps. Summarize the failure for the PM and offer to help debug.
 
 7. **Present Preview Environment info** — only after Step 6 succeeded, show the PM:
 
