@@ -185,7 +185,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl">
             {hasProducts && (
               <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
-                Featured products
+                Featured swag
               </h1>
             )}
             {hasProducts ? (
@@ -250,18 +250,18 @@ export default function Home() {
                     href="/products"
                     className="text-sm font-medium text-[#6a4ff5] hover:text-[#5a3fe5] hover:underline"
                   >
-                    View all products →
+                    View all swag →
                   </Link>
                 </div>
               </>
             ) : (
               <div className="rounded-2xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
-                <p className="text-slate-600">No products yet.</p>
+                <p className="text-slate-600">No swag yet.</p>
                 <Link
                   href="/products"
                   className="btn-primary mt-4 inline-block rounded-xl px-6 py-2.5 text-sm font-medium"
                 >
-                  Browse products
+                  Browse swag
                 </Link>
               </div>
             )}

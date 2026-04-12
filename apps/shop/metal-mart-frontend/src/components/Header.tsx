@@ -40,7 +40,7 @@ export default function Header({ showSubtitle = false }: HeaderProps) {
               href="/products"
               className="text-sm font-medium text-slate-600 hover:text-slate-900"
             >
-              Products
+              Swag
             </Link>
             <Link
               href="/cart"

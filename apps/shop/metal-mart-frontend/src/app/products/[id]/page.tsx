@@ -57,7 +57,7 @@ export default function ProductDetailPage() {
             href="/products"
             className="mt-4 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"
           >
-            ← Back to products
+            ← Back to swag
           </Link>
         </main>
       </div>
@@ -136,7 +136,7 @@ export default function ProductDetailPage() {
                   href="/products"
                   className="btn-secondary inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:ring-offset-2"
                 >
-                  ← Back to products
+                  ← Back to swag
                 </Link>
               </div>
             </div>
