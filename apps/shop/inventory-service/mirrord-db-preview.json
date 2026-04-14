@@ -1,0 +1,43 @@
+{
+  "key": "ari",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "inventory-service"
+    }
+  },
+  "feature": {
+    "fs": "read",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
+        }
+      },
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "id": "{{key}}",
+        "type": "pg",
+        "ttl_secs": 30,
+        "version": "16.0",
+        "connection": {
+          "url": {
+            "type": "env",
+            "variable": "DATABASE_URL"
+          }
+        },
+        "copy": {
+          "mode": "all"
+        }
+      }
+    ],
+    "preview": {
+      "image": "ghcr.io/metalbear-co/playground/inventory-service:latest",
+      "ttl_mins": 60,
+      "creation_timeout_secs": 60
+    }
+  }
+}
