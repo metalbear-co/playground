@@ -1131,7 +1131,7 @@ const resolvePgBranchConnection = async (
   const newItems = (newResult as { items?: Array<Record<string, unknown>> }).items ?? [];
   const legacyItems = (legacyResult as { items?: Array<Record<string, unknown>> }).items ?? [];
   const items = [...newItems, ...legacyItems];
-  console.log(`[db-resolve] looking for dbId="${dbId}", found ${items.length} CRD(s):`, items.map(i => ((i.metadata as any)?.name)));
+  console.log("[db-resolve] looking for dbId=%s, found %d CRD(s):", dbId, items.length, items.map(i => ((i.metadata as any)?.name)));
 
   const branch = items.find((item) => {
     const name = ((item.metadata as Record<string, unknown>)?.name as string) ?? "";
@@ -1454,9 +1454,9 @@ app.patch(dbUpdatePaths, dbRateLimiter, async (req, res) => {
 
   try {
     const pool = getPool(connectionString);
-    // Validate table and column exist
+    // Validate table and column exist, and use the DB-returned names to avoid SQL injection
     const colCheck = await pool.query(
-      `SELECT column_name FROM information_schema.columns
+      `SELECT table_name, column_name FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
       [tableName, column],
     );
@@ -1464,8 +1464,8 @@ app.patch(dbUpdatePaths, dbRateLimiter, async (req, res) => {
       res.status(404).json({ error: "Table or column not found" });
       return;
     }
-    const safeTable = tableName.replace(/"/g, '""');
-    const safeColumn = colCheck.rows[0].column_name.replace(/"/g, '""');
+    const safeTable = (colCheck.rows[0].table_name as string).replace(/"/g, '""');
+    const safeColumn = (colCheck.rows[0].column_name as string).replace(/"/g, '""');
     await pool.query(
       `UPDATE "${safeTable}" SET "${safeColumn}" = $1 WHERE id = $2`,
       [value, rowId],
