@@ -1431,6 +1431,52 @@ app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
   }
 });
 
+const dbUpdatePaths = ["/db/:dbId/update-cell", "/visualization-shop/api/db/:dbId/update-cell"];
+
+app.patch(dbUpdatePaths, dbRateLimiter, async (req, res) => {
+  const dbId = req.params.dbId ?? "";
+  const { tableName, column, value, rowId } = req.body as {
+    tableName?: string;
+    column?: string;
+    value?: unknown;
+    rowId?: number;
+  };
+  if (!tableName || !column || value === undefined || rowId === undefined) {
+    res.status(400).json({ error: "Missing tableName, column, value, or rowId" });
+    return;
+  }
+
+  const connectionString = await resolveDbConnection(dbId);
+  if (!connectionString) {
+    res.status(404).json({ error: "No connection configured for the requested database" });
+    return;
+  }
+
+  try {
+    const pool = getPool(connectionString);
+    // Validate table and column exist
+    const colCheck = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
+      [tableName, column],
+    );
+    if (colCheck.rows.length === 0) {
+      res.status(404).json({ error: "Table or column not found" });
+      return;
+    }
+    const safeTable = tableName.replace(/"/g, '""');
+    const safeColumn = colCheck.rows[0].column_name.replace(/"/g, '""');
+    await pool.query(
+      `UPDATE "${safeTable}" SET "${safeColumn}" = $1 WHERE id = $2`,
+      [value, rowId],
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to update cell:", error instanceof Error ? error.message : error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Update failed" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Shop visualization backend listening on port ${port}`);
 });
