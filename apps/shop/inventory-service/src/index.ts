@@ -51,21 +51,6 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
-    const { rows } = await client.query("SELECT COUNT(*) FROM products");
-    if (parseInt(rows[0].count, 10) === 0) {
-      // image_urls: Cloudinary public IDs. T-shirts have [front, back]; stickers have [single].
-      await client.query(`
-        INSERT INTO products (name, description, price_cents, stock, image_urls, is_new) VALUES
-        ('Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 200, '["team_work_makes_the_Dream_work_ljp4we"]', true),
-        ('Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 50, '["team_Work_makes_the_Dream_Work_-_front_w5qdnb", "team_work_makes_the_dream_work_-_back_onanux"]', true),
-        ('Mind The Gap Sticker', 'MetalBear Mind The Gap sticker', 499, 200, '["Mind_the_Gap_pkyuc6"]', false),
-        ('Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2499, 50, '["Mind_the_gap_-_Front_anazkh", "Mind_the_gap_-_Back_oh9jyf"]', false),
-        ('Increase Velocity Sticker', 'MetalBear Increase Velocity sticker', 499, 200, '["Increase_velocity_mfsov2"]', false),
-        ('Increase Velocity T-Shirt', 'MetalBear Increase Velocity tee — front and back designs', 2499, 50, '["Increase_Velocity_-_Front_c2dgw6", "Increase_Velocity_-_Back_ywhxi6"]', false),
-        ('Cloudboat Willie T-Shirt', 'MetalBear Cloudboat Willie tee — front and back designs', 2499, 50, '["Cloudboat_Willie_-_Front_wpgqi2", "Cloudboat_Willie_-_Back_z05dna"]', false),
-        ('A mirrord Is Born T-Shirt', 'MetalBear A mirrord Is Born tee — front and back designs', 2499, 50, '["A_mirrord_is_born_-_Front_xy8l8p", "A_mirrord_is_born_-_Back_bytwh2"]', false)
-      `);
-    }
   } finally {
     client.release();
   }
