@@ -1,4 +1,5 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { Pool } from "pg";
 
 const app = express();
@@ -114,8 +115,15 @@ app.get("/products/:id", async (req, res) => {
   }
 });
 
-app.patch("/products/:id/stock", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.patch("/products/:id/stock", writeLimiter, async (req, res) => {
+  const id = parseInt(req.params.id as string, 10);
   const { stock } = req.body;
   if (isNaN(id) || typeof stock !== "number" || stock < 0) {
     return res.status(400).json({ error: "Invalid request" });
@@ -135,10 +143,10 @@ app.patch("/products/:id/stock", async (req, res) => {
   }
 });
 
-app.post("/products/:id/reserve", async (req, res) => {
+app.post("/products/:id/reserve", writeLimiter, async (req, res) => {
   console.log("Reserve request headers:", JSON.stringify(req.headers, null, 2));
   console.log("Reserve request body:", JSON.stringify(req.body, null, 2));
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   const { quantity = 1 } = req.body;
   if (isNaN(id) || typeof quantity !== "number" || quantity < 1) {
     return res.status(400).json({ error: "Invalid request" });
