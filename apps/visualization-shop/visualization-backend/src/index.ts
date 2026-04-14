@@ -1131,7 +1131,7 @@ const resolvePgBranchConnection = async (
   const newItems = (newResult as { items?: Array<Record<string, unknown>> }).items ?? [];
   const legacyItems = (legacyResult as { items?: Array<Record<string, unknown>> }).items ?? [];
   const items = [...newItems, ...legacyItems];
-  console.log(`[db-resolve] looking for dbId="${dbId}", found ${items.length} CRD(s):`, items.map(i => ((i.metadata as any)?.name)));
+  console.log("[db-resolve] looking for dbId=%s, found %d CRD(s):", dbId, items.length, items.map(i => ((i.metadata as any)?.name)));
 
   const branch = items.find((item) => {
     const name = ((item.metadata as Record<string, unknown>)?.name as string) ?? "";
@@ -1428,6 +1428,52 @@ app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to query table",
     });
+  }
+});
+
+const dbUpdatePaths = ["/db/:dbId/update-cell", "/visualization-shop/api/db/:dbId/update-cell"];
+
+app.patch(dbUpdatePaths, dbRateLimiter, async (req, res) => {
+  const dbId = req.params.dbId ?? "";
+  const { tableName, column, value, rowId } = req.body as {
+    tableName?: string;
+    column?: string;
+    value?: unknown;
+    rowId?: number;
+  };
+  if (!tableName || !column || value === undefined || rowId === undefined) {
+    res.status(400).json({ error: "Missing tableName, column, value, or rowId" });
+    return;
+  }
+
+  const connectionString = await resolveDbConnection(dbId);
+  if (!connectionString) {
+    res.status(404).json({ error: "No connection configured for the requested database" });
+    return;
+  }
+
+  try {
+    const pool = getPool(connectionString);
+    // Validate table and column exist, and use the DB-returned names to avoid SQL injection
+    const colCheck = await pool.query(
+      `SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
+      [tableName, column],
+    );
+    if (colCheck.rows.length === 0) {
+      res.status(404).json({ error: "Table or column not found" });
+      return;
+    }
+    const safeTable = (colCheck.rows[0].table_name as string).replace(/"/g, '""');
+    const safeColumn = (colCheck.rows[0].column_name as string).replace(/"/g, '""');
+    await pool.query(
+      `UPDATE "${safeTable}" SET "${safeColumn}" = $1 WHERE id = $2`,
+      [value, rowId],
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to update cell:", error instanceof Error ? error.message : error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Update failed" });
   }
 });
 

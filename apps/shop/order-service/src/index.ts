@@ -186,6 +186,22 @@ async function createOrderDirect(
         productId: item.productId,
       });
     }
+
+    const reserveRes = await fetch(
+      `${inventoryUrl}/products/${productId}/reserve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: item.quantity || 1 }),
+      }
+    );
+    if (!reserveRes.ok) {
+      const err = await reserveRes.json().catch(() => ({}));
+      throw new OrderError(err.error || "Stock reservation failed", 409, {
+        error: err.error || "Stock reservation failed",
+        productId: item.productId,
+      });
+    }
   }
 
   const client = await pool.connect();

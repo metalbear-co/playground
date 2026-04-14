@@ -1,12 +1,17 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { Pool } from "pg";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory",
-});
+let dbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory";
+// mirrord branch DB URLs may omit the database name — ensure we connect to "inventory"
+if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
+  dbUrl += "/inventory";
+}
+
+const pool = new Pool({ connectionString: dbUrl });
 
 async function initDb() {
   const client = await pool.connect();
@@ -110,6 +115,62 @@ app.get("/products/:id", async (req, res) => {
   }
 });
 
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.patch("/products/:id/stock", writeLimiter, async (req, res) => {
+  const id = parseInt(req.params.id as string, 10);
+  const { stock } = req.body;
+  if (isNaN(id) || typeof stock !== "number" || stock < 0) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  try {
+    const { rows } = await pool.query(
+      "UPDATE products SET stock = $1 WHERE id = $2 RETURNING stock",
+      [stock, id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    res.json({ stock: rows[0].stock });
+  } catch (err) {
+    console.error("Error updating stock:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/products/:id/reserve", writeLimiter, async (req, res) => {
+  console.log("Reserve request headers:", JSON.stringify(req.headers, null, 2));
+  console.log("Reserve request body:", JSON.stringify(req.body, null, 2));
+  const id = parseInt(req.params.id as string, 10);
+  const { quantity = 1 } = req.body;
+  if (isNaN(id) || typeof quantity !== "number" || quantity < 1) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  try {
+    const before = await pool.query("SELECT stock FROM products WHERE id = $1", [id]);
+    const stockBefore = before.rows.length > 0 ? before.rows[0].stock : "N/A";
+    console.log(`[Inventory] Product ${id} stock BEFORE reserve: ${stockBefore}`);
+
+    const { rows } = await pool.query(
+      "UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1 RETURNING stock",
+      [quantity, id]
+    );
+    if (rows.length === 0) {
+      return res.status(409).json({ error: "Insufficient stock or product not found" });
+    }
+    console.log(`[Inventory] Product ${id} stock AFTER reserve: ${rows[0].stock} (reserved ${quantity})`);
+    res.json({ reserved: true, remaining: rows[0].stock });
+  } catch (err) {
+    console.error("Error reserving stock:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.post("/products/:id/check-stock", async (req, res) => {
   console.log("Check-stock request headers:", JSON.stringify(req.headers, null, 2));
   console.log("Check-stock request body:", JSON.stringify(req.body, null, 2));
@@ -133,6 +194,7 @@ app.post("/products/:id/check-stock", async (req, res) => {
 
 async function main() {
   await initDb();
+  console.log(`[Inventory] DATABASE_URL: ${process.env.DATABASE_URL || "not set (using default)"}`);
   app.listen(port, "0.0.0.0", () => {
     console.log(`Inventory service listening on port ${port}`);
   });

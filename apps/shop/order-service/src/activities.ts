@@ -33,6 +33,19 @@ export async function reserveStock(input: CheckoutInput): Promise<void> {
     if (!inStock) {
       throw new Error(`Insufficient stock for product ${item.productId}`);
     }
+
+    const reserveRes = await fetch(
+      `${inventoryUrl}/products/${item.productId}/reserve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: item.quantity || 1 }),
+      }
+    );
+    if (!reserveRes.ok) {
+      const err = await reserveRes.json().catch(() => ({}));
+      throw new Error(err.error || `Stock reservation failed for product ${item.productId}`);
+    }
   }
 }
 
