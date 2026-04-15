@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-service
+spec:
+  selector:
+    matchLabels:
+      app: notifications-service
+  template:
+    metadata:
+      labels:
+        app: notifications-service
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-notifications-service:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: RABBITMQ_URL
+              value: "amqp://shop:playground@rabbitmq:5672/"
+            - name: RABBITMQ_QUEUE
+              value: "order-notifications"
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 100Mi

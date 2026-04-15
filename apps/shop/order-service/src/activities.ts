@@ -1,6 +1,7 @@
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { pool, producer, inventoryUrl, sqsClient, sqsQueueUrl } from "./connections.js";
 import { sendOrderToKafka } from "./kafka.js";
+import { publishOrderNotification } from "./rabbit.js";
 
 export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
@@ -92,6 +93,23 @@ export async function publishOrderToKafka(input: {
     orderId: input.orderId,
     items: input.items,
     status: input.status,
+    baggage: input.baggage,
+  });
+}
+
+/** Async notification fan-out (RabbitMQ); optional when RABBITMQ_URL is unset. */
+export async function publishOrderNotificationActivity(input: {
+  orderId: number;
+  total_cents: number;
+  customer_email?: string;
+  baggage?: string;
+}): Promise<void> {
+  await publishOrderNotification({
+    orderId: input.orderId,
+    status: "confirmed",
+    customer_email: input.customer_email ?? null,
+    total_cents: input.total_cents,
+    event: "order_confirmed",
     baggage: input.baggage,
   });
 }

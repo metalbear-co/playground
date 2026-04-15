@@ -1,0 +1,20 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "notifications-service"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": "steal",
+      "outgoing": true
+    },
+    "split_queues": {
+      "order-notifications": {
+        "queue_type": "RabbitMQ",
+        "jq_filter": ".customer_email != null and (.customer_email | test(\"metalbear\\\\.com$\"))"
+      }
+    }
+  }
+}

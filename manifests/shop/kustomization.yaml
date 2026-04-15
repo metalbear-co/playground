@@ -4,11 +4,13 @@ kind: Kustomization
 namespace: shop
 
 resources:
+  - ./base/rabbitmq
   - ./base/app/inventory-service
   - ./base/app/order-service
   - ./base/app/payment-service
   - ./base/app/delivery-service
   - ./base/app/receipt-service
+  - ./base/app/notifications-service
   - ./base/app/metal-mart-frontend
 
 commonLabels:

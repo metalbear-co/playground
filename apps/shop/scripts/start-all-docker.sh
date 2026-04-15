@@ -18,6 +18,7 @@ TEMPORAL_SVC="temporal"
 TEMPORAL_UI="temporal-ui"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
+RABBIT_CONTAINER="shop-rabbitmq"
 
 # --- Docker: network ---
 echo "Creating network ${NETWORK}..."
@@ -91,6 +92,18 @@ fi
 echo "Waiting for Kafka (10s)..."
 sleep 10
 
+# --- Docker: RabbitMQ ---
+echo "Starting RabbitMQ..."
+if docker ps -a --format '{{.Names}}' | grep -q "^${RABBIT_CONTAINER}$"; then
+  docker start "${RABBIT_CONTAINER}"
+else
+  docker run -d --name "${RABBIT_CONTAINER}" --network "${NETWORK}" \
+    -e RABBITMQ_DEFAULT_USER=shop -e RABBITMQ_DEFAULT_PASS=playground \
+    rabbitmq:3.13-management-alpine
+fi
+echo "Waiting for RabbitMQ (8s)..."
+sleep 8
+
 # --- Build shop app images (Dockerfile same pattern as inventory-service) ---
 echo "Building shop app images..."
 
@@ -98,6 +111,7 @@ docker build -t shop-inventory-service -f "${SHOP_DIR}/inventory-service/Dockerf
 docker build -t shop-payment-service -f "${SHOP_DIR}/payment-service/Dockerfile" "${SHOP_DIR}/payment-service"
 docker build -t shop-delivery-service -f "${SHOP_DIR}/delivery-service/Dockerfile" "${SHOP_DIR}/delivery-service"
 docker build -t shop-order-service -f "${SHOP_DIR}/order-service/Dockerfile" "${SHOP_DIR}/order-service"
+docker build -t shop-notifications-service -f "${SHOP_DIR}/notifications-service/Dockerfile" "${SHOP_DIR}/notifications-service"
 docker build -t shop-metal-mart-frontend -f "${SHOP_DIR}/metal-mart-frontend/Dockerfile" "${SHOP_DIR}/metal-mart-frontend"
 
 # --- Run shop app containers (service names for internal DNS) ---
@@ -118,12 +132,20 @@ docker run -d --name delivery-service --network "${NETWORK}" \
   -e KAFKA_ADDRESS="${KAFKA_CONTAINER}:9092" \
   shop-delivery-service 2>/dev/null || docker start delivery-service
 
+docker run -d --name notifications-service --network "${NETWORK}" \
+  -e PORT=80 \
+  -e RABBITMQ_URL="amqp://shop:playground@${RABBIT_CONTAINER}:5672/" \
+  -e RABBITMQ_QUEUE="order-notifications" \
+  shop-notifications-service 2>/dev/null || docker start notifications-service
+
 docker run -d --name order-service --network "${NETWORK}" \
   -e PORT=80 \
   -e DATABASE_URL="postgresql://postgres:postgres@${SHOP_PG}:5432/orders" \
   -e INVENTORY_SERVICE_URL="http://inventory-service:80" \
   -e PAYMENT_SERVICE_URL="http://payment-service:80" \
   -e KAFKA_ADDRESS="${KAFKA_CONTAINER}:9092" \
+  -e RABBITMQ_URL="amqp://shop:playground@${RABBIT_CONTAINER}:5672/" \
+  -e RABBITMQ_QUEUE="order-notifications" \
   -e USE_TEMPORAL=true \
   -e TEMPORAL_ADDRESS="${TEMPORAL_SVC}:7233" \
   -e TEMPORAL_NAMESPACE=temporal \
@@ -141,5 +163,5 @@ echo "Shop is up (all from Dockerfiles)."
 echo "  Shop:        http://localhost:3000/shop"
 echo "  Temporal UI: http://localhost:8080"
 echo ""
-echo "To stop: docker stop metal-mart-frontend order-service delivery-service inventory-service payment-service ${TEMPORAL_UI} ${TEMPORAL_SVC} ${TEMPORAL_PG} ${SHOP_PG} ${KAFKA_CONTAINER}"
+echo "To stop: docker stop metal-mart-frontend order-service notifications-service delivery-service inventory-service payment-service ${TEMPORAL_UI} ${TEMPORAL_SVC} ${TEMPORAL_PG} ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"
 echo "Or run: ./apps/shop/scripts/clean-all.sh"

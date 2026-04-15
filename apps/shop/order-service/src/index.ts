@@ -12,6 +12,7 @@ import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
 import { inventoryUrl } from "./connections.js";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
+import { publishOrderNotification } from "./rabbit.js";
 import * as activities from "./activities.js";
 import { CheckoutWorkflow } from "./workflows/checkout.js";
 
@@ -236,6 +237,15 @@ async function createOrderDirect(
     orderId,
     items,
     status: "confirmed",
+    baggage,
+  });
+
+  await publishOrderNotification({
+    orderId,
+    status: "confirmed",
+    customer_email: customer_email ?? null,
+    total_cents: totalCents,
+    event: "order_confirmed",
     baggage,
   });
 
