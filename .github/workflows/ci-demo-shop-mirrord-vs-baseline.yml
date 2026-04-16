@@ -82,7 +82,7 @@ jobs:
           spec:
             containers:
               - name: localstack
-                image: localstack/localstack:latest
+                image: localstack/localstack:4.4
                 env:
                   - name: SERVICES
                     value: "sqs"
@@ -106,9 +106,13 @@ jobs:
 
           kubectl wait --for=condition=Ready pod/localstack --namespace=infra --timeout=3m
 
-          # Create SQS queue
-          kubectl exec -n infra localstack -- \
-            awslocal sqs create-queue --queue-name payments --region us-east-1
+          # Create SQS queue (retry in case LocalStack is still initializing)
+          for i in $(seq 1 10); do
+            kubectl exec -n infra localstack -- \
+              awslocal sqs create-queue --queue-name payments --region us-east-1 && break
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
 
       - name: Build Docker images
         run: |
