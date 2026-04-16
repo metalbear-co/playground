@@ -1,0 +1,602 @@
+# Daily Shop Health Check + Preview Environment Verification
+# Runs every morning at 8 AM UTC to catch regressions in the live demo environment
+# and verify the mirrord preview pipeline is functional end-to-end.
+#
+# Job 1 (health-check): Pings the live shop APIs — no dependencies needed.
+# Job 2 (preview-test): Creates a real PR, waits for preview-shop-pr.yml to build
+#                        and start the preview, then runs Playwright E2E against it.
+# Job 3 (cleanup):      Closes the PR and deletes the branch.
+# Job 4 (notify):       Sends a Slack summary with pass/fail for every check.
+#
+# Required secrets: SLACK_WEBHOOK_URL, GCP_WIF_PROVIDER, GCP_SERVICE_ACCOUNT
+# Note: GCP credentials are not used by this workflow directly — they are used by
+# the preview-shop-pr.yml workflow that this workflow triggers.
+
+name: Daily Shop Health Check + Preview Verification
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 1: Health check — verify the live shop environment
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  health-check:
+    name: Health Check (Live Environment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      frontend_ok:      ${{ steps.set-outputs.outputs.frontend_ok }}
+      products_ok:      ${{ steps.set-outputs.outputs.products_ok }}
+      banner_ok:        ${{ steps.set-outputs.outputs.banner_ok }}
+      create_order_ok:  ${{ steps.set-outputs.outputs.create_order_ok }}
+      verify_order_ok:  ${{ steps.set-outputs.outputs.verify_order_ok }}
+      all_passed:       ${{ steps.set-outputs.outputs.all_passed }}
+
+    steps:
+      - name: Check frontend (HTTP 200 + <html)
+        id: frontend
+        continue-on-error: true
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/frontend_body.html -w "%{http_code}" \
+            https://playground.metalbear.dev/shop)
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Non-200 HTTP status: $HTTP_CODE"
+            exit 1
+          fi
+          if ! grep -q "<html" /tmp/frontend_body.html; then
+            echo "Response body does not contain <html"
+            exit 1
+          fi
+          echo "Frontend check passed"
+
+      - name: Check products API (JSON array, ≥1 product)
+        id: products
+        continue-on-error: true
+        run: |
+          RESP=$(curl -sf https://playground.metalbear.dev/shop/api/products)
+          echo "$RESP" | jq -e 'type == "array" and length >= 1' > /dev/null || {
+            echo "Expected JSON array with ≥1 product. Got: $RESP"
+            exit 1
+          }
+          echo "Products API check passed ($(echo "$RESP" | jq 'length') products)"
+
+      - name: Check banner API (.text field present)
+        id: banner
+        continue-on-error: true
+        run: |
+          RESP=$(curl -sf https://playground.metalbear.dev/shop/api/banner)
+          echo "$RESP" | jq -e '.text' > /dev/null || {
+            echo "Missing .text field. Got: $RESP"
+            exit 1
+          }
+          echo "Banner API check passed"
+
+      - name: Create order (orderId + status == confirmed)
+        id: create_order
+        continue-on-error: true
+        run: |
+          RESP=$(curl -sf -X POST https://playground.metalbear.dev/shop/api/orders \
+            -H "Content-Type: application/json" \
+            -d '{
+              "items": [{"productId": 1, "quantity": 1}],
+              "total_cents": 1999,
+              "customer_email": "health-check-bot@metalbear.dev"
+            }')
+          echo "$RESP" | jq .
+
+          ORDER_ID=$(echo "$RESP" | jq -r '.orderId // empty')
+          if [ -z "$ORDER_ID" ]; then
+            echo "orderId missing from response"
+            exit 1
+          fi
+
+          STATUS=$(echo "$RESP" | jq -r '.status // empty')
+          if [ "$STATUS" != "confirmed" ]; then
+            echo "Expected status 'confirmed', got '$STATUS'"
+            exit 1
+          fi
+
+          echo "order_id=$ORDER_ID" >> "$GITHUB_OUTPUT"
+          echo "Create order check passed: id=$ORDER_ID"
+
+      - name: Verify order (GET /orders/:id, status == confirmed)
+        id: verify_order
+        continue-on-error: true
+        run: |
+          ORDER_ID="${{ steps.create_order.outputs.order_id }}"
+          if [ -z "$ORDER_ID" ]; then
+            echo "No order ID from previous step — skipping verify"
+            exit 1
+          fi
+
+          RESP=$(curl -sf \
+            "https://playground.metalbear.dev/shop/api/orders/${ORDER_ID}")
+          echo "$RESP" | jq .
+
+          echo "$RESP" | jq -e '.status == "confirmed"' > /dev/null || {
+            echo "Order status is not 'confirmed'"
+            exit 1
+          }
+          echo "Verify order check passed"
+
+      - name: Set job outputs
+        id: set-outputs
+        if: always()
+        run: |
+          FRONTEND="${{ steps.frontend.outcome }}"
+          PRODUCTS="${{ steps.products.outcome }}"
+          BANNER="${{ steps.banner.outcome }}"
+          CREATE="${{ steps.create_order.outcome }}"
+          VERIFY="${{ steps.verify_order.outcome }}"
+
+          to_bool() { [ "$1" = "success" ] && echo "true" || echo "false"; }
+          echo "frontend_ok=$(to_bool "$FRONTEND")"       >> "$GITHUB_OUTPUT"
+          echo "products_ok=$(to_bool "$PRODUCTS")"       >> "$GITHUB_OUTPUT"
+          echo "banner_ok=$(to_bool "$BANNER")"           >> "$GITHUB_OUTPUT"
+          echo "create_order_ok=$(to_bool "$CREATE")"     >> "$GITHUB_OUTPUT"
+          echo "verify_order_ok=$(to_bool "$VERIFY")"     >> "$GITHUB_OUTPUT"
+
+          if [ "$FRONTEND" = "success" ] && \
+             [ "$PRODUCTS" = "success" ] && \
+             [ "$BANNER"   = "success" ] && \
+             [ "$CREATE"   = "success" ] && \
+             [ "$VERIFY"   = "success" ]; then
+            echo "all_passed=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "all_passed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 2: Preview test — create a PR and verify the mirrord preview pipeline
+# ─────────────────────────────────────────────────────────────────────────────
+  preview-test:
+    name: Preview Environment Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Runs in parallel with health-check (no dependency).
+    # Always runs so cleanup and notify can depend on it with if: always().
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      branch_name:     ${{ steps.branch.outputs.branch_name }}
+      pr_url:          ${{ steps.create-pr.outputs.pr_url }}
+      preview_created: ${{ steps.wait-preview-complete.outputs.preview_created }}
+      e2e_passed:      ${{ steps.playwright.outputs.e2e_passed }}
+      errors:          ${{ steps.playwright.outputs.errors }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout (full history for branch creation)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute branch name
+        id: branch
+        run: |
+          # No slashes — avoids regex/URL issues with the mirrord baggage filter
+          BRANCH="daily-check-$(date -u +%Y-%m-%d)-${{ github.run_id }}"
+          echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Branch: $BRANCH"
+
+      - name: Clean up stale daily-check-* branches from previous failed runs
+        run: |
+          git ls-remote --heads origin 'refs/heads/daily-check-*' \
+            | awk '{print $2}' \
+            | sed 's|refs/heads/||' \
+            | xargs -I{} git push origin --delete {} 2>/dev/null \
+            || true
+
+      - name: Create branch, patch frontend + order-service, push
+        run: |
+          BRANCH="${{ steps.branch.outputs.branch_name }}"
+          DATE=$(date -u +%Y-%m-%d)
+
+          git checkout -b "$BRANCH"
+
+          # ── Frontend (visible change): stamp date in the "Featured products" heading.
+          # The Playwright test asserts this text, proving the preview serves our build.
+          sed -i "s/Featured products/Featured products ${DATE}/" \
+            apps/shop/metal-mart-frontend/src/app/page.tsx
+
+          # ── Order-service (backend change): a sentinel file is enough to trigger
+          # change detection and rebuild — no need to rebuild all 6 services.
+          echo "${DATE} run=${{ github.run_id }}" > apps/shop/order-service/.daily-check
+
+          git add \
+            apps/shop/metal-mart-frontend/src/app/page.tsx \
+            apps/shop/order-service/.daily-check
+
+          git commit -m "chore: daily shop health check ${DATE} (run ${{ github.run_id }})"
+          git push -u origin "$BRANCH"
+
+      - name: Open PR targeting main
+        id: create-pr
+        run: |
+          BRANCH="${{ steps.branch.outputs.branch_name }}"
+          DATE=$(date -u +%Y-%m-%d)
+
+          PR_URL=$(gh pr create \
+            --repo metalbear-co/playground \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: daily shop health check ${DATE}" \
+            --body "$(cat <<'BODY'
+Automated daily health check PR. Tests the preview environment pipeline end-to-end.
+
+**Do not merge** — this PR is closed automatically by the workflow after testing.
+
+Changes:
+- `apps/shop/metal-mart-frontend/src/app/page.tsx` — heading stamped with today's date (visual proof the preview serves our build)
+- `apps/shop/order-service/.daily-check` — sentinel file to trigger order-service rebuild
+
+Only **2 images** are built (frontend + order-service), not all 6.
+BODY
+)")
+
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "PR created: $PR_URL"
+
+      - name: Wait for preview workflow to start (max 5 min)
+        id: wait-preview-start
+        run: |
+          BRANCH="${{ steps.branch.outputs.branch_name }}"
+          MAX_WAIT=300
+          INTERVAL=30
+          ELAPSED=0
+          RUN_ID=""
+
+          echo "Polling for preview-shop-pr.yml workflow run on branch $BRANCH..."
+          while [ -z "$RUN_ID" ] && [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+
+            RUN_ID=$(gh run list \
+              --repo metalbear-co/playground \
+              --workflow=preview-shop-pr.yml \
+              --branch="$BRANCH" \
+              --limit=1 \
+              --json=databaseId \
+              --jq '.[0].databaseId // empty' 2>/dev/null || true)
+
+            echo "  elapsed ${ELAPSED}s — run_id: ${RUN_ID:-not found yet}"
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            echo "Timed out after ${MAX_WAIT}s waiting for preview workflow to start"
+            exit 1
+          fi
+
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Preview workflow started: run_id=$RUN_ID"
+
+      - name: Wait for preview workflow to complete (max 25 min)
+        id: wait-preview-complete
+        run: |
+          RUN_ID="${{ steps.wait-preview-start.outputs.run_id }}"
+          MAX_WAIT=1500
+          INTERVAL=60
+          ELAPSED=0
+          STATUS=""
+          CONCLUSION=""
+
+          echo "Polling run $RUN_ID for completion..."
+          while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+
+            DATA=$(gh run view "$RUN_ID" \
+              --repo metalbear-co/playground \
+              --json=status,conclusion 2>/dev/null || echo '{}')
+            STATUS=$(echo     "$DATA" | jq -r '.status     // empty')
+            CONCLUSION=$(echo "$DATA" | jq -r '.conclusion // empty')
+
+            echo "  elapsed ${ELAPSED}s — status: ${STATUS}, conclusion: ${CONCLUSION}"
+
+            if [ "$STATUS" = "completed" ]; then
+              break
+            fi
+          done
+
+          if [ "$STATUS" != "completed" ]; then
+            echo "Timed out after ${MAX_WAIT}s — preview workflow did not complete"
+            echo "preview_created=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          if [ "$CONCLUSION" = "success" ]; then
+            echo "preview_created=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "preview_created=false" >> "$GITHUB_OUTPUT"
+            echo "Preview workflow finished with conclusion: $CONCLUSION"
+            exit 1
+          fi
+
+      - name: Install Playwright (chromium only)
+        run: |
+          mkdir -p /tmp/pw
+          cd /tmp/pw
+          npm init -y
+          npm install playwright@latest
+          npx playwright install chromium --with-deps
+
+      - name: Run Playwright E2E test against preview
+        id: playwright
+        run: |
+          BRANCH="${{ steps.branch.outputs.branch_name }}"
+          DATE=$(date -u +%Y-%m-%d)
+          mkdir -p /tmp/screenshots
+
+          # Write the test script into the playwright working dir so Node
+          # can resolve the 'playwright' module from node_modules there.
+          cat > /tmp/pw/e2e-test.mjs << 'PLAYWRIGHT_EOF'
+          import { chromium } from 'playwright';
+          import * as fs from 'fs';
+
+          const branch      = process.env.BRANCH_NAME;
+          const date        = process.env.CHECK_DATE;
+          const baseUrl     = 'https://playground.metalbear.dev/shop';
+          const shotDir     = '/tmp/screenshots';
+
+          console.log(`E2E target: ${baseUrl}`);
+          console.log(`Baggage header: mirrord=${branch}`);
+          console.log(`Expected heading date: ${date}`);
+
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext();
+
+          // Route all requests through the preview via the mirrord baggage header
+          await context.setExtraHTTPHeaders({ baggage: `mirrord=${branch}` });
+
+          const page = await context.newPage();
+
+          try {
+            // ── 1. Load home page ──────────────────────────────────────────
+            await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 30000 });
+
+            // ── 2. Verify heading contains the stamped date ────────────────
+            // This proves the preview is serving the modified frontend build.
+            const h1 = page.locator('h1').first();
+            await h1.waitFor({ state: 'visible', timeout: 15000 });
+            const headingText = await h1.textContent();
+            console.log(`Heading: "${headingText}"`);
+            if (!headingText.includes(`Featured products ${date}`)) {
+              throw new Error(
+                `Heading mismatch — expected "Featured products ${date}", got "${headingText}". ` +
+                `Preview may not be routing correctly or the build hasn't propagated yet.`
+              );
+            }
+            console.log('✅ Heading check passed');
+
+            // ── 3. Verify product tiles are visible ────────────────────────
+            // Products are fetched client-side from /api/products (inventory-service).
+            // Their images appearing proves the full frontend→backend chain works.
+            const productImgs = page.locator('main img');
+            await productImgs.first().waitFor({ state: 'visible', timeout: 15000 });
+            const imgCount = await productImgs.count();
+            if (imgCount === 0) {
+              throw new Error('No product images found — inventory-service may be down');
+            }
+            console.log(`✅ Products visible: ${imgCount} product image(s) found`);
+
+            // ── 4. Add a product to cart and verify ────────────────────────
+            // Navigate to product #1 detail page and click Add to Cart.
+            await page.goto(`${baseUrl}/products/1`, {
+              waitUntil: 'networkidle',
+              timeout: 30000,
+            });
+
+            const addBtn = page.locator('button').filter({ hasText: /add to cart/i }).first();
+            await addBtn.waitFor({ state: 'visible', timeout: 10000 });
+            await addBtn.click();
+            console.log('✅ Clicked Add to Cart');
+
+            // Navigate to /cart and verify the item is there.
+            await page.goto(`${baseUrl}/cart`, { waitUntil: 'networkidle', timeout: 30000 });
+            const cartBody = await page.locator('body').textContent();
+            // Cart should show a price (dollar sign) or a quantity
+            if (!cartBody.match(/\$\d/) && !cartBody.match(/qty|quantity|item/i)) {
+              throw new Error('Cart page appears empty after adding a product');
+            }
+            console.log('✅ Cart check passed');
+
+            // ── 5. Take success screenshot ─────────────────────────────────
+            await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 30000 });
+            await page.screenshot({
+              path: `${shotDir}/success.png`,
+              fullPage: true,
+            });
+            console.log(`✅ Screenshot saved to ${shotDir}/success.png`);
+
+            console.log('');
+            console.log('✅ All E2E checks passed');
+          } catch (err) {
+            console.error('');
+            console.error(`❌ E2E test failed: ${err.message}`);
+            try {
+              await page.screenshot({ path: `${shotDir}/failure.png`, fullPage: true });
+              console.error(`Failure screenshot saved to ${shotDir}/failure.png`);
+            } catch (shotErr) {
+              console.error('Could not take failure screenshot:', shotErr.message);
+            }
+            await browser.close();
+            process.exit(1);
+          }
+
+          await browser.close();
+          PLAYWRIGHT_EOF
+
+          if BRANCH_NAME="$BRANCH" CHECK_DATE="$DATE" node /tmp/pw/e2e-test.mjs; then
+            echo "e2e_passed=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "e2e_passed=false" >> "$GITHUB_OUTPUT"
+            echo "errors=Playwright E2E test failed — see screenshot artifact" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: /tmp/screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 3: Cleanup — close the PR and delete the branch
+# ─────────────────────────────────────────────────────────────────────────────
+  cleanup:
+    name: Cleanup (Close PR + Delete Branch)
+    needs: [preview-test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Close PR and delete branch
+        run: |
+          PR_URL="${{ needs.preview-test.outputs.pr_url }}"
+          BRANCH="${{ needs.preview-test.outputs.branch_name }}"
+
+          if [ -n "$PR_URL" ]; then
+            echo "Closing PR: $PR_URL"
+            gh pr close "$PR_URL" --delete-branch \
+              --repo metalbear-co/playground \
+              --comment "Closed automatically by daily health check workflow." \
+              || true
+          fi
+
+          # Fallback: delete the branch via API in case PR close didn't remove it
+          if [ -n "$BRANCH" ]; then
+            gh api "repos/metalbear-co/playground/git/refs/heads/${BRANCH}" \
+              -X DELETE 2>/dev/null || true
+          fi
+
+          echo "Cleanup complete"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 4: Notify — send Slack summary
+# ─────────────────────────────────────────────────────────────────────────────
+  notify:
+    name: Slack Notification
+    needs: [health-check, preview-test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Build Slack payload
+        id: build-payload
+        run: |
+          # ── Collect results ────────────────────────────────────────────────
+          FRONTEND="${{ needs.health-check.outputs.frontend_ok }}"
+          PRODUCTS="${{ needs.health-check.outputs.products_ok }}"
+          BANNER="${{ needs.health-check.outputs.banner_ok }}"
+          CREATE="${{ needs.health-check.outputs.create_order_ok }}"
+          VERIFY="${{ needs.health-check.outputs.verify_order_ok }}"
+          ALL_HEALTH="${{ needs.health-check.outputs.all_passed }}"
+          PREVIEW="${{ needs.preview-test.outputs.preview_created }}"
+          E2E="${{ needs.preview-test.outputs.e2e_passed }}"
+          ERRORS="${{ needs.preview-test.outputs.errors }}"
+          RUN_URL="https://github.com/metalbear-co/playground/actions/runs/${{ github.run_id }}"
+
+          check() { [ "$1" = "true" ] && echo "✅" || echo "❌"; }
+
+          # ── Overall status ─────────────────────────────────────────────────
+          if [ "$ALL_HEALTH" = "true" ] && [ "$PREVIEW" = "true" ] && [ "$E2E" = "true" ]; then
+            HEADER_TEXT="✅ Daily Shop Health Check — All Passed"
+            HEADER_COLOR="#2eb886"   # green
+          else
+            HEADER_TEXT="❌ Daily Shop Health Check — Failures Detected"
+            HEADER_COLOR="#e01e5a"   # red
+          fi
+
+          # ── Build JSON payload ─────────────────────────────────────────────
+          cat > /tmp/slack-payload.json << SLACK_EOF
+          {
+            "attachments": [
+              {
+                "color": "${HEADER_COLOR}",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": { "type": "plain_text", "text": "${HEADER_TEXT}", "emoji": true }
+                  },
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Live Environment Health Checks* (https://playground.metalbear.dev/shop)"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      { "type": "mrkdwn", "text": "$(check $FRONTEND) Frontend (HTTP 200 + HTML)" },
+                      { "type": "mrkdwn", "text": "$(check $PRODUCTS) Products API (JSON array)" },
+                      { "type": "mrkdwn", "text": "$(check $BANNER) Banner API (.text field)" },
+                      { "type": "mrkdwn", "text": "$(check $CREATE) Create order (confirmed)" },
+                      { "type": "mrkdwn", "text": "$(check $VERIFY) Verify order (GET /orders/:id)" }
+                    ]
+                  },
+                  {
+                    "type": "divider"
+                  },
+                  {
+                    "type": "section",
+                    "text": { "type": "mrkdwn", "text": "*Preview Pipeline (mirrord)*" }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      { "type": "mrkdwn", "text": "$(check $PREVIEW) Preview environment created" },
+                      { "type": "mrkdwn", "text": "$(check $E2E) Playwright E2E passed" }
+                    ]
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      { "type": "mrkdwn", "text": "*Screenshots:* <${RUN_URL}|View in Actions>" },
+                      { "type": "mrkdwn", "text": "*Full logs:* <${RUN_URL}|Workflow run #${{ github.run_number }}>" }
+                    ]
+                  }
+                  $([ -n "$ERRORS" ] && cat << ERR_EOF
+                  ,{
+                    "type": "section",
+                    "text": { "type": "mrkdwn", "text": ":warning: *Error details:* ${ERRORS}" }
+                  }
+          ERR_EOF
+                  )
+                ]
+              }
+            ]
+          }
+          SLACK_EOF
+
+          echo "Payload written to /tmp/slack-payload.json"
+          cat /tmp/slack-payload.json
+
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload-file-path: /tmp/slack-payload.json
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -24,3 +24,7 @@ base/charts
 # Generated TypeScript output (server build)
 apps/visualization/visualization-backend/dist/
 apps/shop/*/dist/
+
+# Local act testing (nektos/act) — never commit secrets
+.actrc
+.secrets.act
