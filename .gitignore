@@ -24,3 +24,8 @@ base/charts
 # Generated TypeScript output (server build)
 apps/visualization/visualization-backend/dist/
 apps/shop/*/dist/
+
+# Shop local / minikube helpers (generated or machine-specific)
+apps/shop/scripts/minikube-deploy-shop.sh
+apps/shop/scripts/seed-from-playground.sh
+apps/shop/seed.sql
