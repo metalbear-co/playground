@@ -57,6 +57,7 @@ jobs:
   health-check:
     name: Run health checks
     runs-on: ubuntu-latest
+    permissions: {}
     timeout-minutes: 5
     outputs:
       overall: ${{ steps.run_checks.outputs.overall }}
