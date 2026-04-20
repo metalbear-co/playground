@@ -98,6 +98,14 @@ for dep in "${SHOP_DEPLOYMENTS[@]}"; do
   fi
 done
 
+echo "removing SQS_QUEUE_URL from order-service and payment-service (minikube has no AWS IAM; avoids checkout credential errors)…"
+if kubectl get deploy order-service -n shop >/dev/null 2>&1; then
+  kubectl set env deployment/order-service -n shop SQS_QUEUE_URL- 2>/dev/null || true
+fi
+if kubectl get deploy payment-service -n shop >/dev/null 2>&1; then
+  kubectl set env deployment/payment-service -n shop SQS_QUEUE_URL- 2>/dev/null || true
+fi
+
 echo "restarting shop deployments to pick up local images…"
 kubectl rollout restart deployment -n shop
 kubectl rollout status deployment/inventory-service -n shop --timeout=180s || true

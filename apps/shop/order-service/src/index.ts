@@ -226,12 +226,18 @@ async function createOrderDirect(
   );
   console.log("[Order] JWT created for order %d: %s", orderId, token);
 
-  await sqsClient.send(
-    new SendMessageCommand({
-      QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ jwt: token }),
-    })
-  );
+  if (sqsQueueUrl) {
+    await sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: sqsQueueUrl,
+        MessageBody: JSON.stringify({ jwt: token }),
+      })
+    );
+  } else {
+    console.warn(
+      "[Order] SQS_QUEUE_URL unset — skipping payment SQS (local dev; payment-service will not debit)"
+    );
+  }
 
   await sendOrderToKafka({
     orderId,

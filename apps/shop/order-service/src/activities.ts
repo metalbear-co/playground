@@ -52,6 +52,12 @@ export async function reserveStock(input: CheckoutInput): Promise<void> {
 
 /** Send payment message to SQS */
 export async function chargePayment(input: CheckoutInput & { orderId?: number }): Promise<void> {
+  if (!sqsQueueUrl) {
+    console.warn(
+      "[Order] SQS_QUEUE_URL unset — skipping payment SQS in Temporal activity (local dev)"
+    );
+    return;
+  }
   await sqsClient.send(
     new SendMessageCommand({
       QueueUrl: sqsQueueUrl,
