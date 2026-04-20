@@ -15,6 +15,9 @@ base/charts
 **/.env.local
 **/.env*.local
 
+# Local-only minikube shop script (contains mirrord license key; do not commit)
+apps/shop/scripts/setup-minikube-shop.sh
+
 # Node dependencies
 **/node_modules
 
@@ -24,8 +27,3 @@ base/charts
 # Generated TypeScript output (server build)
 apps/visualization/visualization-backend/dist/
 apps/shop/*/dist/
-
-# Shop local / minikube helpers (generated or machine-specific)
-apps/shop/scripts/minikube-deploy-shop.sh
-apps/shop/scripts/seed-from-playground.sh
-apps/shop/seed.sql

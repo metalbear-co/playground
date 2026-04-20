@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: shop
 
 resources:
-  - ./base/rabbitmq
   - ./base/app/inventory-service
   - ./base/app/order-service
   - ./base/app/payment-service
