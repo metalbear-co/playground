@@ -20,7 +20,7 @@ jobs:
   # ─── Job 1: Detect which services changed ───
   detect-changes:
     name: Detect changed services
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && startsWith(github.head_ref, 'demo-')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
@@ -252,7 +252,7 @@ jobs:
   # ─── Job 4: Stop all previews on merge/close ───
   preview-stop:
     name: Stop all previews on merge/close
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' && startsWith(github.head_ref, 'demo-')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
