@@ -1,11 +1,5 @@
 {
   "key": "ari",
-  "target": {
-    "namespace": "shop",
-    "path": {
-      "deployment": "order-service"
-    }
-  },
   "feature": {
     "network": {
       "incoming": {
