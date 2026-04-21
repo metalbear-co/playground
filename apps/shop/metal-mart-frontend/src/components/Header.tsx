@@ -29,7 +29,7 @@ export default function Header({ showSubtitle = false }: HeaderProps) {
               className="shrink-0"
             />
           )}
-          MetalMart
+          MetalMart testing
         </Link>
         <div className="flex items-center gap-8">
           {showSubtitle && (
