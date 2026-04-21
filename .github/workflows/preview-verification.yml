@@ -1,12 +1,11 @@
 # Weekly end-to-end verification that the mirrord preview pipeline still works.
-# Creates a real PR, waits for preview-shop-pr.yml to build images + start previews,
-# then runs a Playwright flow through the preview using the baggage header.
-# Finally closes the PR and deletes the branch.
+# Creates a real PR, explicitly dispatches preview-shop-pr.yml to build images +
+# start previews, then runs a Playwright flow through the preview using the
+# baggage header. Finally dispatches preview shutdown, closes the PR, and
+# deletes the branch.
 #
-# Requires secret `GH_PAT`: a PAT (or GitHub App token) with `repo` + `workflow` scope.
-# The default GITHUB_TOKEN cannot trigger other workflows — PRs created with it
-# will NOT fire preview-shop-pr.yml. Without GH_PAT this workflow cannot verify
-# anything and will fail at the "wait for preview workflow to start" step.
+# Uses the built-in GITHUB_TOKEN. The workflow no longer relies on PR-triggered
+# workflow chaining, which GitHub suppresses for automation-created PRs.
 name: Preview Environment Verification
 
 on:
@@ -16,46 +15,38 @@ on:
 
 jobs:
   preview-test:
-    name: Create PR, await preview, run Playwright E2E
+    name: Create PR, dispatch preview, run Playwright E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     permissions:
+      actions: write
       contents: write
       pull-requests: write
     outputs:
       branch_name: ${{ steps.meta.outputs.branch_name }}
+      preview_key: ${{ steps.meta.outputs.preview_key }}
       pr_url: ${{ steps.create_pr.outputs.pr_url }}
+      pr_number: ${{ steps.create_pr.outputs.pr_number }}
       preview_created: ${{ steps.wait_complete.outputs.preview_created }}
       preview_verified: ${{ steps.wait_complete.outputs.preview_verified }}
       e2e_passed: ${{ steps.e2e.outputs.e2e_passed }}
       error_msg: ${{ steps.e2e.outputs.error_msg }}
     steps:
-      - name: Preflight — require GH_PAT secret
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          if [ -z "$GH_PAT" ]; then
-            echo "❌ Secret GH_PAT is not set."
-            echo "   This workflow cannot create a PR that triggers preview-shop-pr.yml"
-            echo "   using the default GITHUB_TOKEN — workflows spawned by GITHUB_TOKEN"
-            echo "   are suppressed. Add a PAT (or GitHub App token) with repo+workflow scope."
-            exit 1
-          fi
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT }}
 
       - name: Compute branch name + date
         id: meta
         run: |
           DATE=$(date -u +%Y-%m-%d)
           BRANCH="daily-check-${DATE}-${{ github.run_id }}"
+          PREVIEW_KEY="$BRANCH"
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
           echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "Branch: $BRANCH, date marker: $DATE"
+          echo "preview_key=$PREVIEW_KEY" >> "$GITHUB_OUTPUT"
+          echo "Branch: $BRANCH, preview key: $PREVIEW_KEY, date marker: $DATE"
 
       - name: Configure git as github-actions[bot]
         run: |
@@ -92,7 +83,7 @@ jobs:
       - name: Open PR
         id: create_pr
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ steps.meta.outputs.branch_name }}
           DATE: ${{ steps.meta.outputs.date }}
         run: |
@@ -102,48 +93,69 @@ jobs:
             --head "$BRANCH" \
             --title "[automated] Preview verification ${DATE}" \
             --body "Automated weekly check that the mirrord preview pipeline works end-to-end. This PR will be closed automatically by run ${{ github.run_id }}.")
+          PR_NUMBER=$(gh pr view "$BRANCH" --json number --jq '.number')
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "Created PR: $PR_URL"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Created PR #$PR_NUMBER: $PR_URL"
+
+      - name: Dispatch preview-shop-pr.yml start
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.meta.outputs.branch_name }}
+          PREVIEW_KEY: ${{ steps.meta.outputs.preview_key }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh workflow run preview-shop-pr.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f action=start \
+            -f branch="$BRANCH" \
+            -f base_ref=main \
+            -f preview_key="$PREVIEW_KEY" \
+            -f pr_number="$PR_NUMBER" \
+            -f pr_url="$PR_URL" \
+            -f caller_run_id="${{ github.run_id }}"
 
       - name: Wait for preview-shop-pr.yml to start
         id: wait_start
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-          BRANCH: ${{ steps.meta.outputs.branch_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           RUN_ID=""
-          for i in $(seq 1 10); do
+          for i in $(seq 1 12); do
             RUN_ID=$(gh run list \
-              --repo ${{ github.repository }} \
+              --repo "${{ github.repository }}" \
               --workflow=preview-shop-pr.yml \
-              --branch "$BRANCH" \
-              --limit 1 \
-              --json databaseId \
-              --jq '.[0].databaseId // empty')
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,displayTitle \
+              --jq '.[] | select(.displayTitle | contains("caller=${{ github.run_id }}")) | .databaseId' | head -n1)
             if [ -n "$RUN_ID" ]; then
               echo "✓ Preview workflow started: run $RUN_ID"
               echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "Waiting for preview workflow to start... ($i/10)"
-            sleep 30
+            echo "Waiting for dispatched preview workflow to start... ($i/12)"
+            sleep 10
           done
-          echo "❌ preview-shop-pr.yml did not start within 5 minutes"
+          echo "❌ preview-shop-pr.yml did not start within 2 minutes"
           echo "run_id=" >> "$GITHUB_OUTPUT"
           exit 1
 
       - name: Wait for preview-shop-pr.yml to complete
         id: wait_complete
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ steps.wait_start.outputs.run_id }}
         run: |
           set -euo pipefail
           for i in $(seq 1 25); do
-            STATUS=$(gh run view "$RUN_ID" --repo ${{ github.repository }} --json status --jq '.status')
+            STATUS=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json status --jq '.status')
             if [ "$STATUS" = "completed" ]; then
-              CONCLUSION=$(gh run view "$RUN_ID" --repo ${{ github.repository }} --json conclusion --jq '.conclusion')
+              CONCLUSION=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')
               echo "preview_created=true" >> "$GITHUB_OUTPUT"
               if [ "$CONCLUSION" = "success" ]; then
                 echo "✓ Preview workflow succeeded"
@@ -172,7 +184,7 @@ jobs:
       - name: Run Playwright E2E against preview
         id: e2e
         env:
-          BRANCH_NAME: ${{ steps.meta.outputs.branch_name }}
+          PREVIEW_KEY: ${{ steps.meta.outputs.preview_key }}
           DATE: ${{ steps.meta.outputs.date }}
         run: |
           mkdir -p /tmp/screenshots
@@ -182,13 +194,13 @@ jobs:
 
           (async () => {
             const date = process.env.DATE;
-            const branch = process.env.BRANCH_NAME;
+            const previewKey = process.env.PREVIEW_KEY;
             const shotsDir = '/tmp/screenshots';
             const shopUrl = 'https://playground.metalbear.dev/shop';
 
             const browser = await chromium.launch();
             const context = await browser.newContext({
-              extraHTTPHeaders: { baggage: `mirrord=${branch}` },
+              extraHTTPHeaders: { baggage: `mirrord=${previewKey}` },
             });
             const page = await context.newPage();
 
@@ -233,7 +245,7 @@ jobs:
               console.log('✓ Cart contains item after add');
 
               const orderResp = await page.request.post(`${shopUrl}/api/orders`, {
-                headers: { baggage: `mirrord=${branch}` },
+                headers: { baggage: `mirrord=${previewKey}` },
                 data: {
                   items: [{ productId: 1, quantity: 1 }],
                   total_cents: 1999,
@@ -275,22 +287,78 @@ jobs:
           retention-days: 14
 
   cleanup:
-    name: Close PR + delete branch
+    name: Stop preview, close PR, delete branch
     needs: preview-test
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
+      actions: write
       contents: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
+
+      - name: Dispatch preview-shop-pr.yml stop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_KEY: ${{ needs.preview-test.outputs.preview_key }}
+          PR_NUMBER: ${{ needs.preview-test.outputs.pr_number }}
+          PR_URL: ${{ needs.preview-test.outputs.pr_url }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PREVIEW_KEY" ]; then
+            gh workflow run preview-shop-pr.yml \
+              --repo "${{ github.repository }}" \
+              --ref main \
+              -f action=stop \
+              -f preview_key="$PREVIEW_KEY" \
+              -f pr_number="$PR_NUMBER" \
+              -f pr_url="$PR_URL" \
+              -f caller_run_id="${{ github.run_id }}-stop"
+          else
+            echo "No preview key recorded; skipping stop dispatch"
+          fi
+
+      - name: Wait for stop workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_KEY: ${{ needs.preview-test.outputs.preview_key }}
+        run: |
+          set -euo pipefail
+          [ -n "$PREVIEW_KEY" ] || exit 0
+          RUN_ID=""
+          for i in $(seq 1 12); do
+            RUN_ID=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow=preview-shop-pr.yml \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,displayTitle \
+              --jq '.[] | select(.displayTitle | contains("caller=${{ github.run_id }}-stop")) | .databaseId' | head -n1)
+            if [ -n "$RUN_ID" ]; then
+              break
+            fi
+            echo "Waiting for dispatched stop workflow to start... ($i/12)"
+            sleep 10
+          done
+
+          [ -n "$RUN_ID" ] || exit 0
+
+          for i in $(seq 1 10); do
+            STATUS=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json status --jq '.status')
+            if [ "$STATUS" = "completed" ]; then
+              CONCLUSION=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')
+              echo "Stop workflow completed with conclusion: $CONCLUSION"
+              exit 0
+            fi
+            echo "Stop workflow still $STATUS... ($i/10)"
+            sleep 15
+          done
 
       - name: Close PR and delete branch
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ needs.preview-test.outputs.pr_url }}
           BRANCH_NAME: ${{ needs.preview-test.outputs.branch_name }}
         run: |
@@ -354,7 +422,6 @@ jobs:
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           ARTIFACT_URL="$RUN_URL#artifacts"
           ERR="${ERROR_MSG:-none}"
-          # Flatten newlines, escape backslashes and double quotes for JSON safety, cap length
           ERR_ESC=$(printf '%s' "$ERR" | tr '\n\r' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | cut -c1-500)
           cat > /tmp/slack.json <<EOF
           {

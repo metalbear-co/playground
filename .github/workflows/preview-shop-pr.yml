@@ -1,41 +1,223 @@
 # Dynamic mirrord Preview Environment: detects changed services, builds images,
-# and starts a preview for each. Posts a single aggregated PR comment + Slack message.
+# and starts a preview for each. Supports three entry points:
+# - PR open/reopen for demo-* branches
+# - PR comment `/preview`
+# - workflow_dispatch for automation such as preview-verification.yml
 # Uses metalbear-co/mirrord-preview GitHub Action.
 # Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT + SLACK_WEBHOOK_URL secrets,
 # mirrord operator with Enterprise license.
 name: Preview Environment - Shop (Dynamic)
+run-name: >-
+  Preview Shop -
+  ${{
+    github.event_name == 'workflow_dispatch' &&
+    format('{0} {1} caller={2}', inputs.action, inputs.preview_key || inputs.branch || 'manual', inputs.caller_run_id || 'na') ||
+    github.event_name == 'issue_comment' &&
+    format('comment PR #{0}', github.event.issue.number) ||
+    format('{0} PR #{1}', github.event.action, github.event.pull_request.number)
+  }}
 
 on:
   pull_request:
     types: [opened, reopened, closed]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: start or stop previews
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+      branch:
+        description: PR head branch to preview
+        required: false
+        type: string
+      base_ref:
+        description: PR base branch for changed-files diff
+        required: false
+        default: main
+        type: string
+      preview_key:
+        description: mirrord preview key
+        required: false
+        type: string
+      pr_number:
+        description: PR number, when known
+        required: false
+        type: string
+      pr_url:
+        description: PR URL, when known
+        required: false
+        type: string
+      caller_run_id:
+        description: Parent workflow run id for correlation
+        required: false
+        type: string
 
 concurrency:
-  group: preview-shop-${{ github.event.pull_request.number }}
+  group: preview-shop-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 
-env:
-  PREVIEW_KEY: "${{ github.head_ref }}"
-
 jobs:
-  # ─── Job 1: Detect which services changed ───
+  resolve-context:
+    name: Resolve trigger context
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      mode: ${{ steps.resolve.outputs.mode }}
+      branch: ${{ steps.resolve.outputs.branch }}
+      base_ref: ${{ steps.resolve.outputs.base_ref }}
+      preview_key: ${{ steps.resolve.outputs.preview_key }}
+      image_tag_key: ${{ steps.resolve.outputs.image_tag_key }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      pr_url: ${{ steps.resolve.outputs.pr_url }}
+      should_comment: ${{ steps.resolve.outputs.should_comment }}
+      services_reason: ${{ steps.resolve.outputs.services_reason }}
+    steps:
+      - name: Resolve event into shared outputs
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sameRepoName = `${owner}/${repo}`;
+
+            const trimmed = value => (value || '').trim();
+            const wantsPreview = body => trimmed(body) === '/preview';
+            const sanitizeTag = value => {
+              const sanitized = (value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9._-]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 60);
+              return sanitized || 'preview';
+            };
+
+            const out = {
+              should_run: 'false',
+              mode: '',
+              branch: '',
+              base_ref: 'main',
+              preview_key: '',
+              image_tag_key: 'preview',
+              pr_number: '',
+              pr_url: '',
+              should_comment: 'false',
+              services_reason: '',
+            };
+
+            if (context.eventName === 'workflow_dispatch') {
+              const inputs = context.payload.inputs || {};
+              out.mode = inputs.action || 'start';
+              out.branch = trimmed(inputs.branch);
+              out.base_ref = trimmed(inputs.base_ref) || 'main';
+              out.preview_key = trimmed(inputs.preview_key) || out.branch;
+              out.pr_number = trimmed(inputs.pr_number);
+              out.pr_url = trimmed(inputs.pr_url) || (out.pr_number ? `${context.serverUrl}/${owner}/${repo}/pull/${out.pr_number}` : '');
+              out.image_tag_key = sanitizeTag(out.branch || out.preview_key);
+              out.should_comment = out.pr_number ? 'true' : 'false';
+              out.services_reason = `workflow_dispatch:${out.mode}`;
+              out.should_run = out.mode === 'stop'
+                ? (out.preview_key ? 'true' : 'false')
+                : (out.branch ? 'true' : 'false');
+            } else if (context.eventName === 'pull_request') {
+              const pr = context.payload.pull_request;
+              const action = context.payload.action;
+              const branch = pr.head.ref;
+              const isDemoBranch = branch.startsWith('demo-');
+              const isSameRepo = pr.head.repo.full_name === sameRepoName;
+
+              out.mode = action === 'closed' ? 'stop' : 'start';
+              out.branch = branch;
+              out.base_ref = pr.base.ref;
+              out.preview_key = branch;
+              out.pr_number = String(pr.number);
+              out.pr_url = pr.html_url;
+              out.image_tag_key = sanitizeTag(branch);
+              out.should_comment = 'true';
+
+              if (action === 'closed') {
+                let hasPreviewComment = false;
+                if (!isDemoBranch) {
+                  const comments = await github.paginate(github.rest.issues.listComments, {
+                    owner,
+                    repo,
+                    issue_number: pr.number,
+                    per_page: 100,
+                  });
+                  hasPreviewComment = comments.some(comment => wantsPreview(comment.body));
+                }
+                out.should_run = isSameRepo && (isDemoBranch || hasPreviewComment) ? 'true' : 'false';
+                out.services_reason = isDemoBranch ? 'pull_request:closed-demo' : 'pull_request:closed-commented';
+              } else {
+                out.should_run = isSameRepo && isDemoBranch ? 'true' : 'false';
+                out.services_reason = isDemoBranch ? 'pull_request:auto-demo' : 'pull_request:ignored';
+              }
+            } else if (context.eventName === 'issue_comment') {
+              const issue = context.payload.issue;
+              const body = context.payload.comment && context.payload.comment.body;
+              if (!issue.pull_request || !wantsPreview(body)) {
+                out.services_reason = 'issue_comment:ignored';
+              } else {
+                const prNumber = issue.number;
+                const { data: pr } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                });
+                const isSameRepo = pr.head.repo.full_name === sameRepoName;
+                out.mode = 'start';
+                out.branch = pr.head.ref;
+                out.base_ref = pr.base.ref;
+                out.preview_key = pr.head.ref;
+                out.pr_number = String(pr.number);
+                out.pr_url = pr.html_url;
+                out.image_tag_key = sanitizeTag(pr.head.ref);
+                out.should_comment = 'true';
+                out.should_run = isSameRepo ? 'true' : 'false';
+                out.services_reason = isSameRepo ? 'issue_comment:/preview' : 'issue_comment:fork-blocked';
+              }
+            } else {
+              out.services_reason = `unsupported:${context.eventName}`;
+            }
+
+            for (const [key, value] of Object.entries(out)) {
+              core.setOutput(key, value);
+            }
+
   detect-changes:
     name: Detect changed services
-    if: github.event.action != 'closed' && startsWith(github.head_ref, 'demo-')
+    needs: resolve-context
+    if: needs.resolve-context.outputs.should_run == 'true' && needs.resolve-context.outputs.mode == 'start'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
       services_list: ${{ steps.build-matrix.outputs.services_list }}
+      head_sha: ${{ steps.build-matrix.outputs.head_sha }}
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.resolve-context.outputs.branch }}
 
       - name: Detect changed services via git diff
         id: build-matrix
+        env:
+          BASE_REF: ${{ needs.resolve-context.outputs.base_ref }}
         run: |
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          set -euo pipefail
+          git fetch origin "$BASE_REF" --depth=1
+          CHANGED_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD")
           CHANGES='[]'
           for path in $(jq -r '.services[].path' .github/preview-services.json); do
             name=$(jq -r --arg p "$path" '.services[] | select(.path == $p) | .name' .github/preview-services.json)
@@ -50,6 +232,7 @@ jobs:
             '[.services[] | select(.name as $n | $changes | index($n)) | .name] | join(", ")' \
             .github/preview-services.json)
           COUNT=$(echo "$CHANGES" | jq 'length')
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "services_list=$SERVICES_LIST" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -gt 0 ]; then
@@ -59,10 +242,9 @@ jobs:
           fi
           echo "Changed services ($COUNT): $SERVICES_LIST"
 
-  # ─── Job 2: Build image + start preview for each changed service ───
   build-and-preview:
     name: Build & Preview (${{ matrix.name }})
-    needs: detect-changes
+    needs: [resolve-context, detect-changes]
     if: needs.detect-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -74,8 +256,10 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-context.outputs.branch }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -97,7 +281,7 @@ jobs:
           file: ${{ matrix.path }}/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ github.head_ref }}-${{ github.sha }}
+          tags: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
           build-args: ${{ matrix.build_args }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
@@ -121,11 +305,11 @@ jobs:
           action: start
           target: deployment/${{ matrix.deployment }}
           namespace: ${{ matrix.namespace }}
-          image: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ github.head_ref }}-${{ github.sha }}
+          image: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
           mode: steal
           filter: 'baggage:\s*[^\n]*\bmirrord={{ key }}\b'
           ttl_mins: '120'
-          key: ${{ env.PREVIEW_KEY }}
+          key: ${{ needs.resolve-context.outputs.preview_key }}
           extra_config: ${{ matrix.extra_config }}
 
       - name: Write result artifact
@@ -142,13 +326,13 @@ jobs:
           path: /tmp/preview-results/${{ matrix.name }}.json
           retention-days: 1
 
-  # ─── Job 3: Post aggregated PR comment + Slack notification ───
   notify:
     name: Post notifications
-    needs: [detect-changes, build-and-preview]
-    if: needs.detect-changes.outputs.has_changes == 'true' && !cancelled()
+    needs: [resolve-context, detect-changes, build-and-preview]
+    if: needs.detect-changes.outputs.has_changes == 'true' && !cancelled() && needs.resolve-context.outputs.should_comment == 'true'
     runs-on: ubuntu-latest
     permissions:
+      issues: write
       pull-requests: write
     steps:
       - name: Download all result artifacts
@@ -160,14 +344,17 @@ jobs:
 
       - name: Post PR comment with preview details
         uses: actions/github-script@v7
+        env:
+          PREVIEW_KEY: ${{ needs.resolve-context.outputs.preview_key }}
+          PR_NUMBER: ${{ needs.resolve-context.outputs.pr_number }}
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const key = `${{ env.PREVIEW_KEY }}`;
+            const key = process.env.PREVIEW_KEY;
+            const issueNumber = Number(process.env.PR_NUMBER);
             const url = 'https://playground.metalbear.dev/shop';
 
-            // Read all result files to get list of successfully previewed services
             const dir = '/tmp/preview-results';
             let services = [];
             try {
@@ -205,7 +392,7 @@ jobs:
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
             });
             const botComment = comments.find(c => c.body && c.body.includes('## mirrord Preview Environment - Metal Mart'));
             if (botComment) {
@@ -219,7 +406,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number: issueNumber,
                 body,
               });
             }
@@ -237,10 +424,10 @@ jobs:
                 {
                   "type": "section",
                   "fields": [
-                    { "type": "mrkdwn", "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>" },
+                    { "type": "mrkdwn", "text": "*PR:*\n<${{ needs.resolve-context.outputs.pr_url }}|#${{ needs.resolve-context.outputs.pr_number }}>" },
                     { "type": "mrkdwn", "text": "*Services:*\n${{ needs.detect-changes.outputs.services_list }}" },
                     { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
-                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord=${{ env.PREVIEW_KEY }}`" }
+                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord=${{ needs.resolve-context.outputs.preview_key }}`" }
                   ]
                 }
               ]
@@ -249,10 +436,10 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-  # ─── Job 4: Stop all previews on merge/close ───
   preview-stop:
-    name: Stop all previews on merge/close
-    if: github.event.action == 'closed' && startsWith(github.head_ref, 'demo-')
+    name: Stop all previews
+    needs: resolve-context
+    if: needs.resolve-context.outputs.should_run == 'true' && needs.resolve-context.outputs.mode == 'stop'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -276,4 +463,4 @@ jobs:
         uses: metalbear-co/mirrord-preview@master
         with:
           action: stop
-          key: ${{ env.PREVIEW_KEY }}
+          key: ${{ needs.resolve-context.outputs.preview_key }}
