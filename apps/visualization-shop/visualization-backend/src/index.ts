@@ -722,6 +722,12 @@ const knownDeployments: KnownDeployment[] = [
     deployment: "delivery-service",
   },
   {
+    id: "notifications-service",
+    name: "notifications-service",
+    description: "RabbitMQ consumer for order notification events",
+    deployment: "notifications-service",
+  },
+  {
     id: "receipt-service",
     name: "receipt-service",
     description: "Receipt generation & delivery",

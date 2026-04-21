@@ -1,0 +1,17 @@
+# Maps notifications-service → RabbitMQ queue env vars for mirrord queue splitting.
+# Queue entry key MUST match feature.split_queues in apps/shop/notifications-service/mirrord.json ("order-notifications").
+apiVersion: queues.mirrord.metalbear.co/v1alpha
+kind: MirrordWorkloadQueueRegistry
+metadata:
+  name: notifications-rabbitmq-queue-registry
+spec:
+  consumer:
+    name: notifications-service
+    workloadType: Deployment
+    container: main
+  queues:
+    order-notifications:
+      clusterProperties: shop-rabbitmq-cluster
+      queueType: RMQ
+      nameSource:
+        envVar: RABBITMQ_QUEUE

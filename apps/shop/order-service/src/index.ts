@@ -12,6 +12,7 @@ import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
 import { inventoryUrl } from "./connections.js";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
+import { publishOrderNotification } from "./rabbit.js";
 import * as activities from "./activities.js";
 import { CheckoutWorkflow } from "./workflows/checkout.js";
 
@@ -225,17 +226,32 @@ async function createOrderDirect(
   );
   console.log("[Order] JWT created for order %d: %s", orderId, token);
 
-  await sqsClient.send(
-    new SendMessageCommand({
-      QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ jwt: token }),
-    })
-  );
+  if (sqsQueueUrl) {
+    await sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: sqsQueueUrl,
+        MessageBody: JSON.stringify({ jwt: token }),
+      })
+    );
+  } else {
+    console.warn(
+      "[Order] SQS_QUEUE_URL unset — skipping payment SQS (local dev; payment-service will not debit)"
+    );
+  }
 
   await sendOrderToKafka({
     orderId,
     items,
     status: "confirmed",
+    baggage,
+  });
+
+  await publishOrderNotification({
+    orderId,
+    status: "confirmed",
+    customer_email: customer_email ?? null,
+    total_cents: totalCents,
+    event: "order_confirmed",
     baggage,
   });
 

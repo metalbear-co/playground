@@ -30,6 +30,10 @@ spec:
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "orders"
+            - name: RABBITMQ_URL
+              value: "amqp://shop:playground@rabbitmq.infra.svc.cluster.local:5672/"
+            - name: RABBITMQ_QUEUE
+              value: "order-notifications"
             - name: USE_TEMPORAL
               value: "false"
             - name: TEMPORAL_ADDRESS
