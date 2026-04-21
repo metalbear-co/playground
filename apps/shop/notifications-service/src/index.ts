@@ -35,7 +35,9 @@ async function consumeLoop(): Promise<void> {
   const conn = await amqp.connect(rabbitUrl);
   conn.on("error", (err) => console.error("[Notifications] AMQP connection error:", err));
   const ch = await conn.createChannel();
-  await ch.assertQueue(queueName, { durable: true });
+  // mirrord RMQ split queues are non-durable; main "order-notifications" stays durable.
+  const durable = !queueName.startsWith("mirrord-");
+  await ch.assertQueue(queueName, { durable });
   ch.prefetch(1);
   await ch.consume(
     queueName,
