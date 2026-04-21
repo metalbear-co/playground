@@ -12,6 +12,12 @@ on:
   schedule:
     - cron: '0 9 * * 0'
   workflow_dispatch:
+    inputs:
+      preview_key_prefix:
+        description: Prefix for the mirrord preview key
+        required: false
+        default: shop-preview
+        type: string
 
 jobs:
   preview-test:
@@ -39,10 +45,17 @@ jobs:
 
       - name: Compute branch name + date
         id: meta
+        env:
+          PREVIEW_KEY_PREFIX: ${{ github.event.inputs.preview_key_prefix || 'shop-preview' }}
         run: |
+          set -euo pipefail
           DATE=$(date -u +%Y-%m-%d)
           BRANCH="daily-check-${DATE}-${{ github.run_id }}"
-          PREVIEW_KEY="$BRANCH"
+          PREFIX=$(printf '%s' "$PREVIEW_KEY_PREFIX" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')
+          if [ -z "$PREFIX" ]; then
+            PREFIX="shop-preview"
+          fi
+          PREVIEW_KEY="${PREFIX}-${{ github.run_id }}"
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
           echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "preview_key=$PREVIEW_KEY" >> "$GITHUB_OUTPUT"
@@ -267,6 +280,7 @@ jobs:
             }
           })();
           EOF
+          export NODE_PATH="$(npm root)"
           if node /tmp/e2e.js; then
             echo "e2e_passed=true" >> "$GITHUB_OUTPUT"
             echo "error_msg=" >> "$GITHUB_OUTPUT"
