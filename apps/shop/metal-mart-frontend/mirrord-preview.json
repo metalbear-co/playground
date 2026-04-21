@@ -1,5 +1,5 @@
 {
-  "key": "ari",
+  "key": "adna",
   "target": {
     "namespace": "shop",
     "path": {
@@ -8,7 +8,7 @@
   },
   "feature": {
     "preview": {
-       "image": "ghcr.io/metalbear-co/playground-metal-mart-frontend:latest",
+       "image": "ghcr.io/metalbear-co/playground-metal-mart-frontend:test",
       "ttl_mins": 120,
       "creation_timeout_secs": 600
     },

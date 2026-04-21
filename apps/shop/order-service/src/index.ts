@@ -235,11 +235,11 @@ async function createOrderDirect(
   await sendOrderToKafka({
     orderId,
     items,
-    status: "confirmed",
+    status: "confirmed this is just a test for Andrej",
     baggage,
   });
 
-  return { orderId, status: "confirmed" };
+  return { orderId, status: "confirmed this is just a test for Andrej" };
 }
 
 app.post("/orders", async (req, res) => {

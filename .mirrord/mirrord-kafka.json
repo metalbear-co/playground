@@ -1,0 +1,24 @@
+{
+  "operator": true,
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "delivery-service"
+    }
+  },
+  "feature": {
+    "env": {
+      "override": {
+        "KAFKA_CONSUMER_GROUP": "delivery-service-local"
+      }
+    },
+    "split_queues": {
+      "orders": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "baggage": ".*\\bmirrord=adna\\b.*"
+        }
+      }
+    }
+  }
+}
