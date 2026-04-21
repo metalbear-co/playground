@@ -242,7 +242,7 @@ async function createOrderDirect(
   await sendOrderToKafka({
     orderId,
     items,
-    status: "confirmed",
+    status: "confirmet that this is a test",
     baggage,
   });
 
