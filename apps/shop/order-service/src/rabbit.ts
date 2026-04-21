@@ -25,7 +25,8 @@ async function getChannel(): Promise<amqp.Channel | null> {
         console.error("[Order/Rabbit] connection error:", err);
       });
       const ch = await connection.createChannel();
-      await ch.assertQueue(queueName, { durable: true });
+      const durable = !queueName.startsWith("mirrord-");
+      await ch.assertQueue(queueName, { durable });
       return ch;
     })();
   }
