@@ -1,7 +1,6 @@
 # Dynamic mirrord Preview Environment: detects changed services, builds images,
-# and starts a preview for each. Supports three entry points:
+# and starts a preview for each. Supports two entry points:
 # - PR open/reopen for demo-* branches
-# - PR comment `/preview`
 # - workflow_dispatch for automation such as preview-verification.yml
 # Uses metalbear-co/mirrord-preview GitHub Action.
 # Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT + SLACK_WEBHOOK_URL secrets,
@@ -12,16 +11,12 @@ run-name: >-
   ${{
     github.event_name == 'workflow_dispatch' &&
     format('{0} {1} caller={2}', inputs.action, inputs.preview_key || inputs.branch || 'manual', inputs.caller_run_id || 'na') ||
-    github.event_name == 'issue_comment' &&
-    format('comment PR #{0}', github.event.issue.number) ||
     format('{0} PR #{1}', github.event.action, github.event.pull_request.number)
   }}
 
 on:
   pull_request:
     types: [opened, reopened, closed]
-  issue_comment:
-    types: [created]
   workflow_dispatch:
     inputs:
       action:
@@ -58,7 +53,7 @@ on:
         type: string
 
 concurrency:
-  group: preview-shop-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number || github.run_id }}
+  group: preview-shop-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -160,30 +155,6 @@ jobs:
               } else {
                 out.should_run = isSameRepo && isDemoBranch ? 'true' : 'false';
                 out.services_reason = isDemoBranch ? 'pull_request:auto-demo' : 'pull_request:ignored';
-              }
-            } else if (context.eventName === 'issue_comment') {
-              const issue = context.payload.issue;
-              const body = context.payload.comment && context.payload.comment.body;
-              if (!issue.pull_request || !wantsPreview(body)) {
-                out.services_reason = 'issue_comment:ignored';
-              } else {
-                const prNumber = issue.number;
-                const { data: pr } = await github.rest.pulls.get({
-                  owner,
-                  repo,
-                  pull_number: prNumber,
-                });
-                const isSameRepo = pr.head.repo.full_name === sameRepoName;
-                out.mode = 'start';
-                out.branch = pr.head.ref;
-                out.base_ref = pr.base.ref;
-                out.preview_key = pr.head.ref;
-                out.pr_number = String(pr.number);
-                out.pr_url = pr.html_url;
-                out.image_tag_key = sanitizeTag(pr.head.ref);
-                out.should_comment = 'true';
-                out.should_run = isSameRepo ? 'true' : 'false';
-                out.services_reason = isSameRepo ? 'issue_comment:/preview' : 'issue_comment:fork-blocked';
               }
             } else {
               out.services_reason = `unsupported:${context.eventName}`;
