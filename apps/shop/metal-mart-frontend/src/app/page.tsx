@@ -184,9 +184,12 @@ export default function Home() {
         <section className="flex-1 px-6 py-12">
           <div className="mx-auto max-w-6xl">
             {hasProducts && (
-              <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
-                Featured products
-              </h1>
+              <>
+                <h1 className="hand-drawn-underline mb-4 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
+                  Featured products
+                </h1>
+                <p className="mb-10 text-slate-500">This is just a test</p>
+              </>
             )}
             {hasProducts ? (
               <>
