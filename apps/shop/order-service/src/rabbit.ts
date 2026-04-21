@@ -41,10 +41,14 @@ export async function publishOrderNotification(
     const ch = await getChannel();
     if (!ch) return;
     const body = Buffer.from(JSON.stringify(payload), "utf-8");
-    ch.sendToQueue(queueName, body, {
+    const opts: amqp.Options.Publish = {
       persistent: true,
       contentType: "application/json",
-    });
+    };
+    if (payload.baggage) {
+      opts.headers = { baggage: payload.baggage };
+    }
+    ch.sendToQueue(queueName, body, opts);
     console.log("[Order/Rabbit] published notification for order %d", payload.orderId);
   } catch (e) {
     console.error("[Order/Rabbit] publish failed (order still ok):", e);
