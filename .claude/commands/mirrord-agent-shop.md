@@ -1,6 +1,6 @@
 Agent-driven preview + test loop for the MetalMart shop. Use this when the developer asks you to make a change and actually verify it end-to-end in a mirrord preview environment before handing it back.
 
-**Difference from `/pm-feature`:** `/pm-feature` creates a preview and hands the URL to a PM to click around. `/mirrord-agent-shop` writes its own test plan, implements the change, runs Playwright against the preview itself, iterates privately until tests pass, and only then shows the developer screenshots + preview URL + mirrord header for review. If the developer gives feedback, loop again.
+**Difference from `/preview-shop`:** `/preview-shop` creates a preview and hands the URL to a PM to click around. `/mirrord-agent-shop` writes its own test plan, implements the change, runs Playwright against the preview itself, iterates privately until tests pass, and only then shows the developer screenshots + preview URL + mirrord header for review. If the developer gives feedback, loop again.
 
 ---
 
@@ -31,7 +31,7 @@ Echo the plan to the developer as a short bulleted list. **Do not ask for approv
 
 ### Phase 3 — Branch, edit, commit, push, PR
 
-Reuse `/pm-feature`'s strict branch-naming rule:
+Reuse `/preview-shop`'s strict branch-naming rule:
 
 - Exactly **2 words**, kebab-case, ASCII lowercase, format `^[a-z]+-[a-z]+$`
 - No `claude/` prefix, no slashes, no random suffix, no `demo-` prefix (we always dispatch previews explicitly)
@@ -52,7 +52,7 @@ git commit -m "<type>(<scope>): <description>"
 git push -u origin "$(git branch --show-current)"
 ```
 
-Create the PR — prefer `gh pr create --base main --head <branch>`; if `gh` is unavailable, fall back to `POST https://api.github.com/repos/metalbear-co/playground/pulls` via `WebFetch` (same pattern as `/pm-feature` step 5). Capture:
+Create the PR — prefer `gh pr create --base main --head <branch>`; if `gh` is unavailable, fall back to `POST https://api.github.com/repos/metalbear-co/playground/pulls` via `WebFetch` (same pattern as `/preview-shop` step 5). Capture:
 
 ```
 BRANCH=<word-word>
