@@ -1,9 +1,5 @@
 # Playground Repo (MetalMart Shop)
 
-## Auto-trigger rules
-
-- When the user describes a feature request, wants to add/change/modify functionality, or says phrases like "I want to create a new feature", "add a feature", "implement this", "build this feature", "make this change" — **always invoke the `/pm-feature` skill** before starting any code work. This ensures proper branching, PR creation, and preview environment setup.
-
 ## MetalMart Frontend Architecture
 
 **Path:** `apps/shop/metal-mart-frontend/`
