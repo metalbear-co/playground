@@ -62,7 +62,7 @@ export default function SuggestedProducts({ currentProductId, limit = 4 }: Props
               className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:-translate-y-0.5 hover:border-[#6a4ff5]/40 hover:shadow-lg"
             >
               <div className="relative aspect-square overflow-hidden bg-slate-50">
-                {p.is_new && <NewBadge size="sm" />}
+                {p.is_new && <NewBadge />}
                 {imageUrl ? (
                   <ProductImage
                     src={imageUrl}
