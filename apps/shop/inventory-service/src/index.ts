@@ -51,6 +51,22 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
+    // Seed additional swag so the "You might also like" carousel has more than 4 items.
+    // Reuses existing Cloudinary asset IDs so images render without new uploads.
+    await client.query(`
+      INSERT INTO products (id, name, description, price_cents, stock, image_urls, is_new) VALUES
+        (9,  'Debug Mode Hoodie',         'Cozy hoodie for late-night debugging sessions',            4999, 35, '["team_Work_makes_the_Dream_Work_-_front_w5qdnb"]'::jsonb, true),
+        (10, 'Kubernetes Ninja Sticker',  'Stealthy pod scheduler sticker pack',                      399,  240, '["Mind_the_Gap_pkyuc6"]'::jsonb, false),
+        (11, 'Rust Crab Mug',             'Fearless-concurrency coffee mug for Rustaceans',           1899, 60, '["A_mirrord_is_born_-_Front_xy8l8p"]'::jsonb, true),
+        (12, 'Latency Killer Cap',        'Ball cap for sub-millisecond engineers',                   2199, 45, '["Cloudboat_Willie_-_Front_wpgqi2"]'::jsonb, false),
+        (13, 'Production Bug Plush',      'Hug the bug — soft plush for incident response',           1499, 80, '["Increase_velocity_mfsov2"]'::jsonb, false),
+        (14, 'Observability Notebook',    'Dot-grid notebook for runbooks and architecture doodles',  1299, 110, '["Mind_the_gap_-_Front_anazkh"]'::jsonb, false),
+        (15, 'Container Whale Keychain',  'Ship it — tiny whale keychain for your laptop bag',        899,  150, '["Cloudboat_Willie_-_Back_z05dna"]'::jsonb, true),
+        (16, 'Service Mesh Tote Bag',     'Carry your sidecars in style',                             1699, 65, '["team_work_makes_the_dream_work_-_back_onanux"]'::jsonb, false)
+      ON CONFLICT (id) DO NOTHING
+    `);
+    // Keep serial sequence in sync after manual id inserts.
+    await client.query(`SELECT setval(pg_get_serial_sequence('products', 'id'), GREATEST((SELECT MAX(id) FROM products), 1))`);
   } finally {
     client.release();
   }
