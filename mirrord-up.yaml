@@ -1,13 +1,9 @@
-common:
-  accept_invalid_certificates: true
-  operator: true
 
 services:
   order-service:
     target:
       namespace: shop
       path: deployment/order-service
-    mode: split
     run:
        command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"] 
 
@@ -15,6 +11,5 @@ services:
     target:
       namespace: shop
       path: deployment/inventory-service
-    mode: split
     run:
        command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"] 
