@@ -1,6 +1,6 @@
 {
   "key": "ari",
-  "target": {
+   "target": {
     "namespace": "shop",
     "path": {
       "deployment": "order-service"
