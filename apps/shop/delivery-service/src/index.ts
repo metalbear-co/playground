@@ -109,7 +109,7 @@ app.get("/deliveries/order/:orderId", async (req, res) => {
   if (isNaN(orderId)) return res.status(400).json({ error: "Invalid order ID" });
   try {
     const { rows } = await pool.query(
-      "SELECT id, order_id, status, gift_wrap, created_at FROM deliveries WHERE order_id = $1",
+      "SELECT id, order_id, status, gift_wrap, created_at FROM deliveries WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
       [orderId]
     );
     res.json(rows[0] || null);
