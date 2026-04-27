@@ -10,7 +10,15 @@ Agent-driven preview + test loop for the MetalMart shop. Use this when the devel
 
 - Restate the developer's change in **one sentence**.
 - Read `.github/preview-services.json` and list which of `metal-mart-frontend`, `order-service`, `inventory-service`, `payment-service`, `delivery-service`, `receipt-service` this change will touch.
-- Ask **at most one** clarifying question, only if scope is genuinely ambiguous. Otherwise proceed.
+- **Preview-state awareness.** For each touched service, note whether it has `db_branches` configured in `preview-services.json`. Output a one-line classification per service:
+  - `service-name (branched)` — mirrord branches the DB per preview key; tests can assume isolated state.
+  - `service-name (shared DB)` — DB is shared across all previews; **test assertions must tolerate pre-existing rows** (query "most recent" / scope by run-start time / use a per-run unique marker like a UUID-suffixed `customer_email`).
+  - `service-name (no DB)` — no DB at all.
+
+  This gates how you write Phase 2 assertions. Get it wrong and tests will pass against stale data or fail against your own.
+
+- **Migration hazard check.** If the change adds an `ALTER TABLE` / `CREATE TABLE` / DDL to a service whose `preview-services.json` entry lacks `db_branches`, surface this to the developer in one line: *"Heads-up: this migration will run against the shared DB and persist across all previews. Confirm before I proceed?"* Wait for an explicit ack — this is the *one* place a clarifying question is mandatory, not optional.
+- Otherwise, ask **at most one** clarifying question, only if scope is genuinely ambiguous. Otherwise proceed.
 
 ### Phase 2 — Write the test plan (before any code)
 
@@ -26,6 +34,11 @@ Write a short, numbered test plan tailored to this specific change. Three sectio
 - **Regression guards** — existing flows that must still work. Examples:
   - Clicking any product tile on `/` opens the detail page
   - Checkout button on `/cart` navigates to `/checkout`
+
+**For any service flagged `(shared DB)` in Phase 1**, every functional check that reads a row from that service must be written tolerant-of-stale-data:
+- Use `ORDER BY created_at DESC LIMIT 1` semantics (e.g. assert *the most recent* delivery for an order, not "a delivery for an order").
+- Or, inject a per-run unique marker into the row (e.g. UUID in `customer_email`) and filter by it.
+- Or, capture a `runStart = new Date()` timestamp and only consider rows with `created_at >= runStart`.
 
 Echo the plan to the developer as a short bulleted list. **Do not ask for approval.** Pause ~5 seconds for a veto; if none, proceed. If they object, revise and re-echo.
 
@@ -44,7 +57,11 @@ git checkout -b <word-word>
 git branch --show-current   # must match ^[a-z]+-[a-z]+$
 ```
 
-Edit files under `apps/shop/metal-mart-frontend/` or `apps/shop/<service>/`. Commit and push:
+Edit files under `apps/shop/metal-mart-frontend/` or `apps/shop/<service>/`.
+
+**When you add or modify UI elements that the Phase 2 plan asserts on, add a stable `data-testid="..."` attribute on the same commit.** `page.locator('h1')` and class-based selectors break the moment a designer edits copy or styling; `data-testid` does not. The corresponding `e2e.js` selector should be `page.locator('[data-testid="..."]')`.
+
+Commit and push:
 
 ```bash
 git add <changed-files>
@@ -52,7 +69,7 @@ git commit -m "<type>(<scope>): <description>"
 git push -u origin "$(git branch --show-current)"
 ```
 
-Create the PR — prefer `gh pr create --base main --head <branch>`; if `gh` is unavailable, fall back to `POST https://api.github.com/repos/metalbear-co/playground/pulls` via `WebFetch` (same pattern as `/preview-shop` step 5). Capture:
+Create the PR — prefer `gh pr create --base main --head <branch>`; if `gh` is unavailable, fall back to `POST https://api.github.com/repos/metalbear-co/playground/pulls` via `WebFetch` (same pattern as `/preview-shop` step 5). If `gh pr create` fails with a `Resource not accessible by personal access token` error, the active GH auth is a fine-grained PAT without PR-create scope; `unset GITHUB_TOKEN` and retry — `gh` will fall back to the keyring token. Capture:
 
 ```
 BRANCH=<word-word>
@@ -123,7 +140,7 @@ Then poll `GET /repos/metalbear-co/playground/actions/runs?event=workflow_dispat
 
 ### Phase 4 — Agent executes the test plan against the preview
 
-**4a. Install Playwright once per session (cached in `/tmp/mirrord-agent-shop/`):**
+**4a. Install Playwright once per session (cached in `/tmp/mirrord-agent-shop/`) and clean prior-iteration artifacts:**
 
 ```bash
 mkdir -p /tmp/mirrord-agent-shop && cd /tmp/mirrord-agent-shop
@@ -131,6 +148,10 @@ mkdir -p /tmp/mirrord-agent-shop && cd /tmp/mirrord-agent-shop
 [ -d node_modules/playwright ] || npm install --save-dev playwright >/dev/null
 npx playwright install chromium --with-deps
 mkdir -p /tmp/screenshots
+# Clean stale artifacts so re-runs don't carry over old screenshots and so
+# the Write tool doesn't refuse to overwrite e2e.js without a prior Read.
+rm -f /tmp/mirrord-agent-shop/e2e.js
+rm -f /tmp/screenshots/iter*-*
 ```
 
 **4b. Write `/tmp/mirrord-agent-shop/e2e.js`** from the Phase 2 test plan. Use this template (adapted from `.github/workflows/preview-verification.yml`):
@@ -144,17 +165,25 @@ const fs = require('fs');
   const iter = process.env.ITER || '1';
   const shotsDir = '/tmp/screenshots';
   const shopUrl = 'https://playground.metalbear.dev/shop';
-  const results = { iter, checks: [], screenshots: [] };
+  const baggage = `mirrord=${previewKey}`;
+  // runStart is useful when asserting against shared-DB services: filter
+  // returned rows by created_at >= runStart to ignore stale rows from
+  // earlier preview runs.
+  const runStart = new Date();
+  const results = { iter, previewKey, runStart: runStart.toISOString(), checks: [], screenshots: [] };
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
-    extraHTTPHeaders: { baggage: `mirrord=${previewKey}` },
+    extraHTTPHeaders: { baggage },
   });
   const page = await ctx.newPage();
 
+  // IMPORTANT: always include the *actual* returned value/status in `detail`.
+  // A failed assertion's detail string is what lets you diagnose in one
+  // glance without re-running. "got: undefined" beats "failed".
   const check = (name, ok, detail) => {
     results.checks.push({ name, ok, detail: detail || '' });
-    console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ' — ' + detail : ''}`);
+    console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
   };
   const shoot = async (label) => {
     const p = `${shotsDir}/iter${iter}-${label}.png`;
@@ -164,19 +193,38 @@ const fs = require('fs');
 
   try {
     // === One block per Phase 2 functional + visual check ===
-    // Example — replace with checks derived from the test plan:
+    // Prefer [data-testid="..."] selectors over h1/class-based ones — they
+    // survive copy and styling changes. Add the data-testid to the JSX in
+    // the same commit as the test.
     await page.goto(shopUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForLoadState('networkidle', { timeout: 30000 });
-    const h1 = (await page.locator('h1').first().textContent()) || '';
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+    const h1 = (await page.locator('h1').first().textContent().catch(() => '')) || '';
     check('home heading present', h1.trim().length > 0, `got: "${h1.trim()}"`);
     await shoot('home');
 
     // Example API check with the baggage header:
     // const r = await page.request.post(`${shopUrl}/api/orders`, {
-    //   headers: { baggage: `mirrord=${previewKey}` },
+    //   headers: { baggage, 'Content-Type': 'application/json' },
     //   data: { items: [{ productId: 1, quantity: 1 }], total_cents: 1999 },
     // });
-    // check('POST /api/orders', r.ok(), `status ${r.status()}`);
+    // const body = await r.json().catch(() => ({}));
+    // check('POST /api/orders', r.ok(), `status ${r.status()} body=${JSON.stringify(body).slice(0, 160)}`);
+
+    // === Pattern: querying a SHARED-DB service ===
+    // Don't assume the first row is yours. Either filter by a unique marker
+    // you set on the request, or assert against the most-recent matching
+    // row. Example for a delivery created via Kafka after a POST /orders:
+    //
+    //   for (let attempt = 0; attempt < 12; attempt++) {
+    //     const dRes = await page.request.get(`${shopUrl}/api/deliveries/order/${orderId}`, { headers: { baggage } });
+    //     const body = await dRes.json().catch(() => null);
+    //     // If the API doesn't already return the latest row, filter:
+    //     if (body && new Date(body.created_at) >= runStart) {
+    //       /* assert here */
+    //       break;
+    //     }
+    //     await new Promise((r) => setTimeout(r, 2500));
+    //   }
   } catch (err) {
     check('fatal', false, err.message || String(err));
     try { await shoot('fatal'); } catch {}
@@ -184,12 +232,13 @@ const fs = require('fs');
     await browser.close();
     fs.writeFileSync(`${shotsDir}/iter${iter}-results.json`, JSON.stringify(results, null, 2));
     const allOk = results.checks.every(c => c.ok);
+    console.log(`\n${results.checks.filter(c => c.ok).length}/${results.checks.length} checks passed`);
     process.exit(allOk ? 0 : 1);
   }
 })();
 ```
 
-One `check()` call per functional check from the plan, one `shoot()` per visual check, `page.request.get/post` for API checks (always pass `headers: { baggage: \`mirrord=${previewKey}\` }`).
+One `check()` call per functional check from the plan, one `shoot()` per visual check, `page.request.get/post` for API checks (always pass `headers: { baggage }`).
 
 **4c. Run it:**
 
@@ -204,7 +253,7 @@ cat /tmp/screenshots/iter<n>-results.json
 
 If any functional check failed, any visual self-review flagged a problem, or the preview build failed:
 
-1. Diagnose the root cause from the failing assertion / screenshot / `gh run view --log-failed` output.
+1. Diagnose the root cause from the failing assertion / screenshot / `gh run view --log-failed` output. **Before assuming a product bug, check whether the failure is a shared-DB / stale-data artifact** (review the `detail` string for `created_at` older than `runStart`, or for `id` values that don't fit the freshly-branched DB). If yes, the fix is in the test (or in the API to return the latest row), not in unrelated product code.
 2. Edit code, commit (`fix: <concise diagnosis>` or `refactor: ...`), `git push`.
 3. Re-enter Phase 3a (rebuild), then Phase 4 with `ITER=<n+1>`.
 
@@ -229,6 +278,8 @@ Tests (iter <n>): <N/N passed>
 Screenshots:
   /tmp/screenshots/iter<n>-home.png — <one-line description of what I saw>
   /tmp/screenshots/iter<n>-<step>.png — <...>
+
+Notes from iteration: <only if iter > 1 — one line per fix made during the loop>
 
 Open the URL with the baggage header to review yourself — either the mirrord
 Browser Extension (set `baggage: mirrord=<BRANCH>`) or:
@@ -298,6 +349,7 @@ gh pr close "$PR_URL" --delete-branch
 | Test script | `/tmp/mirrord-agent-shop/e2e.js` |
 | Results JSON | `/tmp/screenshots/iter<n>-results.json` |
 | Services list | `.github/preview-services.json` |
+| Branched DBs | services in `preview-services.json` whose `extra_config` includes `db_branches` |
 
 ## Guardrails
 
@@ -307,3 +359,5 @@ gh pr close "$PR_URL" --delete-branch
 - **Never poll the preview run faster than every 60 seconds.**
 - **Never use `--no-verify` or `git push --force`** during internal iteration.
 - **Treat a visual self-review failure as a real failure** even if Playwright assertions passed — a green test suite with a broken-looking UI still goes to Phase 5.
+- **Never assert against a shared-DB service without staleness tolerance.** Either the API must return "the most recent" row, or the test must filter by `created_at >= runStart` / a per-run unique marker. A green test against stale data is worse than a red one.
+- **Always prefer `[data-testid="..."]` selectors** over tag/class-based selectors for any element introduced by this change. Add the testid in the same commit as the JSX edit.
