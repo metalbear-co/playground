@@ -15,14 +15,17 @@ type Order = {
   total_cents: number;
   status: string;
   created_at: string;
+  gift_wrap?: boolean;
+  gift_wrap_fee_cents?: number;
 };
 type Product = { id: number; name: string; price_cents: number };
+type Delivery = { status: string; gift_wrap?: boolean };
 
 export default function OrderPage() {
   const params = useParams();
   const id = params?.id as string;
   const [order, setOrder] = useState<Order | null>(null);
-  const [delivery, setDelivery] = useState<{ status: string } | null>(null);
+  const [delivery, setDelivery] = useState<Delivery | null>(null);
   const [lineItems, setLineItems] = useState<{ product: Product; quantity: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +105,14 @@ export default function OrderPage() {
                 {delivery && (
                   <p className="text-slate-600">Delivery: {delivery.status}</p>
                 )}
+                {(order.gift_wrap || delivery?.gift_wrap) && (
+                  <p
+                    data-testid="gift-wrap-indicator"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#6a4ff5]/10 px-3 py-1 text-sm font-medium text-[#6a4ff5]"
+                  >
+                    🎁 Gift wrapped
+                  </p>
+                )}
               </div>
               {lineItems.length > 0 && (
                 <div>
@@ -118,6 +129,14 @@ export default function OrderPage() {
                         </span>
                       </li>
                     ))}
+                    {order.gift_wrap && (
+                      <li className="flex justify-between border-t border-slate-200 pt-3 text-slate-700">
+                        <span>🎁 Gift wrap</span>
+                        <span className="font-semibold text-[#6a4ff5]">
+                          ${((order.gift_wrap_fee_cents ?? 0) / 100).toFixed(2)}
+                        </span>
+                      </li>
+                    )}
                   </ul>
                   <p className="mt-3 text-lg font-semibold text-slate-900">
                     Total: ${(order.total_cents / 100).toFixed(2)}

@@ -7,8 +7,11 @@ export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
   customer_email?: string;
+  gift_wrap?: boolean;
   baggage?: string;
 };
+
+const GIFT_WRAP_FEE_CENTS = 499;
 
 export type CheckoutResult = {
   orderId: number;
@@ -74,13 +77,16 @@ export async function chargePayment(input: CheckoutInput & { orderId?: number })
 
 /** Insert order into DB and return orderId */
 export async function createOrder(input: CheckoutInput): Promise<number> {
+  const giftWrap = !!input.gift_wrap;
+  const giftWrapFee = giftWrap ? GIFT_WRAP_FEE_CENTS : 0;
+  const totalCents = input.total_cents + giftWrapFee;
   const client = await pool.connect();
   try {
     const {
       rows: [row],
     } = await client.query(
-      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id",
-      [JSON.stringify(input.items), input.total_cents, input.customer_email ?? null]
+      "INSERT INTO orders (items, total_cents, status, customer_email, gift_wrap, gift_wrap_fee_cents) VALUES ($1, $2, 'confirmed', $3, $4, $5) RETURNING id",
+      [JSON.stringify(input.items), totalCents, input.customer_email ?? null, giftWrap, giftWrapFee]
     );
     return row.id as number;
   } finally {
@@ -93,12 +99,14 @@ export async function publishOrderToKafka(input: {
   orderId: number;
   items: Array<{ productId: number; quantity: number }>;
   status: string;
+  gift_wrap?: boolean;
   baggage?: string;
 }): Promise<void> {
   await sendOrderToKafka({
     orderId: input.orderId,
     items: input.items,
     status: input.status,
+    gift_wrap: !!input.gift_wrap,
     baggage: input.baggage,
   });
 }

@@ -15,6 +15,7 @@ export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
   customer_email?: string;
+  gift_wrap?: boolean;
   baggage?: string;
 };
 
@@ -34,6 +35,7 @@ export async function CheckoutWorkflow(
     orderId,
     items: input.items,
     status: "confirmed",
+    gift_wrap: !!input.gift_wrap,
     baggage: input.baggage,
   });
   await publishOrderNotificationActivity({

@@ -43,6 +43,12 @@ async function initDb() {
     await client.query(`
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)
     `);
+    await client.query(`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS gift_wrap BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS gift_wrap_fee_cents INTEGER NOT NULL DEFAULT 0
+    `);
   } finally {
     client.release();
   }
@@ -83,8 +89,11 @@ type OrderInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
   customer_email?: string;
+  gift_wrap?: boolean;
   baggage?: string;
 };
+
+const GIFT_WRAP_FEE_CENTS = 499;
 
 const MAX_PRODUCT_ID = 2 ** 31 - 1; // safe integer, prevents URL injection
 
@@ -161,7 +170,9 @@ async function createOrderViaTemporal(
 async function createOrderDirect(
   input: OrderInput
 ): Promise<{ orderId: number; status: string }> {
-  const { items, total_cents: totalCents, customer_email, baggage } = input;
+  const { items, total_cents: subtotalCents, customer_email, gift_wrap, baggage } = input;
+  const giftWrapFee = gift_wrap ? GIFT_WRAP_FEE_CENTS : 0;
+  const totalCents = subtotalCents + giftWrapFee;
 
   for (const item of items) {
     const productId = encodeURIComponent(String(item.productId));
@@ -211,8 +222,8 @@ async function createOrderDirect(
     const {
       rows: [row],
     } = await client.query(
-      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id",
-      [JSON.stringify(items), totalCents, customer_email ?? null]
+      "INSERT INTO orders (items, total_cents, status, customer_email, gift_wrap, gift_wrap_fee_cents) VALUES ($1, $2, 'confirmed', $3, $4, $5) RETURNING id",
+      [JSON.stringify(items), totalCents, customer_email ?? null, !!gift_wrap, giftWrapFee]
     );
     orderId = row.id;
   } finally {
@@ -243,6 +254,7 @@ async function createOrderDirect(
     orderId,
     items,
     status: "confirmed",
+    gift_wrap: !!gift_wrap,
     baggage,
   });
 
@@ -260,10 +272,11 @@ async function createOrderDirect(
 
 app.post("/orders", async (req, res) => {
   const baggage = req.headers["baggage"] as string | undefined;
-  const body = req.body as { items?: unknown; total_cents?: number; customer_email?: string };
+  const body = req.body as { items?: unknown; total_cents?: number; customer_email?: string; gift_wrap?: unknown };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
   const customer_email = typeof body.customer_email === "string" ? body.customer_email : undefined;
-  console.log("Order request:", JSON.stringify({ baggage, total_cents, customer_email, items: body.items }, null, 2));
+  const gift_wrap = body.gift_wrap === true;
+  console.log("Order request:", JSON.stringify({ baggage, total_cents, customer_email, gift_wrap, items: body.items }, null, 2));
 
   const validated = validateOrderItems(body.items);
   if ("error" in validated) {
@@ -275,7 +288,7 @@ app.post("/orders", async (req, res) => {
   }
   const { items } = validated;
 
-  const input: OrderInput = { items, total_cents, customer_email, baggage };
+  const input: OrderInput = { items, total_cents, customer_email, gift_wrap, baggage };
 
   try {
     const result =
@@ -306,7 +319,7 @@ app.get("/orders/:id", orderReadLimiter, async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid order ID" });
   try {
     const { rows } = await pool.query(
-      "SELECT id, items, total_cents, status, created_at FROM orders WHERE id = $1",
+      "SELECT id, items, total_cents, status, created_at, gift_wrap, gift_wrap_fee_cents FROM orders WHERE id = $1",
       [id]
     );
     if (rows.length === 0)

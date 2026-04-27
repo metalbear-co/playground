@@ -15,6 +15,8 @@ type Product = {
   image_urls?: string[] | null;
 };
 
+const GIFT_WRAP_FEE_CENTS = 499;
+
 export default function CheckoutPage() {
   const [cart, setCart] = useState<{ productId: number; quantity: number; product?: Product }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +24,7 @@ export default function CheckoutPage() {
   const [orderId, setOrderId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const [giftWrap, setGiftWrap] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem("metal-mart-cart");
@@ -35,7 +38,9 @@ export default function CheckoutPage() {
     ).then(setCart).finally(() => setLoading(false));
   }, []);
 
-  const totalCents = cart.reduce((s, i) => s + (i.product?.price_cents ?? 0) * i.quantity, 0);
+  const subtotalCents = cart.reduce((s, i) => s + (i.product?.price_cents ?? 0) * i.quantity, 0);
+  const giftWrapFeeCents = giftWrap ? GIFT_WRAP_FEE_CENTS : 0;
+  const totalCents = subtotalCents + giftWrapFeeCents;
   const orderItems = cart.map(({ productId, quantity }) => ({ productId, quantity }));
 
   const handleSubmit = async () => {
@@ -45,7 +50,12 @@ export default function CheckoutPage() {
       const r = await fetch(`${basePath}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: orderItems, total_cents: totalCents, ...(email ? { customer_email: email } : {}) }),
+        body: JSON.stringify({
+          items: orderItems,
+          total_cents: subtotalCents,
+          gift_wrap: giftWrap,
+          ...(email ? { customer_email: email } : {}),
+        }),
       });
       const data = await r.json();
       if (r.ok) {
@@ -139,8 +149,35 @@ export default function CheckoutPage() {
                 </span>
               </li>
             ))}
+            {giftWrap && (
+              <li
+                data-testid="gift-wrap-line"
+                className="flex items-center justify-between border-t border-slate-200 pt-3"
+              >
+                <span className="text-slate-700">🎁 Gift wrap</span>
+                <span className="font-semibold text-[#6a4ff5]">
+                  ${(giftWrapFeeCents / 100).toFixed(2)}
+                </span>
+              </li>
+            )}
           </ul>
-          <p className="mb-6 text-xl font-semibold text-slate-900">
+          <label className="mb-6 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 bg-slate-50 p-4">
+            <input
+              type="checkbox"
+              checked={giftWrap}
+              onChange={(e) => setGiftWrap(e.target.checked)}
+              data-testid="gift-wrap-checkbox"
+              className="mt-1 h-5 w-5 cursor-pointer rounded border-slate-300 text-[#6a4ff5] focus:ring-2 focus:ring-[#6a4ff5]/40"
+            />
+            <span className="text-slate-700">
+              <span className="font-semibold">🎁 Gift wrap this order</span>{" "}
+              <span className="text-slate-500">(+$4.99)</span>
+            </span>
+          </label>
+          <p
+            data-testid="checkout-total"
+            className="mb-6 text-xl font-semibold text-slate-900"
+          >
             Total: ${(totalCents / 100).toFixed(2)}
           </p>
           <div className="mb-6">

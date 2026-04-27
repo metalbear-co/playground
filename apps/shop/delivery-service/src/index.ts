@@ -26,6 +26,9 @@ async function initDb() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await client.query(`
+      ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS gift_wrap BOOLEAN NOT NULL DEFAULT FALSE
+    `);
   } finally {
     client.release();
   }
@@ -62,11 +65,15 @@ async function startConsumer() {
         });
         const body = JSON.parse(message.value?.toString() || "{}");
         const orderId = body.orderId;
-        console.log(`[${t}] Received order ${orderId}`);
+        const giftWrap = body.gift_wrap === true;
+        console.log(`[${t}] Received order ${orderId} (gift_wrap=${giftWrap})`);
 
         const client = await pool.connect();
         try {
-          await client.query("INSERT INTO deliveries (order_id, status) VALUES ($1, 'processing')", [orderId]);
+          await client.query(
+            "INSERT INTO deliveries (order_id, status, gift_wrap) VALUES ($1, 'processing', $2)",
+            [orderId, giftWrap]
+          );
         } finally {
           client.release();
         }
@@ -88,7 +95,7 @@ app.get("/health", (_req, res) => {
 app.get("/deliveries", async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, order_id, status, created_at FROM deliveries ORDER BY created_at DESC LIMIT 50"
+      "SELECT id, order_id, status, gift_wrap, created_at FROM deliveries ORDER BY created_at DESC LIMIT 50"
     );
     res.json(rows);
   } catch (err) {
@@ -102,7 +109,7 @@ app.get("/deliveries/order/:orderId", async (req, res) => {
   if (isNaN(orderId)) return res.status(400).json({ error: "Invalid order ID" });
   try {
     const { rows } = await pool.query(
-      "SELECT id, order_id, status, created_at FROM deliveries WHERE order_id = $1",
+      "SELECT id, order_id, status, gift_wrap, created_at FROM deliveries WHERE order_id = $1",
       [orderId]
     );
     res.json(rows[0] || null);
