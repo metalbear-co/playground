@@ -449,56 +449,109 @@ const deriveRmqOriginalQueueName = (mirrordQueue: string): string => {
 };
 
 /**
- * Discover ephemeral mirrord RabbitMQ queues from notifications-service pods
- * (RABBITMQ_QUEUE env). There is no dedicated split CR in-cluster for this demo path.
+ * Discover ephemeral mirrord RabbitMQ queues for active queue-splitting sessions.
+ * For each MirrordRMQSession, emit:
+ *   - Filtered: queue from `status.Ready.envUpdates.<env>.outputName` (consumed by local user).
+ *   - Fallback: queue from the consumer pod's actual env value (consumed by the deployed pod;
+ *     mirrord patches it to a `mirrord-main-<id>-...` queue).
  */
 const fetchRmqEphemeralQueues = async (
   kubeConfig: KubeConfig,
 ): Promise<RmqEphemeralQueue[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
   const coreApi = kubeConfig.makeApiClient(CoreV1Api);
-  const ns = process.env.WATCH_NAMESPACE || "shop";
-  try {
-    const result = await coreApi.listNamespacedPod({
-      namespace: ns,
-      labelSelector: "app=notifications-service",
-    });
-    const items = result.items ?? [];
-    const seen = new Set<string>();
-    const out: RmqEphemeralQueue[] = [];
+  const out: RmqEphemeralQueue[] = [];
 
-    for (const pod of items) {
-      const labels = (pod.metadata?.labels ?? {}) as Record<string, string>;
-      const sessionId =
-        labels["operator.metalbear.co/session-id"] ??
-        labels["mirrord-session"] ??
-        "unknown";
-      const containers = pod.spec?.containers ?? [];
-      const main = containers.find((c) => c.name === "main") ?? containers[0];
-      const env = main?.env ?? [];
-      const qEnv = env.find((e) => e.name === "RABBITMQ_QUEUE");
-      const raw = (typeof qEnv?.value === "string" ? qEnv.value : "").trim();
-      if (!raw.startsWith("mirrord-")) continue;
-      if (seen.has(raw)) continue;
-      seen.add(raw);
-      const queueType = raw.includes("-fallback-")
-        ? ("Fallback" as const)
-        : ("Filtered" as const);
-      out.push({
-        queueName: raw,
-        originalQueueName: deriveRmqOriginalQueueName(raw),
-        sessionId,
-        consumer: "notifications-service",
-        queueType,
-      });
-    }
-    return out;
+  let items: Array<Record<string, unknown>> = [];
+  try {
+    const result = await customApi.listClusterCustomObject({
+      group: "queues.mirrord.metalbear.co",
+      version: "v1alpha",
+      plural: "mirrordrmqsessions",
+    });
+    const body = result as { items?: Array<Record<string, unknown>> };
+    items = body.items ?? [];
   } catch (err) {
     console.warn(
-      "Failed to list notifications pods for RMQ split:",
+      "Failed to list MirrordRMQSessions:",
       err instanceof Error ? err.message : err,
     );
-    return [];
+    return out;
   }
+
+  for (const item of items) {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const labels = (metadata.labels ?? {}) as Record<string, string>;
+    const sessionId =
+      labels["operator.metalbear.co/session-id"] ??
+      (spec.sessionId as string) ??
+      "unknown";
+    const queueConsumer = (spec.queueConsumer ?? {}) as Record<string, unknown>;
+    const consumer = (queueConsumer.name as string) ?? "unknown";
+    const consumerNs = (spec.namespace as string) ?? defaultNamespace;
+    const ready = (status["Ready"] ?? {}) as Record<string, unknown>;
+    const envUpdates =
+      (ready.envUpdates ?? {}) as Record<string, Record<string, string>>;
+
+    const filterOutputs = new Set<string>();
+    const envVarOriginals: { envVar: string; originalName: string }[] = [];
+
+    for (const [envVar, mapping] of Object.entries(envUpdates)) {
+      const outputName = (mapping.outputName ?? "").trim();
+      const originalName = (mapping.originalName ?? "").trim();
+      if (!outputName) continue;
+      filterOutputs.add(outputName);
+      envVarOriginals.push({ envVar, originalName });
+      out.push({
+        queueName: outputName,
+        originalQueueName:
+          originalName || deriveRmqOriginalQueueName(outputName),
+        sessionId,
+        consumer,
+        queueType: "Filtered",
+      });
+    }
+
+    if (envVarOriginals.length === 0 || consumer === "unknown") continue;
+
+    try {
+      const podsResult = await coreApi.listNamespacedPod({
+        namespace: consumerNs,
+        labelSelector: `app=${consumer}`,
+      });
+      const seen = new Set<string>();
+      for (const pod of podsResult.items ?? []) {
+        const containers = pod.spec?.containers ?? [];
+        const main = containers.find((c) => c.name === "main") ?? containers[0];
+        const env = main?.env ?? [];
+        for (const { envVar, originalName } of envVarOriginals) {
+          const e = env.find((x) => x.name === envVar);
+          const raw = (typeof e?.value === "string" ? e.value : "").trim();
+          if (!raw.startsWith("mirrord-")) continue;
+          if (filterOutputs.has(raw)) continue;
+          if (seen.has(raw)) continue;
+          seen.add(raw);
+          out.push({
+            queueName: raw,
+            originalQueueName:
+              originalName || deriveRmqOriginalQueueName(raw),
+            sessionId,
+            consumer,
+            queueType: "Fallback",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to list pods for RMQ consumer ${consumer} in ${consumerNs}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return out;
 };
 
 /**
