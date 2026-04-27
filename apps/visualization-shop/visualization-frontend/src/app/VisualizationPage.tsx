@@ -1139,15 +1139,6 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     return targets;
   }, [kafkaTopics, operatorSessions]);
 
-  /** Consumers with an active RabbitMQ split (mirrord ephemeral queues); hide direct agent→target. */
-  const rmqSplitTargets = useMemo(() => {
-    const targets = new Set<string>();
-    for (const q of rmqQueues) {
-      if (q.consumer) targets.add(q.consumer);
-    }
-    return targets;
-  }, [rmqQueues]);
-
   // Build dynamic edges: operator -> agent and agent -> target per session.
   const dynamicEdges = useMemo((): Edge[] => {
     const edges: Edge[] = [];
@@ -1182,11 +1173,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
       });
 
-      // Agent -> Target (skip if a kafka / RabbitMQ split replaces this direct path,
+      // Agent -> Target (skip if a kafka split replaces this direct path,
       // or if this is a copy target — the agent IS the replacement for the original service)
       if (
         !kafkaSplitTargets.has(group.targetName) &&
-        !rmqSplitTargets.has(group.targetName) &&
         !group.isCopyTarget
       ) {
         const sessionLabel = group.sessions
@@ -1223,7 +1213,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     }
 
     return edges;
-  }, [agentGroups, kafkaSplitTargets, rmqSplitTargets]);
+  }, [agentGroups, kafkaSplitTargets]);
 
   // Build dynamic Kafka topic nodes from operator status data.
   // When KafkaEphemeralTopics exist, we create:
