@@ -82,9 +82,10 @@ async function startConsumer() {
   });
 }
 
-async function fetchGiftWrap(orderId: number): Promise<boolean | null> {
+async function fetchGiftWrap(orderId: number, baggage?: string): Promise<boolean | null> {
   try {
-    const res = await fetch(`${orderServiceUrl}/orders/${orderId}`);
+    const headers = baggage ? { baggage } : undefined;
+    const res = await fetch(`${orderServiceUrl}/orders/${orderId}`, { headers });
     if (!res.ok) {
       console.warn(`Failed to fetch order ${orderId} for delivery response: ${res.status}`);
       return null;
@@ -125,7 +126,8 @@ app.get("/deliveries/order/:orderId", async (req, res) => {
     );
     const delivery = rows[0] || null;
     if (!delivery) return res.json(null);
-    const giftWrap = await fetchGiftWrap(orderId);
+    const baggage = typeof req.headers.baggage === "string" ? req.headers.baggage : undefined;
+    const giftWrap = await fetchGiftWrap(orderId, baggage);
     res.json({ ...delivery, gift_wrap: giftWrap });
   } catch (err) {
     console.error("Error fetching delivery:", err);
