@@ -316,11 +316,20 @@ type SqsEphemeralQueue = {
   jqFilter?: string;
 };
 
+type RmqEphemeralQueue = {
+  queueName: string;
+  originalQueueName: string;
+  sessionId: string;
+  consumer: string;
+  queueType: "Filtered" | "Fallback";
+};
+
 type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
   sqsQueues: SqsEphemeralQueue[];
+  rmqQueues: RmqEphemeralQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
   fetchedAt: string;
@@ -719,14 +728,15 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const isDynamicAgent = id.startsWith("agent-");
   const isDynamicKafkaTopic = id.startsWith("kafka-topic-") || id.startsWith("kafka-deployed-topic-");
   const isDynamicSqsQueue = id.startsWith("sqs-queue-") || id.startsWith("sqs-deployed-queue-");
+  const isDynamicRmqQueue = id.startsWith("rmq-queue-") || id.startsWith("rmq-deployed-queue-");
   const isDynamicLocal = id.startsWith("dynamic-local-");
   const isDynamicLayer = id.startsWith("dynamic-layer-");
   const isDynamicPgBranch = id.startsWith("pg-branch-");
   const isDynamicPreview = id.startsWith("preview-");
-  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
+  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
   const isOperator = id === "mirrord-operator";
   const isCiRunnerAgent = isDynamicAgent && data.ciRunner === true;
-  const borderColor = isCiRunnerAgent ? "#0D9488" : isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : (isDynamicPgBranch && data.matchesPreview) ? "#0EA5E9" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
+  const borderColor = isCiRunnerAgent ? "#0D9488" : isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : isDynamicRmqQueue ? "#0D9488" : (isDynamicPgBranch && data.matchesPreview) ? "#0EA5E9" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
@@ -797,6 +807,17 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Bottom} id={`${id}-source-bottom`} style={handleStyle} />
         </>
       )}
+      {isDynamicRmqQueue && (
+        <>
+          <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="target" position={Position.Right} id={`${id}-target-right`} style={handleStyle} />
+          <Handle type="target" position={Position.Top} id={`${id}-target-top`} style={handleStyle} />
+          <Handle type="source" position={Position.Left} id={`${id}-source-left`} style={handleStyle} />
+          <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
+          <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
+          <Handle type="source" position={Position.Bottom} id={`${id}-source-bottom`} style={handleStyle} />
+        </>
+      )}
       {isDynamicLayer && (
         <>
           <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
@@ -826,7 +847,7 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
         </>
       )}
-      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || data.focusedCombined) ? (
+      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || data.focusedCombined) ? (
         data.label
       ) : (
         <div className="flex flex-col gap-0.5 text-left">
@@ -933,6 +954,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
   const [operatorSessions, setOperatorSessions] = useState<OperatorSession[]>([]);
   const [kafkaTopics, setKafkaTopics] = useState<KafkaEphemeralTopic[]>([]);
   const [sqsQueues, setSqsQueues] = useState<SqsEphemeralQueue[]>([]);
+  const [rmqQueues, setRmqQueues] = useState<RmqEphemeralQueue[]>([]);
   const [pgBranchesRaw, setPgBranches] = useState<PgBranchDatabase[]>([]);
   const pgBranches = useMemo(() => {
     const seen = new Set<string>();
@@ -1151,9 +1173,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
       });
 
-      // Agent -> Target (skip if a kafka split topic replaces this direct path,
+      // Agent -> Target (skip if a kafka split replaces this direct path,
       // or if this is a copy target — the agent IS the replacement for the original service)
-      if (!kafkaSplitTargets.has(group.targetName) && !group.isCopyTarget) {
+      if (
+        !kafkaSplitTargets.has(group.targetName) &&
+        !group.isCopyTarget
+      ) {
         const sessionLabel = group.sessions
           .map((s) => s.sessionId.substring(0, 8))
           .join(", ");
@@ -1613,12 +1638,209 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     return edges;
   }, [sqsQueues, operatorSessions, aliasIndex]);
 
+  // Build dynamic RabbitMQ ephemeral queue nodes (filtered → local, fallback → cluster consumer).
+  const rmqQueueNodes = useMemo((): Node<NodeData>[] => {
+    if (rmqQueues.length === 0) return [];
+    const palette = groupPalette.mirrord;
+    const nodes: Node<NodeData>[] = [];
+    const sharedStyle = {
+      borderRadius: 18,
+      backgroundColor: "transparent",
+      color: palette.text,
+      boxShadow: "0px 30px 60px rgba(13,148,136,0.35)",
+      width: nodeWidth,
+      zIndex: 10,
+    };
+
+    const filteredQueues = rmqQueues.filter((q) => q.queueType === "Filtered");
+    const fallbackQueues = rmqQueues.filter((q) => q.queueType === "Fallback");
+    const rabbitPos = adjustedNodes.find((n) => n.id === "rabbitmq")?.position ?? { x: 0, y: 0 };
+
+    filteredQueues.forEach((queue, index) => {
+      const nodeId = `rmq-queue-${queue.queueName}`;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{queue.queueName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                ephemeral · filtered
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                session: {queue.sessionId}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: rabbitPos.x,
+          y: dynamicAgentBasePosition.y + (rmqQueues.length + index) * DYNAMIC_AGENT_SPACING_Y,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
+    });
+
+    fallbackQueues.forEach((queue, index) => {
+      const nodeId = `rmq-deployed-queue-${queue.queueName}`;
+      const consumerArchId = aliasIndex.get(queue.consumer.toLowerCase()) ?? queue.consumer;
+      const consumerPos = adjustedNodes.find((n) => n.id === consumerArchId)?.position ?? rabbitPos;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{queue.queueName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                ephemeral · fallback
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                session: {queue.sessionId}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: consumerPos.x + nodeWidth - 280 + index * (nodeWidth + 40),
+          y: consumerPos.y + 420,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
+    });
+
+    return nodes;
+  }, [rmqQueues, dynamicNodePositions, adjustedNodes, aliasIndex]);
+
+  const rmqQueueEdges = useMemo((): Edge[] => {
+    if (rmqQueues.length === 0) return [];
+    const edges: Edge[] = [];
+    const mirroredStyle = intentStyles.mirrored;
+    const edgeLabelDefaults = {
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 10,
+      labelShowBg: true,
+      labelBgStyle: { fill: "#FFFFFF" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+    };
+
+    edges.push({
+      id: "rabbitmq-to-operator",
+      source: "rabbitmq",
+      target: "mirrord-operator",
+      label: "consume messages",
+      type: "bezier",
+      sourceHandle: "source-bottom",
+      targetHandle: "operator-target-top",
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+      style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+      ...edgeLabelDefaults,
+    });
+
+    const filteredQueues = rmqQueues.filter((q) => q.queueType === "Filtered");
+    const fallbackQueues = rmqQueues.filter((q) => q.queueType === "Fallback");
+
+    for (const queue of filteredQueues) {
+      const nodeId = `rmq-queue-${queue.queueName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "matching filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-top`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    filteredQueues.forEach((queue, index) => {
+      const nodeId = `rmq-queue-${queue.queueName}`;
+      const usesDynamicLocal = filteredQueues.length > 1;
+      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
+      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      edges.push({
+        id: `${nodeId}-to-layer`,
+        source: nodeId,
+        target: targetLayer,
+        label: "consume messages",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-bottom`,
+        targetHandle,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    });
+
+    for (const queue of fallbackQueues) {
+      const nodeId = `rmq-deployed-queue-${queue.queueName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "send messages not matching any filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-left`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    for (const queue of fallbackQueues) {
+      const nodeId = `rmq-deployed-queue-${queue.queueName}`;
+      const consumerArchId = aliasIndex.get(queue.consumer.toLowerCase()) ?? queue.consumer;
+      edges.push({
+        id: `${nodeId}-to-${consumerArchId}`,
+        source: nodeId,
+        target: consumerArchId,
+        label: "consume messages",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-top`,
+        targetHandle: "target-bottom",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    return edges;
+  }, [rmqQueues, aliasIndex]);
+
   // Hide the static sqs→payment edge when a split queue replaces it.
   const sqsReplacedEdges = useMemo(() => {
     const replaced = new Set<string>();
     if (sqsQueues.length > 0) replaced.add("sqs-to-payment");
     return replaced;
   }, [sqsQueues]);
+
+  const rmqReplacedEdges = useMemo(() => {
+    const replaced = new Set<string>();
+    if (rmqQueues.length > 0) replaced.add("rabbitmq-to-notifications");
+    return replaced;
+  }, [rmqQueues]);
 
   const hasShopSessions = agentGroups.some(g => g.sessions.length > 0);
 
@@ -1759,8 +1981,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     );
 
     type ActiveQueueSplit = {
-      kind: "kafka" | "sqs";
-      producerId: string;       // architecture node id of the producer (e.g. "kafka", "sqs")
+      kind: "kafka" | "sqs" | "rmq";
+      producerId: string;       // architecture node id of the producer (e.g. "kafka", "sqs", "rabbitmq")
       filteredId: string;       // dynamic node id of the filtered/ephemeral split
       fallbackId: string;       // dynamic node id of the fallback/original split
       label: string;            // user-facing identifier (topic/queue name)
@@ -1805,6 +2027,26 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       });
     }
 
+    const rmqBySession = new Map<string, { filtered?: RmqEphemeralQueue; fallback?: RmqEphemeralQueue }>();
+    for (const q of rmqQueues) {
+      if (!matchingSessionIds.has(q.sessionId)) continue;
+      const entry = rmqBySession.get(q.sessionId) ?? {};
+      if (q.queueType === "Filtered") entry.filtered = q;
+      else if (q.queueType === "Fallback") entry.fallback = q;
+      rmqBySession.set(q.sessionId, entry);
+    }
+    for (const [sessionId, { filtered, fallback }] of rmqBySession) {
+      if (!filtered || !fallback) continue;
+      activeQueueSplits.push({
+        kind: "rmq",
+        producerId: "rabbitmq",
+        filteredId: `rmq-queue-${filtered.queueName}`,
+        fallbackId: `rmq-deployed-queue-${fallback.queueName}`,
+        label: filtered.queueName,
+        sessionId,
+      });
+    }
+
     const hasQueueSplit = activeQueueSplits.length > 0;
     const queueSplitNodeIds = activeQueueSplits.flatMap((s) => [s.filteredId, s.fallbackId]);
 
@@ -1836,7 +2078,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       activeQueueSplits,
       hasQueueSplit,
     };
-  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches, operatorSessions, kafkaTopics, sqsQueues]);
+  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches, operatorSessions, kafkaTopics, sqsQueues, rmqQueues]);
 
   /**
    * Enter focused view when the user clicks an agent node or a local process node.
@@ -1877,7 +2119,8 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           );
           const hasQueueSplit =
             kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
-            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
+            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
           setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
         }
         return;
@@ -1928,12 +2171,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           );
           const hasQueueSplit =
             kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
-            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
+            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
           setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
         }
       }
     },
-    [agentGroups, localMachineEntries, pgBranches, aliasIndex, operatorSessions, kafkaTopics, sqsQueues],
+    [agentGroups, localMachineEntries, pgBranches, aliasIndex, operatorSessions, kafkaTopics, sqsQueues, rmqQueues],
   );
 
   const dynamicLocalMachineNodes = useMemo((): Node<NodeData>[] => {
@@ -2467,6 +2711,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     for (const edge of baseEdges) {
       if (kafkaReplacedEdges.has(edge.id)) continue;
       if (sqsReplacedEdges.has(edge.id)) continue;
+      if (rmqReplacedEdges.has(edge.id)) continue;
       // Hide static local edges when dynamic local machines replace them
       if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) continue;
       if (edge.id === "local-to-layer" || edge.id === "layer-to-agent") {
@@ -2496,13 +2741,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       if (scaleDownTargets.has(edge.source)) continue;
       staticEdges.push(edge);
     }
-    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, sqsReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
+    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...rmqQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, rmqQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, sqsReplacedEdges, rmqReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
     if (!clusterZoneNode) return null;
-    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
+    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
 
     // Apply operator bottom-shift so cluster zone encompasses the shifted operator position
     const opBottomShift = sortedAgentGroups.length > 0
@@ -2517,7 +2762,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       }
       return n;
     });
-    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...pgBranchNodes, ...previewSessionNodes];
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...pgBranchNodes, ...previewSessionNodes];
     const padding = 48;
     const xs = allClusterNodes.map((n) => n.position.x);
     const ys = allClusterNodes.map((n) => n.position.y);
@@ -2551,7 +2796,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, sortedAgentGroups]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, sortedAgentGroups]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -2674,6 +2919,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     nodes.push(...dynamicAgentNodes);
     nodes.push(...kafkaTopicNodes);
     nodes.push(...sqsQueueNodes);
+    nodes.push(...rmqQueueNodes);
     nodes.push(...pgBranchNodes);
     nodes.push(...previewSessionNodes);
     // Add dynamic local machine nodes with localYShift applied
@@ -2688,7 +2934,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       nodes.push(...shiftedDynamicLocalNodes);
     }
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, operatorSessions]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, operatorSessions]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -2796,6 +3042,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         setOperatorSessions(body.sessions ?? []);
         setKafkaTopics(body.kafkaTopics ?? []);
         setSqsQueues(body.sqsQueues ?? []);
+        setRmqQueues(body.rmqQueues ?? []);
         setPgBranches(body.pgBranches ?? []);
         setPreviewSessions(body.previewSessions ?? []);
       }
@@ -2831,7 +3078,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         if ("id" in change && change.id.startsWith("zone-")) continue;
         const isDynamic =
           "id" in change &&
-          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("sqs-queue-") || change.id.startsWith("sqs-deployed-queue-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-"));
+          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("sqs-queue-") || change.id.startsWith("sqs-deployed-queue-") || change.id.startsWith("rmq-queue-") || change.id.startsWith("rmq-deployed-queue-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-"));
         if (
           isDynamic &&
           change.type === "position" &&
@@ -3829,7 +4076,11 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-[#CA8A04]">
-                            {split.kind === "kafka" ? "Kafka topic" : "SQS queue"}
+                            {split.kind === "kafka"
+                              ? "Kafka topic"
+                              : split.kind === "sqs"
+                                ? "SQS queue"
+                                : "RabbitMQ queue"}
                           </span>
                           <span className="font-mono text-[10px] text-[#9CA3AF]">
                             {split.sessionId.substring(0, 8)}

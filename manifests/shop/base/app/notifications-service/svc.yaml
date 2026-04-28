@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications-service
+spec:
+  selector:
+    app: notifications-service
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP

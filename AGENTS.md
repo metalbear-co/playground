@@ -1,20 +1,42 @@
-# Agent context
+# AGENTS - Mirrord Testing Contract
 
-Use this file and `docs/` for project context when working in this repo.
+> [!WARNING]
+> ATTENTION: AI-driven runtime testing in this repository MUST use `mirrord`.
+> Agents MUST use repository helper scripts and MUST validate Kubernetes target access before starting test traffic.
+> Agents MUST NEVER hard-code remote hostnames, credentials, or secret values in commands, scripts, or docs.
 
-## Entry points
+## Mandatory Rules
 
-- **Project overview, layout, deployment:** [docs/AI_ROOT_CONTEXT.md](docs/AI_ROOT_CONTEXT.md)
-- **Feature planning and migrations:** Other markdown files in [docs/](docs/). Check for `*-END-STATE.md`, `*-MIGRATION.md`, etc.
-- **How we use context in git:** [docs/AGENTIC-CONTEXT-GIT-PATTERN.md](docs/AGENTIC-CONTEXT-GIT-PATTERN.md)
+- Agents MUST run shop order-service testing through `scripts/mirrord-order-service.sh`.
+- Agents MUST use `.mirrord/mirrord-order-service.json` for target and network mode.
+- Agents MUST verify success by behavior, not by guessing infrastructure details.
+- Agents MUST confirm `mirrord` and `kubectl` availability before executing tests.
+- Agents MUST NEVER print secret environment variable values to terminal output.
 
-## Conventions
+## Service Overview
 
-- When starting a feature, look in `docs/` for an existing plan (end-state, migration) and follow it.
-- Commit planning or context docs in the **same branch/PR** as the implementation so git history carries the plan.
-- Prefer minimal, directive context; avoid long prose.
+| Service | Runtime | Kubernetes Target | Namespace | Network Mode | Verification |
+|---|---|---|---|---|---|
+| `order-service` | TypeScript + Express | `deployment/order-service` | `shop` | `steal` | HTTP behavior: ordering endpoint returns `201` on `POST /orders` |
 
-## Build and deploy
+## Required Workflow
 
-- **GKE:** `kubectl apply -k overlays/gke` (or `kustomize build --enable-helm overlays/gke | kubectl apply -f -`). See [docs/AI_ROOT_CONTEXT.md](docs/AI_ROOT_CONTEXT.md) and `overlays/gke/DRY-RUN.md` if present.
-- **Apps:** See `apps/*/README.md` and root [README.md](README.md) for local run, SQS, proto.
+1. Run `scripts/mirrord-order-service.sh -- <local command...>`.
+2. Use an HTTP order creation request and verify the response status is `201`.
+3. If background mode is used, stop the session with `scripts/mirrord-order-service.sh --stop`.
+
+## Artifacts
+
+- Mirrord config: `.mirrord/mirrord-order-service.json`
+- Helper script: `scripts/mirrord-order-service.sh`
+- Existing order-service configs retained:
+  - `.mirrord/mirrord-order.json`
+  - `.mirrord/mirrord-ci-shop.json`
+  - `.mirrord/db.json`
+
+## Troubleshooting
+
+- If `mirrord` is missing, install it via your approved local process before running tests.
+- If `kubectl` has no context, authenticate to the correct cluster and retry.
+- If target lookup fails, confirm `deployment/order-service` exists in namespace `shop`.
+- If order verification fails, inspect local app logs and confirm request shape for `POST /orders`.

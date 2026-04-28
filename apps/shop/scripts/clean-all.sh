@@ -11,13 +11,14 @@ TEMPORAL_SVC="temporal"
 TEMPORAL_PG="temporal-postgresql"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
+RABBIT_CONTAINER="shop-rabbitmq"
 NETWORK="shop-network"
 # App containers (from start-all-docker.sh)
-APP_CONTAINERS="metal-mart-frontend order-service delivery-service inventory-service payment-service"
+APP_CONTAINERS="metal-mart-frontend order-service delivery-service inventory-service payment-service notifications-service"
 
 echo "Stopping and removing shop Docker resources..."
 
-for name in "${TEMPORAL_UI}" "${TEMPORAL_SVC}" "${TEMPORAL_PG}" "${SHOP_PG}" "${KAFKA_CONTAINER}" ${APP_CONTAINERS}; do
+for name in "${TEMPORAL_UI}" "${TEMPORAL_SVC}" "${TEMPORAL_PG}" "${SHOP_PG}" "${KAFKA_CONTAINER}" "${RABBIT_CONTAINER}" ${APP_CONTAINERS}; do
   if docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
     docker rm -f "${name}" 2>/dev/null || true
     echo "  removed ${name}"

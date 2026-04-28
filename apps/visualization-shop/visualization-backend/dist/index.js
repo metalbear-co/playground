@@ -133,6 +133,7 @@ app.post(snapshotRefreshPaths, async (_req, res) => {
  */
 const fetchOperatorSessions = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
     const result = await customApi.listClusterCustomObject({
         group: "mirrord.metalbear.co",
         version: "v1alpha",
@@ -141,18 +142,43 @@ const fetchOperatorSessions = async (kubeConfig) => {
     const body = result;
     const items = body.items ?? [];
     const now = Date.now();
-    return items.map((item) => {
+    const sessions = [];
+    for (const item of items) {
         const metadata = (item.metadata ?? {});
         const spec = (item.spec ?? {});
         const status = (item.status ?? {});
         const target = (spec.target ?? {});
         const owner = (spec.owner ?? {});
         const jiraMetrics = (spec.jiraMetrics ?? {});
+        const specCopyTarget = spec.copyTarget;
+        const statusCopyTarget = status.copyTarget;
         const createdAt = metadata.creationTimestamp ?? new Date().toISOString();
         const connectedAt = status.connectedTimestamp;
         const createdMs = new Date(createdAt).getTime();
         const durationSeconds = Math.floor((now - createdMs) / 1000);
-        return {
+        let copyTarget;
+        if (specCopyTarget) {
+            const copyPodName = statusCopyTarget?.name ?? target.name;
+            const ns = spec.namespace ?? "default";
+            let originalTargetDeployment;
+            try {
+                const pod = await coreApi.readNamespacedPod({ name: copyPodName, namespace: ns });
+                const annotation = pod?.metadata?.annotations?.["operator.metalbear.co/copy-target-state"];
+                if (annotation) {
+                    const parsed = JSON.parse(annotation);
+                    originalTargetDeployment = parsed?.spec?.target?.deployment;
+                }
+            }
+            catch (err) {
+                console.warn(`Failed to read copy pod ${copyPodName} in ${ns}:`, err.message ?? err);
+            }
+            copyTarget = {
+                scaleDown: Boolean(specCopyTarget.scaledown),
+                copyPodName,
+                originalTargetDeployment,
+            };
+        }
+        sessions.push({
             sessionId: metadata.name ?? "unknown",
             target: {
                 kind: target.kind ?? "Unknown",
@@ -172,8 +198,10 @@ const fetchOperatorSessions = async (kubeConfig) => {
             durationSeconds: Number.isFinite(durationSeconds)
                 ? durationSeconds
                 : undefined,
-        };
-    });
+            copyTarget,
+        });
+    }
+    return sessions;
 };
 /**
  * Query MirrordKafkaEphemeralTopic custom resources from the operator CRD.
@@ -239,21 +267,99 @@ const fetchSqsEphemeralQueues = async (kubeConfig) => {
     }
     return queues;
 };
+const deriveRmqOriginalQueueName = (mirrordQueue) => {
+    const collapsed = mirrordQueue.replace(/-fallback-/g, "-");
+    const known = "order-notifications";
+    if (collapsed.endsWith(known))
+        return known;
+    const tail = collapsed.replace(/^mirrord-[a-z0-9-]+-/i, "");
+    return tail || known;
+};
+/**
+ * Discover ephemeral mirrord RabbitMQ queues from notifications-service pods
+ * (RABBITMQ_QUEUE env). There is no dedicated split CR in-cluster for this demo path.
+ */
+const fetchRmqEphemeralQueues = async (kubeConfig) => {
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+    const ns = process.env.WATCH_NAMESPACE || "shop";
+    try {
+        const result = await coreApi.listNamespacedPod({
+            namespace: ns,
+            labelSelector: "app=notifications-service",
+        });
+        const items = result.items ?? [];
+        const seen = new Set();
+        const out = [];
+        for (const pod of items) {
+            const labels = (pod.metadata?.labels ?? {});
+            const sessionId = labels["operator.metalbear.co/session-id"] ??
+                labels["mirrord-session"] ??
+                "unknown";
+            const containers = pod.spec?.containers ?? [];
+            const main = containers.find((c) => c.name === "main") ?? containers[0];
+            const env = main?.env ?? [];
+            const qEnv = env.find((e) => e.name === "RABBITMQ_QUEUE");
+            const raw = (typeof qEnv?.value === "string" ? qEnv.value : "").trim();
+            if (!raw.startsWith("mirrord-"))
+                continue;
+            if (seen.has(raw))
+                continue;
+            seen.add(raw);
+            const queueType = raw.includes("-fallback-")
+                ? "Fallback"
+                : "Filtered";
+            out.push({
+                queueName: raw,
+                originalQueueName: deriveRmqOriginalQueueName(raw),
+                sessionId,
+                consumer: "notifications-service",
+                queueType,
+            });
+        }
+        return out;
+    }
+    catch (err) {
+        console.warn("Failed to list notifications pods for RMQ split:", err instanceof Error ? err.message : err);
+        return [];
+    }
+};
 /**
  * Query PgBranchDatabase custom resources from the operator CRD.
  * Returns branch data including target deployment, phase, and owner info.
  */
 const fetchPgBranchDatabases = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-    const result = await customApi.listNamespacedCustomObject({
-        group: "dbs.mirrord.metalbear.co",
-        version: "v1alpha1",
-        namespace: defaultNamespace,
-        plural: "pgbranchdatabases",
-    });
-    const body = result;
-    const items = body.items ?? [];
-    return items.map((item) => {
+    // Fetch from both the new "branchdatabases" and legacy "pgbranchdatabases" CRDs
+    const [newResult, legacyResult] = await Promise.all([
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "branchdatabases",
+        }).catch((err) => {
+            console.error(`[db-branches] ERROR fetching branchdatabases:`, err instanceof Error ? err.message : err);
+            return { items: [] };
+        }),
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "pgbranchdatabases",
+        }).catch((err) => {
+            console.error(`[db-branches] ERROR fetching pgbranchdatabases:`, err instanceof Error ? err.message : err);
+            return { items: [] };
+        }),
+    ]);
+    const newItems = newResult.items ?? [];
+    const legacyItems = legacyResult.items ?? [];
+    console.log(`[db-branches] CRD query: ${newItems.length} new (branchdatabases), ${legacyItems.length} legacy (pgbranchdatabases), namespace: ${defaultNamespace}`);
+    if (newItems.length > 0)
+        console.log(`[db-branches] new CRD raw items:`, JSON.stringify(newItems.map(i => ({ name: i.metadata?.name, spec: i.spec, status: i.status })), null, 2));
+    if (newItems.length === 0 && legacyItems.length === 0) {
+        console.log(`[db-branches] raw newResult keys:`, Object.keys(newResult));
+        console.log(`[db-branches] raw newResult:`, JSON.stringify(newResult).substring(0, 500));
+    }
+    const mapItem = (item, isNew) => {
         const metadata = (item.metadata ?? {});
         const spec = (item.spec ?? {});
         const status = (item.status ?? {});
@@ -269,19 +375,32 @@ const fetchPgBranchDatabases = async (kubeConfig) => {
         const connectionUrl = status.connectionUrl ??
             status.connectionString ??
             undefined;
+        const pgOpts = (spec.postgresOptions ?? {});
+        const pgCopy = (pgOpts.copy ?? {});
+        const legacyCopy = (spec.copy ?? {});
         return {
             name: metadata.name ?? "unknown",
             namespace: metadata.namespace ?? defaultNamespace,
             branchId: spec.id ?? "unknown",
-            targetDeployment: target.deployment ?? "unknown",
-            copyMode: spec.copy?.mode ?? "unknown",
-            postgresVersion: spec.postgresVersion ?? "unknown",
+            targetDeployment: isNew
+                ? target.name ?? "unknown"
+                : target.deployment ?? "unknown",
+            copyMode: isNew
+                ? pgCopy.mode ?? "unknown"
+                : legacyCopy.mode ?? "unknown",
+            postgresVersion: isNew
+                ? spec.version ?? "unknown"
+                : spec.postgresVersion ?? "unknown",
             phase: status.phase ?? "unknown",
             expireTime: status.expireTime ?? undefined,
             connectionUrl,
             owners,
         };
-    });
+    };
+    return [
+        ...newItems.map((item) => mapItem(item, true)),
+        ...legacyItems.map((item) => mapItem(item, false)),
+    ];
 };
 /**
  * Query PreviewSession custom resources from the operator CRD.
@@ -326,14 +445,12 @@ const sanitizeHostname = (raw) => raw
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-const refreshDynamicPgConnections = (branches) => {
+const refreshDynamicPgConnections = (_branches) => {
+    // Clear cached connections so the next "View Data" click always goes through
+    // resolvePgBranchConnection(), which discovers the correct database name from
+    // the branch pod instead of relying on the CRD's connectionUrl (which may
+    // omit or default the database name, causing queries to hit the wrong DB).
     dynamicPgConnections.clear();
-    for (const branch of branches) {
-        if (branch.connectionUrl) {
-            const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
-            dynamicPgConnections.set(nodeId, branch.connectionUrl);
-        }
-    }
 };
 /**
  * Return active mirrord operator sessions and Kafka ephemeral topics.
@@ -375,7 +492,7 @@ app.get(operatorStatusPaths, async (req, res) => {
         return;
     }
     try {
-        const [sessions, kafkaTopics, sqsQueues, pgBranches, previewSessions] = await Promise.all([
+        const [sessions, kafkaTopics, sqsQueues, rmqQueues, pgBranches, previewSessions] = await Promise.all([
             fetchOperatorSessions(kubeConfigRef).catch((err) => {
                 console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
                 return [];
@@ -386,6 +503,10 @@ app.get(operatorStatusPaths, async (req, res) => {
             }),
             fetchSqsEphemeralQueues(kubeConfigRef).catch((err) => {
                 console.warn("Failed to fetch SQS sessions:", err instanceof Error ? err.message : err);
+                return [];
+            }),
+            fetchRmqEphemeralQueues(kubeConfigRef).catch((err) => {
+                console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
                 return [];
             }),
             requestUseDbBranchMock
@@ -402,12 +523,14 @@ app.get(operatorStatusPaths, async (req, res) => {
         const allSessions = requestUseDbBranchMock
             ? [...sessions, mockDbBranchSession]
             : sessions;
+        console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
         refreshDynamicPgConnections(pgBranches);
         const response = {
             sessions: allSessions,
             sessionCount: allSessions.length,
             kafkaTopics,
             sqsQueues,
+            rmqQueues,
             pgBranches,
             previewSessions,
             fetchedAt: new Date().toISOString(),
@@ -463,6 +586,18 @@ const knownDeployments = [
         name: "delivery-service",
         description: "Kafka consumer & delivery tracking",
         deployment: "delivery-service",
+    },
+    {
+        id: "notifications-service",
+        name: "notifications-service",
+        description: "RabbitMQ consumer for order notification events",
+        deployment: "notifications-service",
+    },
+    {
+        id: "receipt-service",
+        name: "receipt-service",
+        description: "Receipt generation & delivery",
+        deployment: "receipt-service",
     },
 ];
 /**
@@ -549,8 +684,18 @@ const mockOperatorStatus = {
             connectedAt: "2026-02-18T07:56:15.398127Z",
             durationSeconds: 564,
         },
+        {
+            sessionId: "cafebabe50505050",
+            target: { kind: "Deployment", name: "notifications-service", container: "main", apiVersion: "apps/v1" },
+            namespace: "shop",
+            owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+            branchName: "shop-visual",
+            createdAt: "2026-02-18T07:50:00Z",
+            connectedAt: "2026-02-18T07:56:10.000000Z",
+            durationSeconds: 400,
+        },
     ],
-    sessionCount: 6,
+    sessionCount: 7,
     kafkaTopics: [
         {
             topicName: "mirrord-tmp-kmhkbbzgki-orders",
@@ -566,6 +711,22 @@ const mockOperatorStatus = {
         },
     ],
     sqsQueues: mockSqsQueues,
+    rmqQueues: [
+        {
+            queueName: "mirrord-main-demoabc-order-notifications",
+            originalQueueName: "order-notifications",
+            sessionId: "cafebabe50505050",
+            consumer: "notifications-service",
+            queueType: "Filtered",
+        },
+        {
+            queueName: "mirrord-main-demoabc-fallback-order-notifications",
+            originalQueueName: "order-notifications",
+            sessionId: "cafebabe50505050",
+            consumer: "notifications-service",
+            queueType: "Fallback",
+        },
+    ],
     pgBranches: [],
     previewSessions: [],
     fetchedAt: new Date().toISOString(),
@@ -669,18 +830,30 @@ const mockMultipleSessionsOperatorStatus = {
     sessionCount: 8,
     kafkaTopics: [],
     sqsQueues: [],
+    rmqQueues: [],
     pgBranches: [],
     previewSessions: [
         {
-            name: "preview-session-deployment-metal-mart-frontend-11cf356f",
+            name: "preview-session-deployment-metal-mart-frontend-4c0c7e57",
             namespace: "shop",
-            key: "redesign",
+            key: "demo-gh-env",
             target: { kind: "Deployment", name: "metal-mart-frontend", container: "main" },
-            image: "ghcr.io/metalbear-co/metalmart-redesign:latest",
-            ttlSecs: 300,
+            image: "ghcr.io/metalbear-co/playground-metal-mart-frontend:preview-demo-gh-env-42f9da14b055016b0796534c4d320eb95df08dd5",
+            ttlSecs: 7200,
             phase: "Ready",
-            podName: "preview-pod-deployment-metal-mart-frontend-11cf356f",
-            startedAt: "2026-02-25T12:17:31.405462Z",
+            podName: "preview-pod-deployment-metal-mart-frontend-4c0c7e57",
+            startedAt: "2026-03-22T07:55:14.492466Z",
+        },
+        {
+            name: "preview-session-deployment-order-service-53b43acb",
+            namespace: "shop",
+            key: "demo-gh-env",
+            target: { kind: "Deployment", name: "payment-service", container: "main" },
+            image: "ghcr.io/metalbear-co/playground-order-service:preview-demo-gh-env-42f9da14b055016b0796534c4d320eb95df08dd5",
+            ttlSecs: 7200,
+            phase: "Ready",
+            podName: "preview-pod-deployment-order-service-53b43acb",
+            startedAt: "2026-03-22T07:53:46.462729Z",
         },
     ],
     fetchedAt: new Date().toISOString(),
@@ -807,21 +980,36 @@ const resolvePgBranchConnection = async (dbId) => {
         return undefined;
     const coreApi = kubeConfigRef.makeApiClient(CoreV1Api);
     const customApi = kubeConfigRef.makeApiClient(CustomObjectsApi);
-    // Find the PgBranchDatabase CR whose sanitized name matches dbId
-    const result = await customApi.listNamespacedCustomObject({
-        group: "dbs.mirrord.metalbear.co",
-        version: "v1alpha1",
-        namespace: defaultNamespace,
-        plural: "pgbranchdatabases",
-    });
-    const body = result;
-    const items = body.items ?? [];
+    // Find the BranchDatabase CR whose sanitized name matches dbId
+    // Query both new "branchdatabases" and legacy "pgbranchdatabases" CRDs
+    const [newResult, legacyResult] = await Promise.all([
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "branchdatabases",
+        }).catch(() => ({ items: [] })),
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "pgbranchdatabases",
+        }).catch(() => ({ items: [] })),
+    ]);
+    const newItems = newResult.items ?? [];
+    const legacyItems = legacyResult.items ?? [];
+    const items = [...newItems, ...legacyItems];
+    console.log("[db-resolve] looking for dbId=%s, found %d CRD(s):", dbId, items.length, items.map(i => (i.metadata?.name)));
     const branch = items.find((item) => {
         const name = item.metadata?.name ?? "";
-        return `pg-branch-${sanitizeHostname(name)}` === dbId;
+        const sanitized = `pg-branch-${sanitizeHostname(name)}`;
+        console.log(`[db-resolve] comparing: "${sanitized}" === "${dbId}" → ${sanitized === dbId}`);
+        return sanitized === dbId;
     });
-    if (!branch)
+    if (!branch) {
+        console.warn(`[db-resolve] no matching branch found for dbId="${dbId}"`);
         return undefined;
+    }
     const metadata = (branch.metadata ?? {});
     const branchName = metadata.name;
     // Find the branch pod via owner label
@@ -830,39 +1018,89 @@ const resolvePgBranchConnection = async (dbId) => {
         labelSelector: `db-owner-name=${branchName}`,
     });
     const pod = podList.items?.[0];
-    if (!pod?.status?.podIP)
+    if (!pod?.status?.podIP) {
+        console.warn(`[db-resolve] branch pod for "${branchName}" has no IP yet`);
         return undefined;
+    }
     const podIp = pod.status.podIP;
+    console.log(`[db-resolve] found branch pod: ${pod.metadata?.name}, IP: ${podIp}`);
     const container = pod.spec?.containers?.[0];
     const envVars = container?.env ?? [];
     const password = envVars.find((e) => e.name === "POSTGRES_PASSWORD")?.value ??
         "postgres";
     const user = envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
-    // Get the database name from the branch pod's POSTGRES_DB env.
-    // If not set, connect to the default "postgres" database and discover
-    // the actual user database (mirrord copies data using the original DB name).
-    let dbName = envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? undefined;
+    // Discover the actual database name by querying the branch pod.
+    // The schema may be copied into a named database (e.g. "orders") but mirrord
+    // may route app connections to "postgres", so we check which database actually
+    // has data in user tables, falling back to the first with user tables.
+    const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
+    const discoverPool = new pg.Pool({
+        connectionString: discoverUrl,
+        max: 1,
+        connectionTimeoutMillis: 10000,
+    });
+    let dbName;
+    try {
+        const result = await discoverPool.query(`SELECT datname FROM pg_database
+       WHERE datistemplate = false
+       ORDER BY datname`);
+        const candidates = result.rows.map((r) => r.datname);
+        console.log(`[db-resolve] candidate databases: ${candidates.join(", ")}`);
+        // Check each candidate for user tables with actual data.
+        // We query tables directly instead of relying on pg_stat_user_tables
+        // because stats counters (n_tup_ins) may be 0 in branch pods where data
+        // was loaded via file copy rather than INSERT.
+        let foundData = false;
+        for (const candidate of candidates) {
+            const checkPool = new pg.Pool({
+                connectionString: `postgresql://${user}:${password}@${podIp}:5432/${candidate}`,
+                max: 1,
+                connectionTimeoutMillis: 5000,
+            });
+            try {
+                const tablesResult = await checkPool.query(`SELECT table_name FROM information_schema.tables
+           WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+           ORDER BY table_name LIMIT 5`);
+                if (tablesResult.rows.length === 0)
+                    continue;
+                // Track first DB with user tables as fallback
+                if (!dbName) {
+                    dbName = candidate;
+                }
+                // Check if any table actually has rows
+                for (const row of tablesResult.rows) {
+                    const dataCheck = await checkPool.query(`SELECT EXISTS(SELECT 1 FROM "${row.table_name}" LIMIT 1) AS has_rows`);
+                    if (dataCheck.rows[0]?.has_rows) {
+                        dbName = candidate;
+                        foundData = true;
+                        console.log(`[db-resolve] found database with data: "${candidate}" (table: ${row.table_name})`);
+                        break;
+                    }
+                }
+                if (foundData)
+                    break;
+            }
+            finally {
+                checkPool.end().catch(() => { });
+            }
+        }
+        console.log(`[db-resolve] discovered database name: "${dbName}" from branch pod ${podIp}`);
+    }
+    catch (err) {
+        // Pod may still be starting — return undefined so the caller retries
+        // on the next request instead of caching a wrong fallback.
+        console.warn(`[db-resolve] failed to discover db name from ${podIp}:`, err instanceof Error ? err.message : err);
+        return undefined;
+    }
+    finally {
+        discoverPool.end().catch(() => { });
+    }
     if (!dbName) {
-        const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
-        const discoverPool = new pg.Pool({
-            connectionString: discoverUrl,
-            max: 1,
-            connectionTimeoutMillis: 10000,
-        });
-        try {
-            const result = await discoverPool.query(`SELECT datname FROM pg_database
-         WHERE datistemplate = false AND datname != 'postgres'
-         ORDER BY datname LIMIT 1`);
-            dbName = result.rows[0]?.datname ?? "postgres";
-        }
-        catch {
-            dbName = "postgres";
-        }
-        finally {
-            discoverPool.end().catch(() => { });
-        }
+        // No user database found yet (schema copy may still be in progress)
+        return undefined;
     }
     const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
+    console.log(`[db-resolve] resolved connection for "${dbId}": postgresql://${user}:***@${podIp}:5432/${dbName}`);
     dynamicPgConnections.set(dbId, connectionUrl);
     return connectionUrl;
 };
@@ -1028,6 +1266,38 @@ app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
         res.status(500).json({
             error: error instanceof Error ? error.message : "Failed to query table",
         });
+    }
+});
+const dbUpdatePaths = ["/db/:dbId/update-cell", "/visualization-shop/api/db/:dbId/update-cell"];
+app.patch(dbUpdatePaths, dbRateLimiter, async (req, res) => {
+    const dbId = req.params.dbId ?? "";
+    const { tableName, column, value, rowId } = req.body;
+    if (!tableName || !column || value === undefined || rowId === undefined) {
+        res.status(400).json({ error: "Missing tableName, column, value, or rowId" });
+        return;
+    }
+    const connectionString = await resolveDbConnection(dbId);
+    if (!connectionString) {
+        res.status(404).json({ error: "No connection configured for the requested database" });
+        return;
+    }
+    try {
+        const pool = getPool(connectionString);
+        // Validate table and column exist, and use the DB-returned names to avoid SQL injection
+        const colCheck = await pool.query(`SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`, [tableName, column]);
+        if (colCheck.rows.length === 0) {
+            res.status(404).json({ error: "Table or column not found" });
+            return;
+        }
+        const safeTable = colCheck.rows[0].table_name.replace(/"/g, '""');
+        const safeColumn = colCheck.rows[0].column_name.replace(/"/g, '""');
+        await pool.query(`UPDATE "${safeTable}" SET "${safeColumn}" = $1 WHERE id = $2`, [value, rowId]);
+        res.json({ success: true });
+    }
+    catch (error) {
+        console.error("Failed to update cell:", error instanceof Error ? error.message : error);
+        res.status(500).json({ error: error instanceof Error ? error.message : "Update failed" });
     }
 });
 app.listen(port, () => {

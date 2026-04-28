@@ -1,0 +1,470 @@
+# Weekly end-to-end verification that the mirrord preview pipeline still works.
+# Creates a real PR, explicitly dispatches preview-shop-pr.yml to build images +
+# start previews, then runs a Playwright flow through the preview using the
+# baggage header. Finally dispatches preview shutdown, closes the PR, and
+# deletes the branch.
+#
+# Uses the built-in GITHUB_TOKEN. The workflow no longer relies on PR-triggered
+# workflow chaining, which GitHub suppresses for automation-created PRs.
+name: Preview Environment Verification
+
+on:
+  schedule:
+    - cron: '0 9 * * 0'
+  workflow_dispatch:
+    inputs:
+      preview_key_prefix:
+        description: Prefix for the mirrord preview key
+        required: false
+        default: shop-preview
+        type: string
+
+jobs:
+  preview-test:
+    name: Create PR, dispatch preview, run Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    outputs:
+      branch_name: ${{ steps.meta.outputs.branch_name }}
+      preview_key: ${{ steps.meta.outputs.preview_key }}
+      pr_url: ${{ steps.create_pr.outputs.pr_url }}
+      pr_number: ${{ steps.create_pr.outputs.pr_number }}
+      preview_created: ${{ steps.wait_complete.outputs.preview_created }}
+      preview_verified: ${{ steps.wait_complete.outputs.preview_verified }}
+      e2e_passed: ${{ steps.e2e.outputs.e2e_passed }}
+      error_msg: ${{ steps.e2e.outputs.error_msg }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute branch name + date
+        id: meta
+        env:
+          PREVIEW_KEY_PREFIX: ${{ github.event.inputs.preview_key_prefix || 'shop-preview' }}
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          BRANCH="daily-check-${DATE}-${{ github.run_id }}"
+          PREFIX=$(printf '%s' "$PREVIEW_KEY_PREFIX" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')
+          if [ -z "$PREFIX" ]; then
+            PREFIX="shop-preview"
+          fi
+          PREVIEW_KEY="${PREFIX}-${{ github.run_id }}"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "preview_key=$PREVIEW_KEY" >> "$GITHUB_OUTPUT"
+          echo "Branch: $BRANCH, preview key: $PREVIEW_KEY, date marker: $DATE"
+
+      - name: Configure git as github-actions[bot]
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create branch + inject changes
+        env:
+          DATE: ${{ steps.meta.outputs.date }}
+          BRANCH: ${{ steps.meta.outputs.branch_name }}
+        run: |
+          set -euo pipefail
+          git checkout -b "$BRANCH"
+
+          FILE=apps/shop/metal-mart-frontend/src/app/page.tsx
+          if ! grep -q "Featured products" "$FILE"; then
+            echo "❌ 'Featured products' marker not found in $FILE — heading may have been renamed"
+            exit 1
+          fi
+          sed -i "s|Featured products|Featured products ${DATE}|" "$FILE"
+          if ! grep -q "Featured products ${DATE}" "$FILE"; then
+            echo "❌ sed did not modify $FILE"
+            exit 1
+          fi
+          echo "✓ Modified frontend heading"
+
+          touch apps/shop/order-service/.daily-check
+          echo "✓ Touched order-service/.daily-check to trigger rebuild"
+
+          git add "$FILE" apps/shop/order-service/.daily-check
+          git commit -m "Preview verification: ${DATE} (run ${{ github.run_id }})"
+          git push origin "$BRANCH"
+
+      - name: Open PR
+        id: create_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.meta.outputs.branch_name }}
+          DATE: ${{ steps.meta.outputs.date }}
+        run: |
+          set -euo pipefail
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "[automated] Preview verification ${DATE}" \
+            --body "Automated weekly check that the mirrord preview pipeline works end-to-end. This PR will be closed automatically by run ${{ github.run_id }}.")
+          PR_NUMBER=$(gh pr view "$BRANCH" --json number --jq '.number')
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Created PR #$PR_NUMBER: $PR_URL"
+
+      - name: Dispatch preview-shop-pr.yml start
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.meta.outputs.branch_name }}
+          PREVIEW_KEY: ${{ steps.meta.outputs.preview_key }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          gh workflow run preview-shop-pr.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f action=start \
+            -f branch="$BRANCH" \
+            -f base_ref=main \
+            -f preview_key="$PREVIEW_KEY" \
+            -f pr_number="$PR_NUMBER" \
+            -f pr_url="$PR_URL" \
+            -f caller_run_id="${{ github.run_id }}"
+
+      - name: Wait for preview-shop-pr.yml to start
+        id: wait_start
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for i in $(seq 1 12); do
+            RUN_ID=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow=preview-shop-pr.yml \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,displayTitle \
+              --jq '.[] | select(.displayTitle | contains("caller=${{ github.run_id }}")) | .databaseId' | head -n1)
+            if [ -n "$RUN_ID" ]; then
+              echo "✓ Preview workflow started: run $RUN_ID"
+              echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Waiting for dispatched preview workflow to start... ($i/12)"
+            sleep 10
+          done
+          echo "❌ preview-shop-pr.yml did not start within 2 minutes"
+          echo "run_id=" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Wait for preview-shop-pr.yml to complete
+        id: wait_complete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ steps.wait_start.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 25); do
+            STATUS=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json status --jq '.status')
+            if [ "$STATUS" = "completed" ]; then
+              CONCLUSION=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')
+              echo "preview_created=true" >> "$GITHUB_OUTPUT"
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "✓ Preview workflow succeeded"
+                echo "preview_verified=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              else
+                echo "❌ Preview workflow completed with conclusion: $CONCLUSION"
+                echo "preview_verified=false" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+            fi
+            echo "Preview workflow still $STATUS... ($i/25)"
+            sleep 60
+          done
+          echo "❌ Preview workflow did not complete within 25 minutes"
+          echo "preview_created=true" >> "$GITHUB_OUTPUT"
+          echo "preview_verified=false" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Install Playwright (chromium)
+        run: |
+          npm init -y >/dev/null
+          npm install --save-dev playwright >/dev/null
+          npx playwright install chromium --with-deps
+
+      - name: Run Playwright E2E against preview
+        id: e2e
+        env:
+          PREVIEW_KEY: ${{ steps.meta.outputs.preview_key }}
+          DATE: ${{ steps.meta.outputs.date }}
+        run: |
+          mkdir -p /tmp/screenshots
+          cat > /tmp/e2e.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+
+          (async () => {
+            const date = process.env.DATE;
+            const previewKey = process.env.PREVIEW_KEY;
+            const shotsDir = '/tmp/screenshots';
+            const shopUrl = 'https://playground.metalbear.dev/shop';
+
+            const browser = await chromium.launch();
+            const context = await browser.newContext({
+              extraHTTPHeaders: { baggage: `mirrord=${previewKey}` },
+            });
+            const page = await context.newPage();
+
+            const fail = async (msg) => {
+              console.error(`❌ ${msg}`);
+              try { await page.screenshot({ path: `${shotsDir}/failure.png`, fullPage: true }); } catch {}
+              fs.writeFileSync('/tmp/e2e-error.txt', msg);
+              await browser.close();
+              process.exit(1);
+            };
+
+            try {
+              await page.goto(shopUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await page.waitForLoadState('networkidle', { timeout: 30000 });
+
+              const heading = page.locator('h1').first();
+              await heading.waitFor({ timeout: 15000 });
+              const headingText = (await heading.textContent()) || '';
+              if (!headingText.includes(`Featured products ${date}`)) {
+                return fail(`Heading missing date. Got: "${headingText}"`);
+              }
+              console.log(`✓ Heading contains date: "${headingText.trim()}"`);
+
+              const productLinks = page.locator('a[href*="/products/"]');
+              const productCount = await productLinks.count();
+              if (productCount < 1) return fail('No product links visible on home page');
+              console.log(`✓ ${productCount} product links visible`);
+
+              await productLinks.first().click();
+              await page.waitForURL(/\/products\//, { timeout: 15000 });
+              await page.waitForLoadState('networkidle', { timeout: 30000 });
+              console.log('✓ Product detail page loaded');
+
+              const addBtn = page.getByText('Add to cart', { exact: false }).first();
+              await addBtn.waitFor({ timeout: 10000 });
+              await addBtn.click();
+              await page.waitForURL(/\/cart/, { timeout: 15000 });
+              await page.waitForLoadState('networkidle', { timeout: 30000 });
+
+              const emptyCount = await page.getByText('Your cart is empty').count();
+              if (emptyCount > 0) return fail('Cart is empty after adding item');
+              console.log('✓ Cart contains item after add');
+
+              const orderResp = await page.request.post(`${shopUrl}/api/orders`, {
+                headers: { baggage: `mirrord=${previewKey}` },
+                data: {
+                  items: [{ productId: 1, quantity: 1 }],
+                  total_cents: 1999,
+                  customer_email: 'preview-verification-bot@metalbear.dev',
+                },
+              });
+              if (!orderResp.ok()) return fail(`POST /api/orders status ${orderResp.status()}`);
+              const orderData = await orderResp.json();
+              if (orderData.status !== 'confirmed') {
+                return fail(`Order status != confirmed: ${JSON.stringify(orderData)}`);
+              }
+              console.log(`✓ Order created via preview: id=${orderData.orderId}`);
+
+              await page.screenshot({ path: `${shotsDir}/success.png`, fullPage: true });
+              console.log('✓ E2E passed');
+              await browser.close();
+            } catch (err) {
+              return fail(err.message || String(err));
+            }
+          })();
+          EOF
+          export NODE_PATH="$(npm root)"
+          if node /tmp/e2e.js; then
+            echo "e2e_passed=true" >> "$GITHUB_OUTPUT"
+            echo "error_msg=" >> "$GITHUB_OUTPUT"
+          else
+            echo "e2e_passed=false" >> "$GITHUB_OUTPUT"
+            err=$(cat /tmp/e2e-error.txt 2>/dev/null || echo "unknown failure")
+            echo "error_msg=$err" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-verification-screenshots-${{ steps.meta.outputs.date }}-${{ github.run_id }}
+          path: /tmp/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+
+  cleanup:
+    name: Stop preview, close PR, delete branch
+    needs: preview-test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dispatch preview-shop-pr.yml stop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_KEY: ${{ needs.preview-test.outputs.preview_key }}
+          PR_NUMBER: ${{ needs.preview-test.outputs.pr_number }}
+          PR_URL: ${{ needs.preview-test.outputs.pr_url }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PREVIEW_KEY" ]; then
+            gh workflow run preview-shop-pr.yml \
+              --repo "${{ github.repository }}" \
+              --ref main \
+              -f action=stop \
+              -f preview_key="$PREVIEW_KEY" \
+              -f pr_number="$PR_NUMBER" \
+              -f pr_url="$PR_URL" \
+              -f caller_run_id="${{ github.run_id }}-stop"
+          else
+            echo "No preview key recorded; skipping stop dispatch"
+          fi
+
+      - name: Wait for stop workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_KEY: ${{ needs.preview-test.outputs.preview_key }}
+        run: |
+          set -euo pipefail
+          [ -n "$PREVIEW_KEY" ] || exit 0
+          RUN_ID=""
+          for i in $(seq 1 12); do
+            RUN_ID=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow=preview-shop-pr.yml \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,displayTitle \
+              --jq '.[] | select(.displayTitle | contains("caller=${{ github.run_id }}-stop")) | .databaseId' | head -n1)
+            if [ -n "$RUN_ID" ]; then
+              break
+            fi
+            echo "Waiting for dispatched stop workflow to start... ($i/12)"
+            sleep 10
+          done
+
+          [ -n "$RUN_ID" ] || exit 0
+
+          for i in $(seq 1 10); do
+            STATUS=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json status --jq '.status')
+            if [ "$STATUS" = "completed" ]; then
+              CONCLUSION=$(gh run view "$RUN_ID" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')
+              echo "Stop workflow completed with conclusion: $CONCLUSION"
+              exit 0
+            fi
+            echo "Stop workflow still $STATUS... ($i/10)"
+            sleep 15
+          done
+
+      - name: Close PR and delete branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ needs.preview-test.outputs.pr_url }}
+          BRANCH_NAME: ${{ needs.preview-test.outputs.branch_name }}
+        run: |
+          set -euo pipefail
+          cleanup_failed=0
+
+          if [ -n "$PR_URL" ]; then
+            echo "Closing PR: $PR_URL"
+            if gh pr close "$PR_URL" --delete-branch; then
+              echo "  ✓ PR closed and branch deleted"
+            else
+              echo "  ✗ gh pr close failed" >&2
+              cleanup_failed=1
+            fi
+          else
+            echo "No PR URL recorded — skipping PR close"
+          fi
+
+          if [ -n "$BRANCH_NAME" ]; then
+            if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
+              echo "Branch $BRANCH_NAME still present — deleting directly"
+              if git push origin --delete "$BRANCH_NAME"; then
+                echo "  ✓ branch deleted"
+              else
+                echo "  ✗ failed to delete branch $BRANCH_NAME" >&2
+                cleanup_failed=1
+              fi
+            else
+              echo "Branch $BRANCH_NAME already gone"
+            fi
+          fi
+
+          exit "$cleanup_failed"
+
+  notify:
+    name: Slack notify
+    needs: [preview-test, cleanup]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build Slack payload
+        id: payload
+        env:
+          PREVIEW_CREATED: ${{ needs.preview-test.outputs.preview_created }}
+          PREVIEW_VERIFIED: ${{ needs.preview-test.outputs.preview_verified }}
+          E2E_PASSED: ${{ needs.preview-test.outputs.e2e_passed }}
+          PR_URL: ${{ needs.preview-test.outputs.pr_url }}
+          ERROR_MSG: ${{ needs.preview-test.outputs.error_msg }}
+          CLEANUP_RESULT: ${{ needs.cleanup.result }}
+          PREVIEW_RESULT: ${{ needs.preview-test.result }}
+        run: |
+          set -euo pipefail
+          if [ "$PREVIEW_RESULT" = "success" ] && [ "$CLEANUP_RESULT" = "success" ]; then
+            HEADER="✅ Preview Verification Passed"
+          else
+            HEADER="🚨 Preview Verification Failed"
+          fi
+          PR_LINK="${PR_URL:-(not created)}"
+          PREVIEW_STATUS="created=${PREVIEW_CREATED:-false}, verified=${PREVIEW_VERIFIED:-false}, e2e=${E2E_PASSED:-false}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ARTIFACT_URL="$RUN_URL#artifacts"
+          ERR="${ERROR_MSG:-none}"
+          ERR_ESC=$(printf '%s' "$ERR" | tr '\n\r' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | cut -c1-500)
+          cat > /tmp/slack.json <<EOF
+          {
+            "blocks": [
+              { "type": "header", "text": { "type": "plain_text", "text": "$HEADER" } },
+              {
+                "type": "section",
+                "fields": [
+                  { "type": "mrkdwn", "text": "*PR:*\n$PR_LINK" },
+                  { "type": "mrkdwn", "text": "*Preview:*\n$PREVIEW_STATUS" },
+                  { "type": "mrkdwn", "text": "*Cleanup:*\n$CLEANUP_RESULT" },
+                  { "type": "mrkdwn", "text": "*Error:*\n$ERR_ESC" }
+                ]
+              },
+              {
+                "type": "section",
+                "text": { "type": "mrkdwn", "text": "<$RUN_URL|Full logs> · <$ARTIFACT_URL|Screenshots>" }
+              }
+            ]
+          }
+          EOF
+          echo "payload<<PAYLOAD_EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/slack.json >> "$GITHUB_OUTPUT"
+          echo "PAYLOAD_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post to Slack
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: ${{ steps.payload.outputs.payload }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

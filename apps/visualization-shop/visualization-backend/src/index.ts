@@ -227,6 +227,15 @@ type SqsEphemeralQueue = {
   jqFilter?: string;
 };
 
+/** Ephemeral RabbitMQ queues observed on consumer pods during mirrord queue splitting. */
+type RmqEphemeralQueue = {
+  queueName: string;
+  originalQueueName: string;
+  sessionId: string;
+  consumer: string;
+  queueType: "Filtered" | "Fallback";
+};
+
 type PgBranchDatabase = {
   name: string;
   namespace: string;
@@ -262,6 +271,7 @@ type OperatorStatusResponse = {
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
   sqsQueues: SqsEphemeralQueue[];
+  rmqQueues: RmqEphemeralQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
   fetchedAt: string;
@@ -428,6 +438,120 @@ const fetchSqsEphemeralQueues = async (
   }
 
   return queues;
+};
+
+const deriveRmqOriginalQueueName = (mirrordQueue: string): string => {
+  const collapsed = mirrordQueue.replace(/-fallback-/g, "-");
+  const known = "order-notifications";
+  if (collapsed.endsWith(known)) return known;
+  const tail = collapsed.replace(/^mirrord-[a-z0-9-]+-/i, "");
+  return tail || known;
+};
+
+/**
+ * Discover ephemeral mirrord RabbitMQ queues for active queue-splitting sessions.
+ * For each MirrordRMQSession, emit:
+ *   - Filtered: queue from `status.Ready.envUpdates.<env>.outputName` (consumed by local user).
+ *   - Fallback: queue from the consumer pod's actual env value (consumed by the deployed pod;
+ *     mirrord patches it to a `mirrord-main-<id>-...` queue).
+ */
+const fetchRmqEphemeralQueues = async (
+  kubeConfig: KubeConfig,
+): Promise<RmqEphemeralQueue[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+  const out: RmqEphemeralQueue[] = [];
+
+  let items: Array<Record<string, unknown>> = [];
+  try {
+    const result = await customApi.listClusterCustomObject({
+      group: "queues.mirrord.metalbear.co",
+      version: "v1alpha",
+      plural: "mirrordrmqsessions",
+    });
+    const body = result as { items?: Array<Record<string, unknown>> };
+    items = body.items ?? [];
+  } catch (err) {
+    console.warn(
+      "Failed to list MirrordRMQSessions:",
+      err instanceof Error ? err.message : err,
+    );
+    return out;
+  }
+
+  for (const item of items) {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const labels = (metadata.labels ?? {}) as Record<string, string>;
+    const sessionId =
+      labels["operator.metalbear.co/session-id"] ??
+      (spec.sessionId as string) ??
+      "unknown";
+    const queueConsumer = (spec.queueConsumer ?? {}) as Record<string, unknown>;
+    const consumer = (queueConsumer.name as string) ?? "unknown";
+    const consumerNs = (spec.namespace as string) ?? defaultNamespace;
+    const ready = (status["Ready"] ?? {}) as Record<string, unknown>;
+    const envUpdates =
+      (ready.envUpdates ?? {}) as Record<string, Record<string, string>>;
+
+    const filterOutputs = new Set<string>();
+    const envVarOriginals: { envVar: string; originalName: string }[] = [];
+
+    for (const [envVar, mapping] of Object.entries(envUpdates)) {
+      const outputName = (mapping.outputName ?? "").trim();
+      const originalName = (mapping.originalName ?? "").trim();
+      if (!outputName) continue;
+      filterOutputs.add(outputName);
+      envVarOriginals.push({ envVar, originalName });
+      out.push({
+        queueName: outputName,
+        originalQueueName:
+          originalName || deriveRmqOriginalQueueName(outputName),
+        sessionId,
+        consumer,
+        queueType: "Filtered",
+      });
+    }
+
+    if (envVarOriginals.length === 0 || consumer === "unknown") continue;
+
+    try {
+      const podsResult = await coreApi.listNamespacedPod({
+        namespace: consumerNs,
+        labelSelector: `app=${consumer}`,
+      });
+      const seen = new Set<string>();
+      for (const pod of podsResult.items ?? []) {
+        const containers = pod.spec?.containers ?? [];
+        const main = containers.find((c) => c.name === "main") ?? containers[0];
+        const env = main?.env ?? [];
+        for (const { envVar, originalName } of envVarOriginals) {
+          const e = env.find((x) => x.name === envVar);
+          const raw = (typeof e?.value === "string" ? e.value : "").trim();
+          if (!raw.startsWith("mirrord-")) continue;
+          if (filterOutputs.has(raw)) continue;
+          if (seen.has(raw)) continue;
+          seen.add(raw);
+          out.push({
+            queueName: raw,
+            originalQueueName:
+              originalName || deriveRmqOriginalQueueName(raw),
+            sessionId,
+            consumer,
+            queueType: "Fallback",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to list pods for RMQ consumer ${consumer} in ${consumerNs}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return out;
 };
 
 /**
@@ -619,7 +743,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     return;
   }
   try {
-    const [sessions, kafkaTopics, sqsQueues, pgBranches, previewSessions] = await Promise.all([
+    const [sessions, kafkaTopics, sqsQueues, rmqQueues, pgBranches, previewSessions] = await Promise.all([
       fetchOperatorSessions(kubeConfigRef).catch((err) => {
         console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
         return [] as OperatorSession[];
@@ -631,6 +755,10 @@ app.get(operatorStatusPaths, async (req, res) => {
       fetchSqsEphemeralQueues(kubeConfigRef).catch((err) => {
         console.warn("Failed to fetch SQS sessions:", err instanceof Error ? err.message : err);
         return [] as SqsEphemeralQueue[];
+      }),
+      fetchRmqEphemeralQueues(kubeConfigRef).catch((err) => {
+        console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
+        return [] as RmqEphemeralQueue[];
       }),
       requestUseDbBranchMock
         ? Promise.resolve(mockPgBranches)
@@ -653,6 +781,7 @@ app.get(operatorStatusPaths, async (req, res) => {
       sessionCount: allSessions.length,
       kafkaTopics,
       sqsQueues,
+      rmqQueues,
       pgBranches,
       previewSessions,
       fetchedAt: new Date().toISOString(),
@@ -720,6 +849,12 @@ const knownDeployments: KnownDeployment[] = [
     name: "delivery-service",
     description: "Kafka consumer & delivery tracking",
     deployment: "delivery-service",
+  },
+  {
+    id: "notifications-service",
+    name: "notifications-service",
+    description: "RabbitMQ consumer for order notification events",
+    deployment: "notifications-service",
   },
   {
     id: "receipt-service",
@@ -815,8 +950,18 @@ const mockOperatorStatus: OperatorStatusResponse = {
       connectedAt: "2026-02-18T07:56:15.398127Z",
       durationSeconds: 564,
     },
+    {
+      sessionId: "cafebabe50505050",
+      target: { kind: "Deployment", name: "notifications-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "shop-visual",
+      createdAt: "2026-02-18T07:50:00Z",
+      connectedAt: "2026-02-18T07:56:10.000000Z",
+      durationSeconds: 400,
+    },
   ],
-  sessionCount: 6,
+  sessionCount: 7,
   kafkaTopics: [
     {
       topicName: "mirrord-tmp-kmhkbbzgki-orders",
@@ -832,6 +977,22 @@ const mockOperatorStatus: OperatorStatusResponse = {
     },
   ],
   sqsQueues: mockSqsQueues,
+  rmqQueues: [
+    {
+      queueName: "mirrord-main-demoabc-order-notifications",
+      originalQueueName: "order-notifications",
+      sessionId: "cafebabe50505050",
+      consumer: "notifications-service",
+      queueType: "Filtered",
+    },
+    {
+      queueName: "mirrord-main-demoabc-fallback-order-notifications",
+      originalQueueName: "order-notifications",
+      sessionId: "cafebabe50505050",
+      consumer: "notifications-service",
+      queueType: "Fallback",
+    },
+  ],
   pgBranches: [],
   previewSessions: [],
   fetchedAt: new Date().toISOString(),
@@ -937,6 +1098,7 @@ const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
   sessionCount: 8,
   kafkaTopics: [],
   sqsQueues: [],
+  rmqQueues: [],
   pgBranches: [],
   previewSessions: [
     {

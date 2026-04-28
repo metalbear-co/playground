@@ -6,6 +6,7 @@ const {
   chargePayment,
   createOrder,
   publishOrderToKafka,
+  publishOrderNotificationActivity,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "2 minutes",
 });
@@ -13,6 +14,7 @@ const {
 export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
+  customer_email?: string;
   baggage?: string;
 };
 
@@ -32,6 +34,12 @@ export async function CheckoutWorkflow(
     orderId,
     items: input.items,
     status: "confirmed",
+    baggage: input.baggage,
+  });
+  await publishOrderNotificationActivity({
+    orderId,
+    total_cents: input.total_cents,
+    customer_email: input.customer_email,
     baggage: input.baggage,
   });
   return { orderId, status: "confirmed" };
