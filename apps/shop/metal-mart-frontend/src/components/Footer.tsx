@@ -44,8 +44,16 @@ export default function Footer() {
             height={120}
             className="shrink-0 opacity-95"
           />
-          <span className="text-lg font-semibold">Powered by mirrord</span>
+          <span className="text-lg font-semibold" data-testid="footer-powered-by">
+            Powered by mirrord
+          </span>
         </a>
+        <p
+          className="text-center text-xs font-medium tracking-wide text-white/75"
+          data-testid="footer-edition"
+        >
+          Preview edition
+        </p>
       </div>
     </footer>
   );
