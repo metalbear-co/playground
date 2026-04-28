@@ -5,6 +5,7 @@ export type SendOrderPayload = {
   items: Array<{ productId: number; quantity: number }>;
   status: string;
   baggage?: string;
+  gift_wrap?: boolean;
 };
 
 /**
@@ -12,11 +13,12 @@ export type SendOrderPayload = {
  * Used by both the current implementation and the Temporal publishOrderToKafka activity.
  */
 export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void> {
-  const { orderId, items, status, baggage } = payload;
+  const { orderId, items, status, baggage, gift_wrap = false } = payload;
   const message = {
     orderId,
     items,
     status,
+    gift_wrap,
     timestamp: new Date().toISOString(),
   };
   const kafkaHeaders: Record<string, string> = {};

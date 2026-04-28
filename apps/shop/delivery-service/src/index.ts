@@ -14,6 +14,9 @@ const kafka = new Kafka({
   clientId: "delivery-service",
   brokers: (process.env.KAFKA_ADDRESS || "localhost:9092").split(","),
 });
+const orderServiceUrl =
+  process.env.ORDER_SERVICE_URL ||
+  (process.env.KUBERNETES_SERVICE_HOST ? "http://order-service:80" : "http://localhost:3001");
 
 async function initDb() {
   const client = await pool.connect();
@@ -79,6 +82,21 @@ async function startConsumer() {
   });
 }
 
+async function fetchGiftWrap(orderId: number): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${orderServiceUrl}/orders/${orderId}`);
+    if (!res.ok) {
+      console.warn(`Failed to fetch order ${orderId} for delivery response: ${res.status}`);
+      return null;
+    }
+    const order = await res.json() as { gift_wrap?: unknown };
+    return typeof order.gift_wrap === "boolean" ? order.gift_wrap : null;
+  } catch (err) {
+    console.warn(`Failed to fetch order ${orderId} for delivery response:`, err);
+    return null;
+  }
+}
+
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
@@ -102,10 +120,13 @@ app.get("/deliveries/order/:orderId", async (req, res) => {
   if (isNaN(orderId)) return res.status(400).json({ error: "Invalid order ID" });
   try {
     const { rows } = await pool.query(
-      "SELECT id, order_id, status, created_at FROM deliveries WHERE order_id = $1",
+      "SELECT id, order_id, status, created_at FROM deliveries WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
       [orderId]
     );
-    res.json(rows[0] || null);
+    const delivery = rows[0] || null;
+    if (!delivery) return res.json(null);
+    const giftWrap = await fetchGiftWrap(orderId);
+    res.json({ ...delivery, gift_wrap: giftWrap });
   } catch (err) {
     console.error("Error fetching delivery:", err);
     res.status(500).json({ error: "Internal server error" });

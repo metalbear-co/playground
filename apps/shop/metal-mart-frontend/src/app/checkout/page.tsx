@@ -22,6 +22,7 @@ export default function CheckoutPage() {
   const [orderId, setOrderId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const [giftWrap, setGiftWrap] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem("metal-mart-cart");
@@ -36,6 +37,8 @@ export default function CheckoutPage() {
   }, []);
 
   const totalCents = cart.reduce((s, i) => s + (i.product?.price_cents ?? 0) * i.quantity, 0);
+  const giftWrapFeeCents = giftWrap ? 499 : 0;
+  const checkoutTotalCents = totalCents + giftWrapFeeCents;
   const orderItems = cart.map(({ productId, quantity }) => ({ productId, quantity }));
 
   const handleSubmit = async () => {
@@ -45,7 +48,12 @@ export default function CheckoutPage() {
       const r = await fetch(`${basePath}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: orderItems, total_cents: totalCents, ...(email ? { customer_email: email } : {}) }),
+        body: JSON.stringify({
+          items: orderItems,
+          total_cents: totalCents,
+          gift_wrap: giftWrap,
+          ...(email ? { customer_email: email } : {}),
+        }),
       });
       const data = await r.json();
       if (r.ok) {
@@ -140,9 +148,39 @@ export default function CheckoutPage() {
               </li>
             ))}
           </ul>
-          <p className="mb-6 text-xl font-semibold text-slate-900">
-            Total: ${(totalCents / 100).toFixed(2)}
-          </p>
+          <div className="mb-6 space-y-4 rounded-xl border border-slate-300 bg-white p-5">
+            <label
+              htmlFor="gift-wrap"
+              className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4"
+            >
+              <input
+                id="gift-wrap"
+                type="checkbox"
+                checked={giftWrap}
+                onChange={(e) => setGiftWrap(e.target.checked)}
+                data-testid="gift-wrap-checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-[#6a4ff5] focus:ring-[#6a4ff5]"
+              />
+              <div>
+                <p className="font-medium text-slate-900">🎁 Gift wrap this order (+$4.99)</p>
+                <p className="text-sm text-slate-500">A demo-only wrap option added at checkout.</p>
+              </div>
+            </label>
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="flex items-center justify-between">
+                <span>Subtotal</span>
+                <span>${(totalCents / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between" data-testid="gift-wrap-fee">
+                <span>Gift wrap</span>
+                <span>{giftWrap ? "$4.99" : "$0.00"}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-xl font-semibold text-slate-900">
+                <span>Total</span>
+                <span data-testid="checkout-total">${(checkoutTotalCents / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
           <div className="mb-6">
             <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
               Email <span className="text-slate-400">(optional)</span>
@@ -167,6 +205,7 @@ export default function CheckoutPage() {
           <button
             onClick={handleSubmit}
             disabled={submitting}
+            data-testid="place-order-button"
             className="btn-primary w-full rounded-xl px-8 py-3.5 font-semibold disabled:opacity-50 disabled:transform-none disabled:shadow-none sm:w-fit focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
           >
             {submitting ? "Placing order..." : "Place order"}

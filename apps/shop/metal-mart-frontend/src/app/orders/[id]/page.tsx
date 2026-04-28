@@ -15,6 +15,8 @@ type Order = {
   total_cents: number;
   status: string;
   created_at: string;
+  gift_wrap: boolean;
+  gift_wrap_fee_cents: number;
 };
 type Product = { id: number; name: string; price_cents: number };
 
@@ -22,10 +24,12 @@ export default function OrderPage() {
   const params = useParams();
   const id = params?.id as string;
   const [order, setOrder] = useState<Order | null>(null);
-  const [delivery, setDelivery] = useState<{ status: string } | null>(null);
+  const [delivery, setDelivery] = useState<{ status: string; gift_wrap?: boolean | null } | null>(null);
   const [lineItems, setLineItems] = useState<{ product: Product; quantity: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const itemsSubtotalCents = lineItems.reduce((sum, item) => sum + item.product.price_cents * item.quantity, 0);
+  const isGiftWrapped = (order?.gift_wrap ?? delivery?.gift_wrap) === true;
 
   useEffect(() => {
     if (!id) return;
@@ -99,6 +103,14 @@ export default function OrderPage() {
                 <p className="text-slate-600">
                   Placed: {new Date(order.created_at).toLocaleString()}
                 </p>
+                {isGiftWrapped && (
+                  <p
+                    className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800"
+                    data-testid="gift-wrap-indicator"
+                  >
+                    🎁 Gift wrapped
+                  </p>
+                )}
                 {delivery && (
                   <p className="text-slate-600">Delivery: {delivery.status}</p>
                 )}
@@ -119,9 +131,24 @@ export default function OrderPage() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-3 text-lg font-semibold text-slate-900">
-                    Total: ${(order.total_cents / 100).toFixed(2)}
-                  </p>
+                  <div className="mt-3 space-y-2">
+                    {order.gift_wrap_fee_cents > 0 && (
+                      <>
+                        <p className="flex justify-between text-slate-600">
+                          <span>Items subtotal</span>
+                          <span>${(itemsSubtotalCents / 100).toFixed(2)}</span>
+                        </p>
+                        <p className="flex justify-between text-slate-600">
+                          <span>Gift wrap fee</span>
+                          <span>${(order.gift_wrap_fee_cents / 100).toFixed(2)}</span>
+                        </p>
+                      </>
+                    )}
+                    <p className="flex justify-between text-lg font-semibold text-slate-900">
+                      <span>Total</span>
+                      <span>${(order.total_cents / 100).toFixed(2)}</span>
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
