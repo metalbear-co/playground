@@ -28,10 +28,10 @@ body {
 
 @keyframes mirrordCopyPulse {
   0%, 100% {
-    box-shadow: 0px 0px 20px rgba(230, 100, 121, 0.3);
+    box-shadow: 0px 0px 20px rgba(79, 70, 229, 0.3);
   }
   50% {
-    box-shadow: 0px 0px 40px rgba(230, 100, 121, 0.7);
+    box-shadow: 0px 0px 40px rgba(79, 70, 229, 0.55);
   }
 }
 
@@ -55,10 +55,10 @@ body {
 
 @keyframes mirrordFocusDbBranchPulse {
   0%, 100% {
-    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.3), 0px 30px 60px rgba(220, 38, 38, 0.2);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.3), 0px 30px 60px rgba(79, 70, 229, 0.2);
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.55), 0px 30px 60px rgba(220, 38, 38, 0.35);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.5), 0px 30px 60px rgba(79, 70, 229, 0.35);
   }
 }
 
