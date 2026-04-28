@@ -163,7 +163,6 @@ export default function CheckoutPage() {
               />
               <div>
                 <p className="font-medium text-slate-900">🎁 Gift wrap this order (+$4.99)</p>
-                <p className="text-sm text-slate-500">A demo-only wrap option added at checkout.</p>
               </div>
             </label>
             <div className="space-y-2 text-sm text-slate-600">
