@@ -66,7 +66,7 @@ app.use((req, _res, next) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok" });
+  res.status(200).json({ status: "ok", service: "inventory" });
 });
 
 app.get("/products", async (_req, res) => {
