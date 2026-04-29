@@ -239,7 +239,7 @@ async function createOrderDirect(
     );
   }
 
-  await sendOrderToKafka({
+  const orderStatus = await sendOrderToKafka({
     orderId,
     items,
     status: "confirmed",
@@ -248,14 +248,14 @@ async function createOrderDirect(
 
   await publishOrderNotification({
     orderId,
-    status: "confirmed",
+    status: orderStatus,
     customer_email: customer_email ?? null,
     total_cents: totalCents,
     event: "order_confirmed",
     baggage,
   });
 
-  return { orderId, status: "confirmed" };
+  return { orderId, status: orderStatus };
 }
 
 app.post("/orders", async (req, res) => {

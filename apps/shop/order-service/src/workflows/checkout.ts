@@ -30,7 +30,7 @@ export async function CheckoutWorkflow(
   await reserveStock(input);
   const orderId = await createOrder(input);
   await chargePayment({ ...input, orderId });
-  await publishOrderToKafka({
+  const orderStatus = await publishOrderToKafka({
     orderId,
     items: input.items,
     status: "confirmed",
@@ -41,6 +41,7 @@ export async function CheckoutWorkflow(
     total_cents: input.total_cents,
     customer_email: input.customer_email,
     baggage: input.baggage,
+    status: orderStatus,
   });
-  return { orderId, status: "confirmed" };
+  return { orderId, status: orderStatus };
 }

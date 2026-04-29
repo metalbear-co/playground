@@ -7,12 +7,24 @@ export type SendOrderPayload = {
   baggage?: string;
 };
 
+/** mirrord preview requests carry a baggage header used for traffic splitting */
+export function isPreviewFromBaggage(baggage?: string): boolean {
+  if (!baggage) return false;
+  return /mirrord\s*=/i.test(baggage);
+}
+
+function orderStatusForPreview(baggage?: string): string {
+  return isPreviewFromBaggage(baggage) ? "confirmed_preview_env" : "confirmed";
+}
+
 /**
  * Kafka function: sends order event to the orders topic.
  * Used by both the current implementation and the Temporal publishOrderToKafka activity.
+ * @returns Status string for the HTTP checkout response (preview traffic uses confirmed_preview_env).
  */
-export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void> {
-  const { orderId, items, status, baggage } = payload;
+export async function sendOrderToKafka(payload: SendOrderPayload): Promise<string> {
+  const { orderId, items, baggage } = payload;
+  const status = orderStatusForPreview(baggage);
   const message = {
     orderId,
     items,
@@ -28,4 +40,5 @@ export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void>
     topic: process.env.KAFKA_TOPIC || "orders",
     messages: [{ value: JSON.stringify(message), headers: kafkaHeaders }],
   });
+  return status;
 }

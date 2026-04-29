@@ -94,8 +94,8 @@ export async function publishOrderToKafka(input: {
   items: Array<{ productId: number; quantity: number }>;
   status: string;
   baggage?: string;
-}): Promise<void> {
-  await sendOrderToKafka({
+}): Promise<string> {
+  return sendOrderToKafka({
     orderId: input.orderId,
     items: input.items,
     status: input.status,
@@ -109,10 +109,11 @@ export async function publishOrderNotificationActivity(input: {
   total_cents: number;
   customer_email?: string;
   baggage?: string;
+  status: string;
 }): Promise<void> {
   await publishOrderNotification({
     orderId: input.orderId,
-    status: "confirmed",
+    status: input.status,
     customer_email: input.customer_email ?? null,
     total_cents: input.total_cents,
     event: "order_confirmed",

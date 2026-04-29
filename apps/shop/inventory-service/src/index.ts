@@ -13,6 +13,14 @@ if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
 
 const pool = new Pool({ connectionString: dbUrl });
 
+function previewEnvSuffix(req: express.Request): string {
+  const baggage = req.headers["baggage"];
+  if (typeof baggage === "string" && /mirrord\s*=/i.test(baggage)) {
+    return " (preview env)";
+  }
+  return "";
+}
+
 async function initDb() {
   const client = await pool.connect();
   try {
@@ -83,7 +91,7 @@ app.get("/products", async (_req, res) => {
 app.get("/products/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
-    return res.status(400).json({ error: "Invalid product ID" });
+    return res.status(400).json({ error: `Invalid product ID${previewEnvSuffix(req)}` });
   }
   try {
     const { rows } = await pool.query(
