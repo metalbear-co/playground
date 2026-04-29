@@ -1,7 +1,7 @@
 # Dynamic mirrord Preview Environment: detects changed services, builds images,
 # and starts a preview for each. Supports two entry points:
-# - PR open/reopen for demo-* branches
-# - workflow_dispatch for automation such as preview-verification.yml
+# - PR open/reopen from this repo (detect-changes gates builds on apps/shop paths)
+# - workflow_dispatch for automation such as /preview or preview-verification.yml
 # Uses metalbear-co/mirrord-preview GitHub Action.
 # Requires: GCP_WIF_PROVIDER + GCP_SERVICE_ACCOUNT + SLACK_WEBHOOK_URL secrets,
 # mirrord operator with Enterprise license.
@@ -153,8 +153,9 @@ jobs:
                 out.should_run = isSameRepo && (isDemoBranch || hasPreviewComment) ? 'true' : 'false';
                 out.services_reason = isDemoBranch ? 'pull_request:closed-demo' : 'pull_request:closed-commented';
               } else {
-                out.should_run = isSameRepo && isDemoBranch ? 'true' : 'false';
-                out.services_reason = isDemoBranch ? 'pull_request:auto-demo' : 'pull_request:ignored';
+                // Same-repo PRs: run detect-changes; build-and-preview still requires shop path diffs (has_changes).
+                out.should_run = isSameRepo ? 'true' : 'false';
+                out.services_reason = isDemoBranch ? 'pull_request:auto-demo' : 'pull_request:auto-in-repo';
               }
             } else {
               out.services_reason = `unsupported:${context.eventName}`;
