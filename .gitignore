@@ -27,3 +27,5 @@ apps/shop/scripts/setup-minikube-shop.sh
 # Generated TypeScript output (server build)
 apps/visualization/visualization-backend/dist/
 apps/shop/*/dist/
+
+localstack/

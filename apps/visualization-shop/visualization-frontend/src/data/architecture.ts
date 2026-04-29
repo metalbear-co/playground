@@ -203,8 +203,7 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "rabbitmq",
     label: "RabbitMQ",
     stack: "order-notifications",
-    description:
-      "AMQP queue for async order notifications; published by order-service after Kafka; consumed by notifications-service.",
+    description: "Delivers order notifications to notifications-service.",
     group: "queue",
     zone: "cluster",
   },
@@ -213,7 +212,7 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "PostgreSQL",
     stack: "Inventory DB",
     description: "Stores product catalog and stock levels.",
-    group: "data",
+    group: "infra",
     zone: "cluster",
   },
   {
@@ -221,7 +220,7 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "PostgreSQL",
     stack: "Orders DB",
     description: "Stores order records and status.",
-    group: "data",
+    group: "infra",
     zone: "cluster",
   },
   {
@@ -229,7 +228,7 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "PostgreSQL",
     stack: "Deliveries DB",
     description: "Stores delivery tracking records.",
-    group: "data",
+    group: "infra",
     zone: "cluster",
   },
   // {
@@ -397,8 +396,10 @@ export const groupPalette: Record<
 > = {
   entry: { background: "#FFFFFF", border: "#0F172A", text: "#111827" },
   infra: { background: "#FFFFFF", border: "#6B7280", text: "#111827" },
-  service: { background: "#FBF8F2", border: "#EA580C", text: "#111827" },
+  /** Core services — amber/yellow border (same hue as the former “Queues & Streams” accent). */
+  service: { background: "#FFFBEB", border: "#CA8A04", text: "#111827" },
   data: { background: "#FFFFFF", border: "#DC2626", text: "#111827" },
-  queue: { background: "#FFFFFF", border: "#CA8A04", text: "#111827" },
+  /** Kafka, SQS, RabbitMQ — same as `infra` (no separate “Queues & Streams” legend). */
+  queue: { background: "#FFFFFF", border: "#6B7280", text: "#111827" },
   mirrord: { background: "#EEF2FF", border: "#4F46E5", text: "#111827" },
 };

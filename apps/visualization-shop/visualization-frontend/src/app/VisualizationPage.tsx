@@ -34,7 +34,15 @@ import {
   type ArchitectureEdge,
   type ArchitectureNode,
 } from "@/data/architecture";
+import { ArchitectureGlyph, PgBranchGlyph } from "@/lib/architectureNodeIcons";
 import DatabaseViewerDialog from "./DatabaseViewerDialog";
+
+/** Handles, bold session borders, mirrored edges — matches legend “mirrord control plane”. */
+const MIRRORD_PLANE_BORDER = groupPalette.mirrord.border;
+/** Baseline drop shadow under mirrord session nodes (same hue as control plane, not red/violet-600). */
+const MIRRORD_NODE_SHADOW = "0px 30px 60px rgba(79, 70, 229, 0.3)";
+/** Static mascot for the mirrord Operator node (`public/mirrord/mirrord-operator-mascot.png`). */
+const MIRRORD_OPERATOR_MASCOT_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/mirrord/mirrord-operator-mascot.png`;
 
 /**
  * Custom data payload carried by each React Flow node rendered in the visualization.
@@ -70,7 +78,7 @@ const intentStyles: Record<
 > = {
   request: { color: "#4F46E5" },
   data: { color: "#F5B42A" },
-  mirrored: { color: "#E66479", dash: "6 4", animated: true },
+  mirrored: { color: MIRRORD_PLANE_BORDER, dash: "6 4", animated: true },
   control: { color: "#0F172A", dash: "2 4" },
   default: { color: "#94A3B8" },
 };
@@ -606,7 +614,9 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
   const palette = groupPalette[data.group];
   const label = typeof data.label === "string" ? data.label : "";
   const isService = data.group === "service";
-  const isDataNode = data.group === "data";
+  /** Postgres boxes use infra styling but keep the DB viewer action. */
+  const showDbViewer =
+    data.group === "data" || id.startsWith("postgres-");
   return (
     <div
       className="flex h-full w-full flex-col justify-between text-left"
@@ -624,12 +634,15 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
       <Handle type="source" position={Position.Bottom} id="source-bottom" style={{ visibility: "hidden" }} />
       <Handle type="target" position={Position.Bottom} id="target-bottom" style={{ visibility: "hidden" }} />
       <div className="flex flex-col gap-1.5">
-        <span
-          className="font-bold leading-tight text-[#111827]"
-          style={{ fontSize: isService ? 18 : 15 }}
-        >
-          {label}
-        </span>
+        <div className="flex items-start gap-2">
+          <ArchitectureGlyph id={id} fontTitlePx={isService ? 18 : 15} />
+          <span
+            className="min-w-0 flex-1 font-bold leading-tight text-[#111827]"
+            style={{ fontSize: isService ? 18 : 15 }}
+          >
+            {label}
+          </span>
+        </div>
         {data.stack && (
           <span
             className="font-normal uppercase tracking-wider"
@@ -660,7 +673,7 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
             {data.repoPath}
           </span>
         )}
-        {isDataNode && (
+        {showDbViewer && (
           <button
             className="mt-1 inline-flex items-center gap-1 self-start rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer"
             style={{
@@ -699,7 +712,7 @@ const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   >
     <div className={data.description ? "" : "text-center"}>
       <p
-        className="text-xs font-bold uppercase tracking-[0.2em]"
+        className="text-lg font-bold uppercase tracking-[0.16em]"
         style={{ color: data.border }}
       >
         {data.label}
@@ -713,7 +726,7 @@ const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   </div>
 );
 
-const handleStyle = { background: "#E66479", width: 8, height: 8 };
+const handleStyle = { background: MIRRORD_PLANE_BORDER, width: 8, height: 8 };
 
 type MirrordNodeType = Node<NodeData, "mirrord">;
 
@@ -735,8 +748,27 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const isDynamicPreview = id.startsWith("preview-");
   const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
   const isOperator = id === "mirrord-operator";
+  /** Static `local-process` or per-session `dynamic-local-*` — styled blue like the Local Machine zone. */
+  const isLocalProcess = id === "local-process" || id.startsWith("dynamic-local-");
   const isCiRunnerAgent = isDynamicAgent && data.ciRunner === true;
-  const borderColor = isCiRunnerAgent ? "#0D9488" : isOperator ? "#16A34A" : isDynamicKafkaTopic ? "#7C3AED" : isDynamicSqsQueue ? "#CA8A04" : isDynamicRmqQueue ? "#0D9488" : (isDynamicPgBranch && data.matchesPreview) ? "#0EA5E9" : isDynamicPgBranch ? "#DC2626" : isDynamicPreview ? "#0EA5E9" : useHighlightBorder ? "#E66479" : palette.border;
+  /** Kafka / SQS / RabbitMQ split-queue topics — same border as infrastructure (not a separate legend color). */
+  const isQueueStreamSplitNode =
+    isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue;
+  const borderColor = isCiRunnerAgent
+    ? "#0D9488"
+    : isLocalProcess
+      ? "#3B82F6"
+      : isOperator
+        ? palette.border
+        : isQueueStreamSplitNode
+          ? groupPalette.infra.border
+          : (isDynamicPgBranch && data.matchesPreview)
+            ? "#0EA5E9"
+            : isDynamicPgBranch
+              ? palette.border
+              : isDynamicPreview
+                ? "#0EA5E9"
+                : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
   const stack = info?.stack;
@@ -744,10 +776,14 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
 
   return (
     <div
-      className="flex h-full w-full flex-col justify-between whitespace-normal rounded-[18px] border border-solid px-4 py-4 text-left shadow-md"
+      className={`flex h-full w-full flex-col justify-between whitespace-normal rounded-[18px] border border-solid py-4 text-left shadow-md ${isOperator ? "pl-1 pr-4" : "px-4"}`}
       style={{
         border: `${borderWidth}px solid ${borderColor}`,
-        backgroundColor: palette.background,
+        backgroundColor: isLocalProcess
+          ? "rgba(191, 219, 254, 0.45)"
+          : isQueueStreamSplitNode
+            ? groupPalette.infra.background
+            : palette.background,
         color: palette.text,
       }}
     >
@@ -849,6 +885,33 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
       )}
       {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || data.focusedCombined) ? (
         data.label
+      ) : isOperator ? (
+        <div className="flex items-center gap-2 text-left">
+          {/* eslint-disable-next-line @next/next/no-img-element -- small fixed public asset inside React Flow node */}
+          <img
+            src={MIRRORD_OPERATOR_MASCOT_SRC}
+            alt=""
+            width={88}
+            height={88}
+            className="-ml-1 pointer-events-none h-[88px] w-[88px] shrink-0 select-none object-contain"
+            aria-hidden
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="font-bold text-[15px] leading-tight text-[#111827]">
+              {label}
+            </span>
+            {stack && (
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[#6B7280]">
+                {stack}
+              </span>
+            )}
+            {description && (
+              <p className="text-[13px] leading-snug text-[#374151]">
+                {description}
+              </p>
+            )}
+          </div>
+        </div>
       ) : (
         <div className="flex flex-col gap-0.5 text-left">
           <span className="font-bold text-[15px] leading-tight text-[#111827]">
@@ -912,14 +975,17 @@ function FocusedFitView({ visibleNodeIds }: { visibleNodeIds: string[] | null })
   return null;
 }
 
-// Legend entries rendered in the top-left panel.
-const legendItems = [
-  { label: "Entry / Client", color: groupPalette.entry.border },
-  { label: "Infrastructure", color: groupPalette.infra.border },
-  { label: "Core services", color: groupPalette.service.border },
-  { label: "Data stores", color: groupPalette.data.border },
-  { label: "Queues & Streams", color: groupPalette.queue.border },
-  { label: "mirrord control plane", color: groupPalette.mirrord.border },
+/** Legend: node group colors plus mirrord session edges (dashed); ordinary traffic is left unstated. */
+type LegendEntry =
+  | { kind: "node"; label: string; color: string }
+  | { kind: "line"; label: string };
+
+const legendEntries: LegendEntry[] = [
+  { kind: "node", label: "Entry / Client", color: groupPalette.entry.border },
+  { kind: "node", label: "Infrastructure", color: groupPalette.infra.border },
+  { kind: "node", label: "Core services", color: groupPalette.service.border },
+  { kind: "node", label: "mirrord control plane", color: groupPalette.mirrord.border },
+  { kind: "line", label: "Mirrord session" },
 ];
 
 const SHOW_SNAPSHOT_PANEL = false;
@@ -1074,31 +1140,44 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           group: "mirrord" as const,
           ciRunner: isCiRunner,
           label: (
-            <div className={`flex flex-col gap-1 text-left${isCopy ? " mirrord-copy-pulse" : ""}`}>
-              <span className="text-sm font-semibold text-slate-900">
-                Agent - {group.targetName}
-              </span>
-              {copyLabel && (
-                <span className="text-[11px] font-bold uppercase tracking-wide text-[#E66479]">
-                  {copyLabel}
+            <div
+              className={`flex items-start gap-2 text-left${isCopy ? " mirrord-copy-pulse" : ""}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- same mascot as operator, smaller */}
+              <img
+                src={MIRRORD_OPERATOR_MASCOT_SRC}
+                alt=""
+                width={44}
+                height={44}
+                className="pointer-events-none h-11 w-11 shrink-0 select-none object-contain"
+                aria-hidden
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-sm font-semibold text-slate-900">
+                  Agent - {group.targetName}
                 </span>
-              )}
-              {group.owners.map((owner) => (
-                <p key={owner.hostname} className="text-xs leading-snug text-[#DC2626] font-semibold">
-                  {owner.username === "runner" ? "mirrord CI" : owner.hostname}
-                </p>
-              ))}
-              {group.previewEnvKeys.length > 0 && (
-                <div className="flex flex-col gap-0.5 mt-1 border-t border-slate-200 pt-1">
-                  {group.previewEnvKeys.map((entry) => (
-                    entry.podName && (
-                      <p key={`${entry.key}-${entry.podName}`} className="text-[11px] font-bold text-[#0EA5E9] break-all">
-                        {entry.podName}
-                      </p>
-                    )
-                  ))}
-                </div>
-              )}
+                {copyLabel && (
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-[#4F46E5]">
+                    {copyLabel}
+                  </span>
+                )}
+                {group.owners.map((owner) => (
+                  <p key={owner.hostname} className="text-xs leading-snug text-[#3730A3] font-semibold">
+                    {owner.username === "runner" ? "mirrord CI" : owner.hostname}
+                  </p>
+                ))}
+                {group.previewEnvKeys.length > 0 && (
+                  <div className="mt-1 flex flex-col gap-0.5 border-t border-slate-200 pt-1">
+                    {group.previewEnvKeys.map((entry) => (
+                      entry.podName && (
+                        <p key={`${entry.key}-${entry.podName}`} className="break-all text-[11px] font-bold text-[#0EA5E9]">
+                          {entry.podName}
+                        </p>
+                      )
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ),
         },
@@ -1107,7 +1186,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           borderRadius: 18,
           backgroundColor: "transparent",
           color: palette.text,
-          boxShadow: isCiRunner ? "0px 30px 60px rgba(13,148,136,0.35)" : "0px 30px 60px rgba(124,58,237,0.35)",
+          boxShadow: isCiRunner ? "0px 30px 60px rgba(13,148,136,0.35)" : MIRRORD_NODE_SHADOW,
           width: nodeWidth,
           zIndex: 10,
           cursor: "pointer",
@@ -1227,7 +1306,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       borderRadius: 18,
       backgroundColor: "transparent",
       color: palette.text,
-      boxShadow: "0px 30px 60px rgba(124,58,237,0.35)",
+      boxShadow: MIRRORD_NODE_SHADOW,
       width: nodeWidth,
       zIndex: 10,
     };
@@ -2188,7 +2267,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       borderRadius: 18,
       backgroundColor: "transparent",
       color: palette.text,
-      boxShadow: "0px 30px 60px rgba(124,58,237,0.35)",
+      boxShadow: MIRRORD_NODE_SHADOW,
       width: nodeWidth,
       zIndex: 10,
     };
@@ -2390,10 +2469,10 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       const matchesPreview = previewKeys.has(branch.branchId);
       const boxShadow = matchesPreview
         ? "0px 30px 60px rgba(14,165,233,0.25)"
-        : "0px 30px 60px rgba(220,38,38,0.25)";
+        : MIRRORD_NODE_SHADOW;
       const buttonClass = matchesPreview
         ? "mt-1 inline-flex items-center gap-1 self-start rounded-md bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
-        : "mt-1 inline-flex items-center gap-1 self-start rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 border border-red-200 hover:bg-red-100 transition-colors cursor-pointer";
+        : "mt-1 inline-flex items-center gap-1 self-start rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer";
 
       return {
         id: nodeId,
@@ -2402,31 +2481,34 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
           group: "mirrord" as const,
           matchesPreview,
           label: (
-            <div className="flex flex-col gap-1 text-left">
-              <span className="text-sm font-semibold text-slate-900">
-                DB Branch: {branch.branchId}
-              </span>
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {branch.targetDeployment} / PG {branch.postgresVersion}
-              </span>
-              <p className="text-xs leading-snug text-slate-600">
-                Copy mode: {branch.copyMode} | Phase: {branch.phase}
-              </p>
-              {branch.owners.map((owner) => (
-                <p key={owner.hostname} className="text-[11px] text-slate-500">
-                  {owner.username === "runner" ? "mirrord CI" : `${owner.username} (${owner.hostname})`}
+            <div className="flex items-start gap-2 text-left">
+              <PgBranchGlyph matchesPreview={matchesPreview} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-sm font-semibold text-slate-900">
+                  DB Branch: {branch.branchId}
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {branch.targetDeployment} / PG {branch.postgresVersion}
+                </span>
+                <p className="text-xs leading-snug text-slate-600">
+                  Copy mode: {branch.copyMode} | Phase: {branch.phase}
                 </p>
-              ))}
-              <button
-                className={buttonClass}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDbDialogId(nodeId);
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                View Data
-              </button>
+                {branch.owners.map((owner) => (
+                  <p key={owner.hostname} className="text-[11px] text-slate-500">
+                    {owner.username === "runner" ? "mirrord CI" : `${owner.username} (${owner.hostname})`}
+                  </p>
+                ))}
+                <button
+                  className={buttonClass}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDbDialogId(nodeId);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  View Data
+                </button>
+              </div>
             </div>
           ),
         },
@@ -3150,7 +3232,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
             ? {
                 ...baseStyle,
                 opacity: 1,
-                boxShadow: "0px 30px 60px rgba(124,58,237,0.35)",
+                boxShadow: MIRRORD_NODE_SHADOW,
               }
             : { ...baseStyle, opacity: 1 };
           const dataWithHighlight = hasShopSessions
@@ -3243,9 +3325,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
       type: "bezier",
       animated: true,
       markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-      style: { stroke: "#E66479", strokeWidth: 2.5, strokeDasharray: "6 4" },
-      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#E66479" },
-      labelBgStyle: { fill: "#FFF1F3" },
+      style: { stroke: MIRRORD_PLANE_BORDER, strokeWidth: 2.5, strokeDasharray: "6 4" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: MIRRORD_PLANE_BORDER },
+      labelBgStyle: { fill: "#EEF2FF" },
       ...edgeLabelDefaults,
     };
 
@@ -3268,9 +3350,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         type: "bezier",
         animated: true,
         markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-        style: { stroke: "#E66479", strokeWidth: 2, strokeDasharray: "6 4" },
-        labelStyle: { fontSize: 11, fontWeight: 600, fill: "#E66479" },
-        labelBgStyle: { fill: "#FFF1F3" },
+        style: { stroke: MIRRORD_PLANE_BORDER, strokeWidth: 2, strokeDasharray: "6 4" },
+        labelStyle: { fontSize: 11, fontWeight: 600, fill: MIRRORD_PLANE_BORDER },
+        labelBgStyle: { fill: "#EEF2FF" },
         ...edgeLabelDefaults,
       }));
 
@@ -3288,9 +3370,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
             type: "bezier",
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-            style: { stroke: "#DC2626", strokeWidth: 2.5, strokeDasharray: "6 4" },
-            labelStyle: { fontSize: 12, fontWeight: 700, fill: "#DC2626" },
-            labelBgStyle: { fill: "#FEF2F2" },
+            style: { stroke: MIRRORD_PLANE_BORDER, strokeWidth: 2.5, strokeDasharray: "6 4" },
+            labelStyle: { fontSize: 12, fontWeight: 700, fill: MIRRORD_PLANE_BORDER },
+            labelBgStyle: { fill: "#EEF2FF" },
             ...edgeLabelDefaults,
           },
           {
@@ -3303,9 +3385,9 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
             type: "smoothstep",
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
-            style: { stroke: "#DC2626", strokeWidth: 2.5, strokeDasharray: "6 4" },
-            labelStyle: { fontSize: 12, fontWeight: 600, fill: "#DC2626" },
-            labelBgStyle: { fill: "#FEF2F2" },
+            style: { stroke: MIRRORD_PLANE_BORDER, strokeWidth: 2.5, strokeDasharray: "6 4" },
+            labelStyle: { fontSize: 12, fontWeight: 600, fill: MIRRORD_PLANE_BORDER },
+            labelBgStyle: { fill: "#EEF2FF" },
             ...edgeLabelDefaults,
           },
         ]
@@ -3810,18 +3892,41 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         <FocusedFitView
           visibleNodeIds={focusedViewData ? [...focusedViewData.visibleIds] : null}
         />
-        <Panel position="top-left" className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
+        <Panel position="top-left" className="w-fit max-w-[min(100vw-1.5rem,280px)] rounded-2xl border border-[#E5E7EB] bg-white p-4 text-[#111827] shadow-lg">
           <p className="text-sm font-semibold uppercase tracking-wide text-[#6B7280]">
             Legend
           </p>
           <div className="mt-3 flex flex-col gap-2 text-sm">
-            {legendItems.map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span>{item.label}</span>
+            {legendEntries.map((entry) => (
+              <div
+                key={entry.label}
+                className={`flex items-center gap-2 ${entry.kind === "line" ? "mt-2 border-t border-[#E5E7EB] pt-2" : ""}`}
+              >
+                {entry.kind === "node" ? (
+                  <>
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span>{entry.label}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width={40} height={14} className="shrink-0 overflow-visible" aria-hidden>
+                      <line
+                        x1={2}
+                        y1={7}
+                        x2={38}
+                        y2={7}
+                        stroke={MIRRORD_PLANE_BORDER}
+                        strokeWidth={2.25}
+                        strokeLinecap="round"
+                        strokeDasharray="6 4"
+                      />
+                    </svg>
+                    <span className="leading-snug">{entry.label}</span>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -3906,7 +4011,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                     <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#F5F3FF] p-2">
                       {operatorSessions.map((session) => (
                         <div key={session.sessionId} className="mb-2 last:mb-0">
-                          <p className="text-xs font-semibold text-[#E66479]">
+                          <p className="text-xs font-semibold text-[#4F46E5]">
                             Target • {session.target.name ?? "Unknown workload"}
                           </p>
                           <p className="text-[11px] text-[#6B7280]">
@@ -3933,7 +4038,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         const hasQueueSplit = focusedViewData.hasQueueSplit;
         const headerBg =
           focusPanelTab === "db-branch"
-            ? "#FEF2F2"
+            ? "#F5F3FF"
             : focusPanelTab === "queue-split"
             ? "#FEFCE8"
             : focusPanelTab === "mirror"
@@ -3941,7 +4046,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
             : "#FFF7ED";
         const headerBorder =
           focusPanelTab === "db-branch"
-            ? "#FECACA"
+            ? "#E0E7FF"
             : focusPanelTab === "queue-split"
             ? "#FDE68A"
             : focusPanelTab === "mirror"
@@ -3949,7 +4054,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
             : "#FFEDD5";
         const headerAccent =
           focusPanelTab === "db-branch"
-            ? "#DC2626"
+            ? "#4F46E5"
             : focusPanelTab === "queue-split"
             ? "#CA8A04"
             : focusPanelTab === "mirror"
@@ -4008,7 +4113,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
                     className="flex-1 py-2.5 text-sm font-semibold transition-all"
                     style={
                       focusPanelTab === "db-branch"
-                        ? { background: "#DC2626", color: "#fff" }
+                        ? { background: "#4F46E5", color: "#fff" }
                         : { background: "#fff", color: "#6B7280" }
                     }
                     onClick={() => setFocusPanelTab("db-branch")}
