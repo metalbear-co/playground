@@ -16,7 +16,7 @@ export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void>
   const message = {
     orderId,
     items,
-    status,
+    status: "This is Adna again",
     timestamp: new Date().toISOString(),
   };
   const kafkaHeaders: Record<string, string> = {};
