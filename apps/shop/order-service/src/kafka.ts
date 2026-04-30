@@ -17,6 +17,7 @@ export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void>
     orderId,
     items,
     status,
+    confirmed: "this is just a test",
     timestamp: new Date().toISOString(),
   };
   const kafkaHeaders: Record<string, string> = {};

@@ -54,6 +54,7 @@ export default function ProductsPage() {
           <h1 className="hand-drawn-underline mb-10 inline-block text-2xl font-bold tracking-tight text-slate-900">
             Products
           </h1>
+          <p className="mb-6 text-sm font-medium text-orange-500">this is just a test</p>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {products.map((p, i) => (
               <Link
