@@ -12,7 +12,7 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
         }
       },
       "outgoing": true
@@ -21,7 +21,7 @@
       "order-notifications": {
         "queue_type": "RMQ",
         "message_filter": {
-          "baggage": ".*mirrord={{key}}.*"
+          "baggage": ".*mirrord-session={{key}}.*"
         }
       }
     }

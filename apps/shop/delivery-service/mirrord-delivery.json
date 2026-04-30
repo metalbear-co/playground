@@ -19,7 +19,7 @@
       "orders": {
         "queue_type": "Kafka",
         "message_filter": {
-          "baggage": "^mirrord=ari$"
+          "baggage": "^mirrord-session=ari$"
         }
       }
     }

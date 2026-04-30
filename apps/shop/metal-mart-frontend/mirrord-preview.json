@@ -16,7 +16,7 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord={{key}}\\b"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
         }
       }
     }
