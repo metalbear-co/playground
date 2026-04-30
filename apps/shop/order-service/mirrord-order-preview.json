@@ -1,5 +1,5 @@
 {
-  "key":"preview-123",
+  "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "namespace": "shop",
     "path": {

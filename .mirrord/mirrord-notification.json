@@ -1,6 +1,6 @@
 {
   "operator": true,
-  "key": "adna",
+  "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "namespace": "shop",
     "path": {
@@ -21,7 +21,7 @@
       "order-notifications": {
         "queue_type": "RMQ",
         "message_filter": {
-          "baggage": ".*mirrord=adna.*"
+          "baggage": ".*mirrord={{key}}.*"
         }
       }
     }

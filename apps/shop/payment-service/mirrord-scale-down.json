@@ -1,5 +1,5 @@
 {
-  "key": "ari",
+  "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "namespace": "shop",
     "path": {

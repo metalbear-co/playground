@@ -1,5 +1,5 @@
 {
-   "key": "dan",
+   "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "namespace": "visualization-shop",
     "path": {
