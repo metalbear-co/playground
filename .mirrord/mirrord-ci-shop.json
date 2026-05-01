@@ -13,7 +13,7 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord=mirrord-ci-shop\\b"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session=mirrord-ci-shop\\b"
         }
       },
       "outgoing": true
