@@ -1,0 +1,18 @@
+{
+  "target": {
+    "namespace": "ip-visit-counter",
+    "path": {
+      "deployment": "ip-visit-gcp-pubsub-consumer"
+    }
+  },
+  "feature": {
+    "split_queues": {
+      "ip-pubsub": {
+        "queue_type": "GCPPubSub",
+        "message_filter": {
+          "tenant": "demo-local.*"
+        }
+      }
+    }
+  }
+}

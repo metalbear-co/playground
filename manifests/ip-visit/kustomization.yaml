@@ -14,6 +14,8 @@ resources:
   - ./base/app/frontend
   - ./base/app/consumer-kafka
   - ./base/app/consumer-sqs
+  # GCP Pub/Sub consumer — set ConfigMap + Workload Identity before relying on it in-cluster.
+  - ./base/app/consumer-gcp-pubsub
 
 commonLabels:
   env: playground

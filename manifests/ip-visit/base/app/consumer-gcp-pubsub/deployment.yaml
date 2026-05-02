@@ -1,0 +1,57 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ip-visit-gcp-pubsub-consumer
+  annotations:
+    metalbear.co/note: >-
+      Scale replicas to 1 after replacing ConfigMap placeholders and configuring GCP credentials (Workload Identity recommended).
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: ip-visit-gcp-pubsub-consumer
+  template:
+    metadata:
+      labels:
+        app: ip-visit-gcp-pubsub-consumer
+    spec:
+      # Bind a GCP service account with roles/pubsub.subscriber via Workload Identity:
+      # serviceAccountName: ip-visit-gcp-pubsub
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-ip-visit-gcp-pubsub-consumer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "80"
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: ip-visit-gcp-pubsub-consumer
+                  key: GOOGLE_CLOUD_PROJECT
+            - name: PUBSUB_SUBSCRIPTION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: ip-visit-gcp-pubsub-consumer
+                  key: PUBSUB_SUBSCRIPTION_ID
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
