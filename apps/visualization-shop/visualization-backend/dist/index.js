@@ -82,7 +82,9 @@ const operatorStatusPaths = [
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
 app.get(snapshotPaths, async (req, res) => {
-    if (req.query.queueSplittingMock === "true") {
+    if (req.query.queueSplittingMock === "true" ||
+        req.query.multipleSessionMock === "true" ||
+        req.query.dbBranchMock === "true") {
         res.json(mockSnapshot);
         return;
     }
@@ -276,52 +278,97 @@ const deriveRmqOriginalQueueName = (mirrordQueue) => {
     return tail || known;
 };
 /**
- * Discover ephemeral mirrord RabbitMQ queues from notifications-service pods
- * (RABBITMQ_QUEUE env). There is no dedicated split CR in-cluster for this demo path.
+ * Discover ephemeral mirrord RabbitMQ queues for active queue-splitting sessions.
+ * For each MirrordRMQSession, emit:
+ *   - Filtered: queue from `status.Ready.envUpdates.<env>.outputName` (consumed by local user).
+ *   - Fallback: queue from the consumer pod's actual env value (consumed by the deployed pod;
+ *     mirrord patches it to a `mirrord-main-<id>-...` queue).
  */
 const fetchRmqEphemeralQueues = async (kubeConfig) => {
+    const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
     const coreApi = kubeConfig.makeApiClient(CoreV1Api);
-    const ns = process.env.WATCH_NAMESPACE || "shop";
+    const out = [];
+    let items = [];
     try {
-        const result = await coreApi.listNamespacedPod({
-            namespace: ns,
-            labelSelector: "app=notifications-service",
+        const result = await customApi.listClusterCustomObject({
+            group: "queues.mirrord.metalbear.co",
+            version: "v1alpha",
+            plural: "mirrordrmqsessions",
         });
-        const items = result.items ?? [];
-        const seen = new Set();
-        const out = [];
-        for (const pod of items) {
-            const labels = (pod.metadata?.labels ?? {});
-            const sessionId = labels["operator.metalbear.co/session-id"] ??
-                labels["mirrord-session"] ??
-                "unknown";
-            const containers = pod.spec?.containers ?? [];
-            const main = containers.find((c) => c.name === "main") ?? containers[0];
-            const env = main?.env ?? [];
-            const qEnv = env.find((e) => e.name === "RABBITMQ_QUEUE");
-            const raw = (typeof qEnv?.value === "string" ? qEnv.value : "").trim();
-            if (!raw.startsWith("mirrord-"))
-                continue;
-            if (seen.has(raw))
-                continue;
-            seen.add(raw);
-            const queueType = raw.includes("-fallback-")
-                ? "Fallback"
-                : "Filtered";
-            out.push({
-                queueName: raw,
-                originalQueueName: deriveRmqOriginalQueueName(raw),
-                sessionId,
-                consumer: "notifications-service",
-                queueType,
-            });
-        }
-        return out;
+        const body = result;
+        items = body.items ?? [];
     }
     catch (err) {
-        console.warn("Failed to list notifications pods for RMQ split:", err instanceof Error ? err.message : err);
-        return [];
+        console.warn("Failed to list MirrordRMQSessions:", err instanceof Error ? err.message : err);
+        return out;
     }
+    for (const item of items) {
+        const metadata = (item.metadata ?? {});
+        const spec = (item.spec ?? {});
+        const status = (item.status ?? {});
+        const labels = (metadata.labels ?? {});
+        const sessionId = labels["operator.metalbear.co/session-id"] ??
+            spec.sessionId ??
+            "unknown";
+        const queueConsumer = (spec.queueConsumer ?? {});
+        const consumer = queueConsumer.name ?? "unknown";
+        const consumerNs = spec.namespace ?? defaultNamespace;
+        const ready = (status["Ready"] ?? {});
+        const envUpdates = (ready.envUpdates ?? {});
+        const filterOutputs = new Set();
+        const envVarOriginals = [];
+        for (const [envVar, mapping] of Object.entries(envUpdates)) {
+            const outputName = (mapping.outputName ?? "").trim();
+            const originalName = (mapping.originalName ?? "").trim();
+            if (!outputName)
+                continue;
+            filterOutputs.add(outputName);
+            envVarOriginals.push({ envVar, originalName });
+            out.push({
+                queueName: outputName,
+                originalQueueName: originalName || deriveRmqOriginalQueueName(outputName),
+                sessionId,
+                consumer,
+                queueType: "Filtered",
+            });
+        }
+        if (envVarOriginals.length === 0 || consumer === "unknown")
+            continue;
+        try {
+            const podsResult = await coreApi.listNamespacedPod({
+                namespace: consumerNs,
+                labelSelector: `app=${consumer}`,
+            });
+            const seen = new Set();
+            for (const pod of podsResult.items ?? []) {
+                const containers = pod.spec?.containers ?? [];
+                const main = containers.find((c) => c.name === "main") ?? containers[0];
+                const env = main?.env ?? [];
+                for (const { envVar, originalName } of envVarOriginals) {
+                    const e = env.find((x) => x.name === envVar);
+                    const raw = (typeof e?.value === "string" ? e.value : "").trim();
+                    if (!raw.startsWith("mirrord-"))
+                        continue;
+                    if (filterOutputs.has(raw))
+                        continue;
+                    if (seen.has(raw))
+                        continue;
+                    seen.add(raw);
+                    out.push({
+                        queueName: raw,
+                        originalQueueName: originalName || deriveRmqOriginalQueueName(raw),
+                        sessionId,
+                        consumer,
+                        queueType: "Fallback",
+                    });
+                }
+            }
+        }
+        catch (err) {
+            console.warn(`Failed to list pods for RMQ consumer ${consumer} in ${consumerNs}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    return out;
 };
 /**
  * Query PgBranchDatabase custom resources from the operator CRD.
@@ -485,6 +532,23 @@ app.get(operatorStatusPaths, async (req, res) => {
         res.json(response);
         return;
     }
+    // db_branch=true alone: full canned operator payload (no cluster reads — same guarantee as other demo URLs).
+    if (requestUseDbBranchMock) {
+        const sessionsWithBranchDemo = [
+            ...mockOperatorStatus.sessions,
+            mockDbBranchSession,
+        ];
+        const response = {
+            ...mockOperatorStatus,
+            pgBranches: mockPgBranches,
+            previewSessions: mockOperatorStatus.previewSessions,
+            sessions: sessionsWithBranchDemo,
+            sessionCount: sessionsWithBranchDemo.length,
+            fetchedAt: new Date().toISOString(),
+        };
+        res.json(response);
+        return;
+    }
     if (!kubeConfigRef) {
         res.status(503).json({
             error: "Kubernetes configuration unavailable; cannot query operator sessions.",
@@ -509,20 +573,16 @@ app.get(operatorStatusPaths, async (req, res) => {
                 console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
                 return [];
             }),
-            requestUseDbBranchMock
-                ? Promise.resolve(mockPgBranches)
-                : fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
-                    console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
-                    return [];
-                }),
+            fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
+                console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
+                return [];
+            }),
             fetchPreviewSessions(kubeConfigRef).catch((err) => {
                 console.warn("Failed to fetch preview sessions:", err instanceof Error ? err.message : err);
                 return [];
             }),
         ]);
-        const allSessions = requestUseDbBranchMock
-            ? [...sessions, mockDbBranchSession]
-            : sessions;
+        const allSessions = sessions;
         console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
         refreshDynamicPgConnections(pgBranches);
         const response = {
@@ -601,7 +661,7 @@ const knownDeployments = [
     },
 ];
 /**
- * Mock data used when QUEUE_SPLITTING_MOCK_DATA=true, so the backend can run without a real cluster.
+ * Mock deployment snapshot for demo query params (?queueSplittingMock / ?multipleSessionMock / ?dbBranchMock).
  */
 const mockSnapshot = {
     clusterName: "mock-playground",

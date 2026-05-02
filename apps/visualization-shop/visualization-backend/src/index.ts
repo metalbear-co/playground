@@ -129,7 +129,11 @@ const operatorStatusPaths = [
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
 app.get(snapshotPaths, async (req, res) => {
-  if (req.query.queueSplittingMock === "true") {
+  if (
+    req.query.queueSplittingMock === "true" ||
+    req.query.multipleSessionMock === "true" ||
+    req.query.dbBranchMock === "true"
+  ) {
     res.json(mockSnapshot);
     return;
   }
@@ -736,6 +740,23 @@ app.get(operatorStatusPaths, async (req, res) => {
     res.json(response);
     return;
   }
+  // db_branch=true alone: full canned operator payload (no cluster reads — same guarantee as other demo URLs).
+  if (requestUseDbBranchMock) {
+    const sessionsWithBranchDemo = [
+      ...mockOperatorStatus.sessions,
+      mockDbBranchSession,
+    ];
+    const response: OperatorStatusResponse = {
+      ...mockOperatorStatus,
+      pgBranches: mockPgBranches,
+      previewSessions: mockOperatorStatus.previewSessions,
+      sessions: sessionsWithBranchDemo,
+      sessionCount: sessionsWithBranchDemo.length,
+      fetchedAt: new Date().toISOString(),
+    };
+    res.json(response);
+    return;
+  }
   if (!kubeConfigRef) {
     res.status(503).json({
       error: "Kubernetes configuration unavailable; cannot query operator sessions.",
@@ -760,20 +781,16 @@ app.get(operatorStatusPaths, async (req, res) => {
         console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
         return [] as RmqEphemeralQueue[];
       }),
-      requestUseDbBranchMock
-        ? Promise.resolve(mockPgBranches)
-        : fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
-            console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
-            return [] as PgBranchDatabase[];
-          }),
+      fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
+        console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
+        return [] as PgBranchDatabase[];
+      }),
       fetchPreviewSessions(kubeConfigRef).catch((err) => {
         console.warn("Failed to fetch preview sessions:", err instanceof Error ? err.message : err);
         return [] as PreviewSession[];
       }),
     ]);
-    const allSessions = requestUseDbBranchMock
-      ? [...sessions, mockDbBranchSession]
-      : sessions;
+    const allSessions = sessions;
     console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
     refreshDynamicPgConnections(pgBranches);
     const response: OperatorStatusResponse = {
@@ -865,7 +882,7 @@ const knownDeployments: KnownDeployment[] = [
 ];
 
 /**
- * Mock data used when QUEUE_SPLITTING_MOCK_DATA=true, so the backend can run without a real cluster.
+ * Mock deployment snapshot for demo query params (?queueSplittingMock / ?multipleSessionMock / ?dbBranchMock).
  */
 const mockSnapshot: ClusterSnapshot = {
   clusterName: "mock-playground",

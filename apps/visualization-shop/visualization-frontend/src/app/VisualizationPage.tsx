@@ -3053,9 +3053,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         setSnapshotLoading(true);
       }
       try {
-        const targetUrl = options?.forceRefresh
-          ? `${snapshotUrl}?refresh=1`
-          : snapshotUrl;
+        const params = new URLSearchParams();
+        if (options?.forceRefresh) params.set("refresh", "1");
+        if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
+        else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+        if (useDbBranchMock) params.set("dbBranchMock", "true");
+        const qs = params.toString();
+        const targetUrl = qs ? `${snapshotUrl}?${qs}` : snapshotUrl;
         const response = await fetch(targetUrl, {
           cache: "no-store",
         });
@@ -3082,7 +3086,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         setSnapshotLoading(false);
       }
     },
-    [snapshotUrl],
+    [
+      snapshotUrl,
+      useMultipleSessionMock,
+      useQueueSplittingMock,
+      useDbBranchMock,
+    ],
   );
 
   // Periodically refresh the snapshot (in addition to manual refresh requests).
@@ -3104,7 +3113,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     };
   }, [fetchSnapshot]);
 
-  // Fetch operator status (sessions + kafka topics) from the backend when not using mock data.
+  // Fetch operator status (sessions + kafka topics); mock query mirrors snapshot mock modes.
   const operatorStatusUrl = useMemo(
     () => `${snapshotBaseUrl}/operator-status`,
     [snapshotBaseUrl],
