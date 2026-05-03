@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "next/navigation";
 
 import {
   architectureEdges,
@@ -994,13 +995,13 @@ const SHOW_SNAPSHOT_PANEL = false;
  * Main visualization page. Builds the React Flow graph, keeps snapshot state in sync with the backend,
  * and wires up UI panels for the demo.
  */
-export type VisualizationPageProps = {
-  useQueueSplittingMock: boolean;
-  useDbBranchMock: boolean;
-  useMultipleSessionMock: boolean;
-};
-
-export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMock, useMultipleSessionMock }: VisualizationPageProps) {
+export default function VisualizationPage() {
+  const searchParams = useSearchParams();
+  const useQueueSplittingMock =
+    searchParams.get("queue_splitting") === "true";
+  const useDbBranchMock = searchParams.get("db_branch") === "true";
+  const useMultipleSessionMock =
+    searchParams.get("multiple_session") === "true";
   const nodeTypes = useMemo(
     () => ({ zone: ZoneNode, architecture: ArchitectureNode, mirrord: MirrordNode }),
     [],

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
@@ -18,6 +19,18 @@ const port = process.env.PORT || 8080;
 app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
+
+/** Proxies/CDNs must not cache snapshot or operator-status — demo query params must always hit origin. */
+app.use((req, res, next) => {
+  const p = req.path ?? "";
+  if (p.includes("snapshot") || p.includes("operator-status")) {
+    res.setHeader(
+      "Cache-Control",
+      "private, no-store, no-cache, must-revalidate",
+    );
+  }
+  next();
+});
 
 /**
  * Service information tracked in the snapshot. Derived from known deployments or manual POSTs.
@@ -725,33 +738,34 @@ app.get(operatorStatusPaths, async (req, res) => {
     return;
   }
   if (requestUseMock) {
+    const sessionsMerged =
+      requestUseDbBranchMock
+        ? [...mockOperatorStatus.sessions, mockDbBranchSession]
+        : mockOperatorStatus.sessions;
+    const sessionsDeduped = [
+      ...new Map(sessionsMerged.map((s) => [s.sessionId, s])).values(),
+    ];
     const response: OperatorStatusResponse = {
       ...mockOperatorStatus,
       pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
       previewSessions: mockOperatorStatus.previewSessions,
-      sessions: requestUseDbBranchMock
-        ? [...mockOperatorStatus.sessions, mockDbBranchSession]
-        : mockOperatorStatus.sessions,
-      sessionCount: requestUseDbBranchMock
-        ? mockOperatorStatus.sessions.length + 1
-        : mockOperatorStatus.sessions.length,
+      sessions: sessionsDeduped,
+      sessionCount: sessionsDeduped.length,
       fetchedAt: new Date().toISOString(),
     };
     res.json(response);
     return;
   }
-  // db_branch=true alone: full canned operator payload (no cluster reads — same guarantee as other demo URLs).
+  // db_branch=true alone: Ari + branch demo only (no other canned sessions / queue visuals).
   if (requestUseDbBranchMock) {
-    const sessionsWithBranchDemo = [
-      ...mockOperatorStatus.sessions,
-      mockDbBranchSession,
-    ];
     const response: OperatorStatusResponse = {
-      ...mockOperatorStatus,
+      sessions: [mockDbBranchSession],
+      sessionCount: 1,
+      kafkaTopics: [],
+      sqsQueues: [],
+      rmqQueues: [],
       pgBranches: mockPgBranches,
-      previewSessions: mockOperatorStatus.previewSessions,
-      sessions: sessionsWithBranchDemo,
-      sessionCount: sessionsWithBranchDemo.length,
+      previewSessions: [],
       fetchedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -1158,26 +1172,34 @@ const mockDbBranchSession: OperatorSession = {
 const defaultNamespace = process.env.WATCH_NAMESPACE || "shop";
 const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
 
+const K8S_SERVICE_ACCOUNT_TOKEN_PATH =
+  "/var/run/secrets/kubernetes.io/serviceaccount/token";
+
 /**
- * Attempt to load Kubernetes credentials (preferring in-cluster config, falling back to local kubeconfig).
+ * In-cluster config only when pod SA exists; otherwise ~/.kube/config.
+ * loadFromCluster() does not throw — without this guard, local runs use https://undefined:undefined.
  */
 const loadKubeConfiguration = (): KubeConfig | null => {
   const kubeConfig = new KubeConfig();
-  try {
+  const inCluster =
+    Boolean(process.env.KUBERNETES_SERVICE_HOST) &&
+    fs.existsSync(K8S_SERVICE_ACCOUNT_TOKEN_PATH);
+
+  if (inCluster) {
     kubeConfig.loadFromCluster();
     console.log("Loaded in-cluster Kubernetes configuration");
     return kubeConfig;
-  } catch (clusterError) {
-    try {
-      kubeConfig.loadFromDefault();
-      console.log("Loaded local kubeconfig");
-      return kubeConfig;
-    } catch (localError) {
-      console.warn(
-        "Kubernetes configuration not found; automatic snapshot updates disabled.",
-      );
-      return null;
-    }
+  }
+
+  try {
+    kubeConfig.loadFromDefault();
+    console.log("Loaded local kubeconfig");
+    return kubeConfig;
+  } catch {
+    console.warn(
+      "Kubernetes configuration not found; automatic snapshot updates disabled.",
+    );
+    return null;
   }
 };
 
