@@ -91,6 +91,13 @@ const operatorStatusPaths = [
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
 app.get(snapshotPaths, async (req, res) => {
+    if (req.query.sharableVisualizationMock === "true") {
+        res.json({
+            ...mockSharableVisualizationSnapshot,
+            updatedAt: new Date().toISOString(),
+        });
+        return;
+    }
     if (req.query.queueSplittingMock === "true" ||
         req.query.multipleSessionMock === "true" ||
         req.query.dbBranchMock === "true") {
@@ -515,6 +522,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     const requestUseMock = req.query.queueSplittingMock === "true";
     const requestUseDbBranchMock = req.query.dbBranchMock === "true";
     const requestUseMultipleSessionMock = req.query.multipleSessionMock === "true";
+    const requestUseSharableVisualizationMock = req.query.sharableVisualizationMock === "true";
     if (requestUseMultipleSessionMock) {
         const response = {
             ...mockMultipleSessionsOperatorStatus,
@@ -538,6 +546,23 @@ app.get(operatorStatusPaths, async (req, res) => {
             previewSessions: mockOperatorStatus.previewSessions,
             sessions: sessionsDeduped,
             sessionCount: sessionsDeduped.length,
+            fetchedAt: new Date().toISOString(),
+        };
+        res.json(response);
+        return;
+    }
+    // ?sharable_visualization=true — sharable demo snapshot shape + single Adna / inventory-service session.
+    if (requestUseSharableVisualizationMock) {
+        const s = mockSharableVisualizationOperatorSession;
+        const durationSeconds = Math.floor((Date.now() - new Date(s.createdAt).getTime()) / 1000);
+        const response = {
+            sessions: [{ ...s, durationSeconds }],
+            sessionCount: 1,
+            kafkaTopics: [],
+            sqsQueues: [],
+            rmqQueues: [],
+            pgBranches: [],
+            previewSessions: [],
             fetchedAt: new Date().toISOString(),
         };
         res.json(response);
@@ -669,6 +694,96 @@ const knownDeployments = [
         deployment: "receipt-service",
     },
 ];
+/** Sharable demo: playground-shaped snapshot + single Adna session on inventory-service (?sharableVisualizationMock). */
+const mockSharableVisualizationSnapshot = {
+    clusterName: "playground",
+    updatedAt: "2026-05-03T00:26:10.131Z",
+    services: [
+        {
+            id: "delivery-service",
+            name: "delivery-service",
+            description: "Kafka consumer & delivery tracking",
+            lastUpdated: "2026-05-03T00:26:02.400Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "inventory-service",
+            name: "inventory-service",
+            description: "Product catalog & stock management",
+            lastUpdated: "2026-05-03T00:26:02.401Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "metal-mart-frontend",
+            name: "metal-mart-frontend",
+            description: "Next.js storefront",
+            lastUpdated: "2026-05-03T00:26:02.398Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "mirrord-operator",
+            name: "mirrord operator",
+            description: "Injects mirrord sessions",
+            lastUpdated: "2026-05-03T00:26:02.398Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "notifications-service",
+            name: "notifications-service",
+            description: "RabbitMQ consumer for order notification events",
+            lastUpdated: "2026-05-03T00:26:02.399Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "order-service",
+            name: "order-service",
+            description: "Order orchestration",
+            lastUpdated: "2026-05-03T00:26:02.399Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "payment-service",
+            name: "payment-service",
+            description: "Mock payment processor",
+            lastUpdated: "2026-05-03T00:26:02.400Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "receipt-service",
+            name: "receipt-service",
+            description: "Receipt generation & delivery",
+            lastUpdated: "2026-05-03T00:26:02.397Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+    ],
+};
+const mockSharableVisualizationOperatorSession = {
+    sessionId: "838a524f05fe0a8e",
+    target: {
+        kind: "Deployment",
+        name: "inventory-service",
+        container: "main",
+        apiVersion: "apps/v1",
+    },
+    namespace: "shop",
+    owner: {
+        username: "Adna",
+        k8sUsername: "adnal@metalbear.com",
+        hostname: "Adnas-MacBook-Air.local",
+    },
+    branchName: "sharable-visualization",
+    createdAt: "2026-05-03T00:25:29Z",
+    connectedAt: "2026-05-03T00:26:35.032112Z",
+    durationSeconds: 66,
+};
 /**
  * Mock deployment snapshot for demo query params (?queueSplittingMock / ?multipleSessionMock / ?dbBranchMock).
  */
