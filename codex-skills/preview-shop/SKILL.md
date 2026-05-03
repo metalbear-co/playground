@@ -60,7 +60,7 @@ After the PR is open:
 When the preview succeeds, provide:
 
 - Preview URL: `https://playground.metalbear.dev/shop`
-- Header: `baggage: mirrord=<branch>`
+- Header: `baggage: mirrord-session=<branch>`
 - Shareable URL: `https://preview.metalbear.dev/<branch>/shop`
 
 Also include short testing instructions for the browser extension, `curl`, or request-header tools.

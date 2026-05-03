@@ -278,7 +278,7 @@ jobs:
           namespace: ${{ matrix.namespace }}
           image: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
           mode: steal
-          filter: 'baggage:\s*[^\n]*\bmirrord={{ key }}\b'
+          filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
           ttl_mins: '120'
           key: ${{ needs.resolve-context.outputs.preview_key }}
           extra_config: ${{ matrix.extra_config }}
@@ -351,11 +351,11 @@ jobs:
               '| | |',
               '|---|---|',
               `| **Preview URL** | [${url}](${url}) |`,
-              `| **Header** | \`baggage: mirrord=${key}\` |`,
+              `| **Header** | \`baggage: mirrord-session=${key}\` |`,
               '',
               'To send traffic to this preview:',
               `- Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or`,
-              `- \`curl -H "baggage: mirrord=${key}" ${url}\``,
+              `- \`curl -H "baggage: mirrord-session=${key}" ${url}\``,
               '',
               '*Preview is stopped when the PR is merged or closed.*',
             ].join('\n');
@@ -398,7 +398,7 @@ jobs:
                     { "type": "mrkdwn", "text": "*PR:*\n<${{ needs.resolve-context.outputs.pr_url }}|#${{ needs.resolve-context.outputs.pr_number }}>" },
                     { "type": "mrkdwn", "text": "*Services:*\n${{ needs.detect-changes.outputs.services_list }}" },
                     { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
-                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord=${{ needs.resolve-context.outputs.preview_key }}`" }
+                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord-session=${{ needs.resolve-context.outputs.preview_key }}`" }
                   ]
                 }
               ]
