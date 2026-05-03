@@ -3,6 +3,10 @@ name: CI Demo - Shop - mirrord vs Baseline - Jobs View
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 concurrency:
   group: ci-demo-shop-jobs-${{ github.ref }}
   cancel-in-progress: true
