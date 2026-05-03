@@ -9,7 +9,7 @@ This skill automates the end-to-end workflow for PM-driven MetalMart changes in 
 
 Read `docs/AI_ROOT_CONTEXT.md` first.
 
-> Branch naming is load-bearing. The branch name becomes both a Docker tag input and the `baggage: mirrord=<branch>` routing value.
+> Branch naming is load-bearing. The branch name becomes both a Docker tag input and the `baggage: mirrord-session=<branch>` routing value.
 
 ## Workflow Overview
 
@@ -92,7 +92,7 @@ If the workflow fails:
 When the preview succeeds, return:
 
 - Preview URL: `https://playground.metalbear.dev/shop`
-- Header: `baggage: mirrord=<branch>`
+- Header: `baggage: mirrord-session=<branch>`
 - Shareable URL: `https://preview.metalbear.dev/<branch>/shop`
 
 Also provide concise testing instructions using either the mirrord browser extension, `curl`, or a request-header tool.

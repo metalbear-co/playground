@@ -165,7 +165,7 @@ const fs = require('fs');
   const iter = process.env.ITER || '1';
   const shotsDir = '/tmp/screenshots';
   const shopUrl = 'https://playground.metalbear.dev/shop';
-  const baggage = `mirrord=${previewKey}`;
+  const baggage = `mirrord-session=${previewKey}`;
   // runStart is useful when asserting against shared-DB services: filter
   // returned rows by created_at >= runStart to ignore stale rows from
   // earlier preview runs.
@@ -267,7 +267,7 @@ If any functional check failed, any visual self-review flagged a problem, or the
 <change summary in one line>
 
 Preview URL: https://playground.metalbear.dev/shop
-Header:      baggage: mirrord=<BRANCH>
+Header:      baggage: mirrord-session=<BRANCH>
 PR:          <PR_URL>
 
 Tests (iter <n>): <N/N passed>
@@ -282,9 +282,9 @@ Screenshots:
 Notes from iteration: <only if iter > 1 — one line per fix made during the loop>
 
 Open the URL with the baggage header to review yourself — either the mirrord
-Browser Extension (set `baggage: mirrord=<BRANCH>`) or:
+Browser Extension (set `baggage: mirrord-session=<BRANCH>`) or:
 
-  curl -H "baggage: mirrord=<BRANCH>" https://playground.metalbear.dev/shop
+  curl -H "baggage: mirrord-session=<BRANCH>" https://playground.metalbear.dev/shop
 
 Your turn:
   (a) approve — stop the loop, leave the PR open
@@ -339,7 +339,7 @@ gh pr close "$PR_URL" --delete-branch
 | | |
 |---|---|
 | Preview URL | `https://playground.metalbear.dev/shop` |
-| Routing header | `baggage: mirrord=$BRANCH` |
+| Routing header | `baggage: mirrord-session=$BRANCH` |
 | Start preview | `gh workflow run preview-shop-pr.yml --repo metalbear-co/playground --ref main -f action=start -f branch=$BRANCH -f base_ref=main -f preview_key=$BRANCH -f pr_number=$PR_NUMBER -f pr_url=$PR_URL -f caller_run_id=$CALLER_ID` |
 | Stop preview | same, `-f action=stop` (omit `branch`, `base_ref`) |
 | Find run | `gh run list --repo metalbear-co/playground --workflow=preview-shop-pr.yml --event workflow_dispatch --json databaseId,displayTitle --jq '.[] \| select(.displayTitle \| contains("caller=<id>")) \| .databaseId'` |

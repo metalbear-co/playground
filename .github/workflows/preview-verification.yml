@@ -213,7 +213,7 @@ jobs:
 
             const browser = await chromium.launch();
             const context = await browser.newContext({
-              extraHTTPHeaders: { baggage: `mirrord=${previewKey}` },
+              extraHTTPHeaders: { baggage: `mirrord-session=${previewKey}` },
             });
             const page = await context.newPage();
 
@@ -258,7 +258,7 @@ jobs:
               console.log('✓ Cart contains item after add');
 
               const orderResp = await page.request.post(`${shopUrl}/api/orders`, {
-                headers: { baggage: `mirrord=${previewKey}` },
+                headers: { baggage: `mirrord-session=${previewKey}` },
                 data: {
                   items: [{ productId: 1, quantity: 1 }],
                   total_cents: 1999,
