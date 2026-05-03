@@ -1002,6 +1002,8 @@ export default function VisualizationPage() {
   const useDbBranchMock = searchParams.get("db_branch") === "true";
   const useMultipleSessionMock =
     searchParams.get("multiple_session") === "true";
+  const useSharableVisualizationMock =
+    searchParams.get("sharable_visualization") === "true";
   const nodeTypes = useMemo(
     () => ({ zone: ZoneNode, architecture: ArchitectureNode, mirrord: MirrordNode }),
     [],
@@ -3029,10 +3031,17 @@ export default function VisualizationPage() {
     const params = new URLSearchParams();
     if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
     else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+    else if (useSharableVisualizationMock)
+      params.set("sharableVisualizationMock", "true");
     if (useDbBranchMock) params.set("dbBranchMock", "true");
     const str = params.toString();
     return str ? `?${str}` : "";
-  }, [useQueueSplittingMock, useDbBranchMock, useMultipleSessionMock]);
+  }, [
+    useQueueSplittingMock,
+    useDbBranchMock,
+    useMultipleSessionMock,
+    useSharableVisualizationMock,
+  ]);
 
   const snapshotUrl = useMemo(
     () => `${snapshotBaseUrl}/snapshot`,
@@ -3058,6 +3067,8 @@ export default function VisualizationPage() {
         if (options?.forceRefresh) params.set("refresh", "1");
         if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
         else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+        else if (useSharableVisualizationMock)
+          params.set("sharableVisualizationMock", "true");
         if (useDbBranchMock) params.set("dbBranchMock", "true");
         const qs = params.toString();
         const targetUrl = qs ? `${snapshotUrl}?${qs}` : snapshotUrl;
@@ -3091,6 +3102,7 @@ export default function VisualizationPage() {
       snapshotUrl,
       useMultipleSessionMock,
       useQueueSplittingMock,
+      useSharableVisualizationMock,
       useDbBranchMock,
     ],
   );
