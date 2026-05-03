@@ -1,0 +1,288 @@
+name: CI Demo - Shop - mirrord vs Baseline - Jobs View
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-demo-shop-jobs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-kind:
+    name: Full Environment Flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install kind, kubectl, jq
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create kind cluster
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          cat <<EOF | kind create cluster --config=- --name ci-shop-${SHORT_SHA}
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+            extraPortMappings:
+            - containerPort: 30080
+              hostPort: 30080
+              protocol: TCP
+          EOF
+
+          kubectl cluster-info
+
+      - name: Create namespaces
+        run: |
+          kubectl create namespace infra
+          kubectl create namespace shop
+
+      - name: Deploy PostgreSQL
+        run: |
+          kubectl apply -k manifests/infrastructure/postgres -n infra
+          kubectl rollout status deployment/postgres --namespace=infra --timeout=5m
+
+      - name: Deploy Kafka
+        run: |
+          # Kafka StatefulSet uses PVC — patch to emptyDir for kind
+          kubectl apply -k manifests/infrastructure/kafka -n infra
+          kubectl rollout status statefulset/kafka --namespace=infra --timeout=10m
+          sleep 10
+
+      - name: Deploy LocalStack (SQS)
+        run: |
+          cat <<'EOF' | kubectl apply -n infra -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: localstack
+            labels:
+              app: localstack
+          spec:
+            containers:
+              - name: localstack
+                image: localstack/localstack:4.4
+                env:
+                  - name: SERVICES
+                    value: "sqs"
+                ports:
+                  - containerPort: 4566
+                    protocol: TCP
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: localstack
+          spec:
+            type: ClusterIP
+            ports:
+              - port: 4566
+                targetPort: 4566
+                protocol: TCP
+            selector:
+              app: localstack
+          EOF
+
+          kubectl wait --for=condition=Ready pod/localstack --namespace=infra --timeout=3m
+
+          # Create SQS queue (retry in case LocalStack is still initializing)
+          for i in $(seq 1 10); do
+            kubectl exec -n infra localstack -- \
+              awslocal sqs create-queue --queue-name payments --region us-east-1 && break
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+
+      - name: Build Docker images
+        run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+
+          docker build -t order-service:${IMAGE_TAG} \
+            -f apps/shop/order-service/Dockerfile \
+            apps/shop/order-service
+
+          docker build -t inventory-service:${IMAGE_TAG} \
+            -f apps/shop/inventory-service/Dockerfile \
+            apps/shop/inventory-service
+
+      - name: Load images into kind
+        run: |
+          export IMAGE_TAG="ci-demo-${{ github.sha }}"
+          export CLUSTER_NAME="ci-shop-${GITHUB_SHA::8}"
+
+          kind load docker-image order-service:${IMAGE_TAG} --name ${CLUSTER_NAME}
+          kind load docker-image inventory-service:${IMAGE_TAG} --name ${CLUSTER_NAME}
+
+      - name: Deploy inventory-service
+        run: |
+          kubectl apply -k manifests/shop/base/app/inventory-service -n shop
+
+          # Patch for kind: local image + correct DB URL
+          kubectl set image deployment/inventory-service \
+            main=inventory-service:ci-demo-${{ github.sha }} -n shop
+          kubectl set env deployment/inventory-service \
+            DATABASE_URL="postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/inventory" -n shop
+          kubectl patch deployment inventory-service -n shop \
+            --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
+
+          kubectl rollout status deployment/inventory-service --namespace=shop --timeout=5m
+
+      - name: Seed inventory products
+        run: |
+          # inventory-service's initDb creates the products table on startup;
+          # seed the rows the E2E test expects (productId=1 must exist).
+          kubectl exec -i -n infra deployment/postgres -- \
+            psql -U postgres -d inventory -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO products (id, name, description, price_cents, stock, image_urls, is_new) VALUES
+            (1, 'Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 72, '["team_work_makes_the_Dream_work_ljp4we"]'::jsonb, true),
+            (2, 'Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 43, '["team_Work_makes_the_Dream_Work_-_front_w5qdnb","team_work_makes_the_dream_work_-_back_onanux"]'::jsonb, true),
+            (3, 'Mind The Gap Sticker', 'MetalBear Mind The Gap sticker', 499, 198, '["Mind_the_Gap_pkyuc6"]'::jsonb, false),
+            (4, 'Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2499, 50, '["Mind_the_gap_-_Front_anazkh","Mind_the_gap_-_Back_oh9jyf"]'::jsonb, false),
+            (5, 'Increase Velocity Sticker', 'MetalBear Increase Velocity sticker', 499, 199, '["Increase_velocity_mfsov2"]'::jsonb, false),
+            (6, 'Increase Velocity T-Shirt', 'MetalBear Increase Velocity tee — front and back designs', 2499, 41, '["Increase_Velocity_-_Front_c2dgw6","Increase_Velocity_-_Back_ywhxi6"]'::jsonb, false),
+            (7, 'Cloudboat Willie T-Shirt', 'MetalBear Cloudboat Willie tee — front and back designs', 2499, 50, '["Cloudboat_Willie_-_Front_wpgqi2","Cloudboat_Willie_-_Back_z05dna"]'::jsonb, false),
+            (8, 'A mirrord Is Born T-Shirt', 'MetalBear A mirrord Is Born tee — front and back designs', 2499, 50, '["A_mirrord_is_born_-_Front_xy8l8p","A_mirrord_is_born_-_Back_bytwh2"]'::jsonb, false)
+          ON CONFLICT (id) DO NOTHING;
+          SELECT setval(pg_get_serial_sequence('products', 'id'), (SELECT MAX(id) FROM products));
+          SQL
+
+      - name: Deploy order-service
+        run: |
+          kubectl apply -k manifests/shop/base/app/order-service -n shop
+
+          # Patch for kind: local image + LocalStack SQS + disable Temporal
+          kubectl set image deployment/order-service \
+            main=order-service:ci-demo-${{ github.sha }} -n shop
+          kubectl set env deployment/order-service \
+            DATABASE_URL="postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/orders" \
+            INVENTORY_SERVICE_URL="http://inventory-service.shop.svc.cluster.local:80" \
+            SQS_QUEUE_URL="http://localstack.infra.svc.cluster.local:4566/000000000000/payments" \
+            SQS_ENDPOINT="http://localstack.infra.svc.cluster.local:4566" \
+            AWS_REGION="us-east-1" \
+            AWS_ACCESS_KEY_ID="test" \
+            AWS_SECRET_ACCESS_KEY="test" \
+            KAFKA_ADDRESS="kafka.infra.svc.cluster.local:9092" \
+            KAFKA_TOPIC="orders" \
+            USE_TEMPORAL="false" \
+            -n shop
+          kubectl patch deployment order-service -n shop \
+            --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
+
+          kubectl rollout status deployment/order-service --namespace=shop --timeout=5m
+
+      - name: Expose order-service via NodePort
+        run: |
+          kubectl patch svc order-service -n shop \
+            --type=json -p='[
+              {"op":"replace","path":"/spec/type","value":"NodePort"},
+              {"op":"replace","path":"/spec/ports/0/nodePort","value":30080}
+            ]'
+
+      - name: Run E2E test
+        env:
+          SHOP_URL: http://localhost:30080
+        run: |
+          chmod +x apps/shop/order-service/ci/demo_e2e.sh
+          ./apps/shop/order-service/ci/demo_e2e.sh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-shop-logs
+          path: /tmp/kind-*.log
+
+      - name: Delete kind cluster
+        if: always()
+        run: |
+          kind delete cluster --name ci-shop-${GITHUB_SHA::8} || true
+
+  mirrord-ci:
+    name: mirrord CI
+    needs: baseline-kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install jq and kubectl
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl get deployments -n shop >/dev/null
+
+      - name: Build order-service
+        working-directory: apps/shop/order-service
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install mirrord
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+
+      - name: Start mirrord CI
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+        run: |
+          mirrord ci start --config-file .mirrord/mirrord-ci-shop.json -- \
+            node apps/shop/order-service/dist/index.js
+
+      - name: Run E2E test
+        env:
+          SHOP_URL: https://playground.metalbear.dev
+          BAGGAGE_HEADER: mirrord=mirrord-ci-shop
+        run: |
+          chmod +x apps/shop/order-service/ci/demo_e2e.sh
+          ./apps/shop/order-service/ci/demo_e2e.sh
+
+      - name: Stop mirrord CI session
+        if: always()
+        run: |
+          mirrord ci stop || true
+
+      - name: Upload mirrord logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirrord-shop-logs
+          path: /tmp/mirrord
