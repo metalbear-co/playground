@@ -187,7 +187,7 @@ jobs:
           BASE_REF: ${{ needs.resolve-context.outputs.base_ref }}
         run: |
           set -euo pipefail
-          git fetch origin "$BASE_REF" --depth=1
+          git fetch origin "$BASE_REF"
           CHANGED_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD")
           CHANGES='[]'
           for path in $(jq -r '.services[].path' .github/preview-services.json); do
