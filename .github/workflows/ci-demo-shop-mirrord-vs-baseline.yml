@@ -152,7 +152,7 @@ jobs:
         run: |
           # inventory-service's initDb creates the products table on startup;
           # seed the rows the E2E test expects (productId=1 must exist).
-          kubectl exec -n infra deployment/postgres -- \
+          kubectl exec -i -n infra deployment/postgres -- \
             psql -U postgres -d inventory -v ON_ERROR_STOP=1 <<'SQL'
           INSERT INTO products (id, name, description, price_cents, stock, image_urls, is_new) VALUES
             (1, 'Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 72, '["team_work_makes_the_Dream_work_ljp4we"]'::jsonb, true),
