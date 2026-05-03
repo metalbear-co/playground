@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "next/navigation";
 
 import {
   architectureEdges,
@@ -994,13 +995,13 @@ const SHOW_SNAPSHOT_PANEL = false;
  * Main visualization page. Builds the React Flow graph, keeps snapshot state in sync with the backend,
  * and wires up UI panels for the demo.
  */
-export type VisualizationPageProps = {
-  useQueueSplittingMock: boolean;
-  useDbBranchMock: boolean;
-  useMultipleSessionMock: boolean;
-};
-
-export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMock, useMultipleSessionMock }: VisualizationPageProps) {
+export default function VisualizationPage() {
+  const searchParams = useSearchParams();
+  const useQueueSplittingMock =
+    searchParams.get("queue_splitting") === "true";
+  const useDbBranchMock = searchParams.get("db_branch") === "true";
+  const useMultipleSessionMock =
+    searchParams.get("multiple_session") === "true";
   const nodeTypes = useMemo(
     () => ({ zone: ZoneNode, architecture: ArchitectureNode, mirrord: MirrordNode }),
     [],
@@ -3053,9 +3054,13 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         setSnapshotLoading(true);
       }
       try {
-        const targetUrl = options?.forceRefresh
-          ? `${snapshotUrl}?refresh=1`
-          : snapshotUrl;
+        const params = new URLSearchParams();
+        if (options?.forceRefresh) params.set("refresh", "1");
+        if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
+        else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+        if (useDbBranchMock) params.set("dbBranchMock", "true");
+        const qs = params.toString();
+        const targetUrl = qs ? `${snapshotUrl}?${qs}` : snapshotUrl;
         const response = await fetch(targetUrl, {
           cache: "no-store",
         });
@@ -3082,7 +3087,12 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
         setSnapshotLoading(false);
       }
     },
-    [snapshotUrl],
+    [
+      snapshotUrl,
+      useMultipleSessionMock,
+      useQueueSplittingMock,
+      useDbBranchMock,
+    ],
   );
 
   // Periodically refresh the snapshot (in addition to manual refresh requests).
@@ -3104,7 +3114,7 @@ export default function VisualizationPage({ useQueueSplittingMock, useDbBranchMo
     };
   }, [fetchSnapshot]);
 
-  // Fetch operator status (sessions + kafka topics) from the backend when not using mock data.
+  // Fetch operator status (sessions + kafka topics); mock query mirrors snapshot mock modes.
   const operatorStatusUrl = useMemo(
     () => `${snapshotBaseUrl}/operator-status`,
     [snapshotBaseUrl],
