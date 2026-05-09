@@ -1,21 +1,25 @@
 # Slash-command entry point for shop previews.
-# This workflow is intentionally lightweight: it parses `/preview` comments on PRs
-# and dispatches preview-shop-pr.yml, but never checks out or executes PR code in
-# the trusted issue_comment context.
 #
-# NOTE: `/preview` is now handled by preview-shop-on-comment.yml, which adds a
-# mirrord-ci E2E gate before dispatching. To avoid both workflows running on the
-# same comment, this workflow is kept as a manually-invokable template only —
-# it no longer auto-triggers on PR comments.
+# This workflow listens for `/preview` PR comments and dispatches the E2E
+# gate workflow (preview-shop-on-comment.yml). It is intentionally lightweight:
+# no checkout of PR code, no execution of PR scripts, no access to the GCP /
+# mirrord secrets. That keeps it CodeQL-clean for `issue_comment` triggers.
+#
+# Chain:
+#   PR comment `/preview`
+#     → preview-shop-pr-command.yml (this file, validates)
+#       → preview-shop-on-comment.yml (workflow_dispatch, runs E2E gate)
+#         → preview-shop-pr.yml (workflow_dispatch, publishes preview)
 name: Preview Environment - Shop Command
 
 on:
-  workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 jobs:
-  dispatch-preview:
-    name: Dispatch preview from /preview comment
-    if: false  # disabled: /preview is now handled by preview-shop-on-comment.yml
+  dispatch-gate:
+    name: Dispatch E2E gate from /preview comment
+    if: github.event.issue.pull_request && github.event.comment.body == '/preview'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -46,7 +50,6 @@ jobs:
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('pr_number', String(pr.number));
             core.setOutput('pr_url', pr.html_url);
-            core.setOutput('preview_key', pr.head.ref);
             core.setOutput('reason', !sameRepo ? 'fork-pr-not-supported' : (!allowedAssociations.has(assoc) ? `commenter-not-allowed:${assoc}` : 'ok'));
 
       - name: Acknowledge rejected request
@@ -57,7 +60,7 @@ jobs:
         with:
           script: |
             const body = [
-              'Preview request was not started.',
+              '/preview request was not started.',
               '',
               `Reason: \`${process.env.REASON}\``,
               '',
@@ -73,23 +76,26 @@ jobs:
               body,
             });
 
-      - name: Dispatch preview workflow
+      - name: Dispatch E2E gate workflow
         if: steps.resolve.outputs.allowed == 'true'
         uses: actions/github-script@v7
+        env:
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+          BASE_REF: ${{ steps.resolve.outputs.base_ref }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          PR_URL: ${{ steps.resolve.outputs.pr_url }}
         with:
           script: |
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'preview-shop-pr.yml',
+              workflow_id: 'preview-shop-on-comment.yml',
               ref: context.payload.repository.default_branch,
               inputs: {
-                action: 'start',
-                branch: '${{ steps.resolve.outputs.branch }}',
-                base_ref: '${{ steps.resolve.outputs.base_ref }}',
-                preview_key: '${{ steps.resolve.outputs.preview_key }}',
-                pr_number: '${{ steps.resolve.outputs.pr_number }}',
-                pr_url: '${{ steps.resolve.outputs.pr_url }}',
+                branch: process.env.BRANCH,
+                base_ref: process.env.BASE_REF,
+                pr_number: process.env.PR_NUMBER,
+                pr_url: process.env.PR_URL,
                 caller_run_id: String(context.runId),
               },
             });
@@ -103,5 +109,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: 'Preview requested. Dispatching `preview-shop-pr.yml` now.',
+              body: '/preview accepted. Dispatching `preview-shop-on-comment.yml` (E2E gate) now.',
             });
