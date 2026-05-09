@@ -174,9 +174,13 @@ jobs:
     steps:
       - name: Decide whether this service has a gate
         id: gate-config
+        env:
+          MATRIX_NAME: ${{ matrix.name }}
+          E2E_COMMAND: ${{ matrix.e2e_command }}
+          E2E_SCRIPT: ${{ matrix.e2e_script }}
         run: |
-          if [ -z "${{ matrix.e2e_command }}" ] || [ -z "${{ matrix.e2e_script }}" ]; then
-            echo "No E2E configured for ${{ matrix.name }}, skipping gate."
+          if [ -z "$E2E_COMMAND" ] || [ -z "$E2E_SCRIPT" ]; then
+            echo "No E2E configured for $MATRIX_NAME, skipping gate."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -224,13 +228,16 @@ jobs:
 
       - name: Generate mirrord ci config
         if: steps.gate-config.outputs.skip != 'true'
+        env:
+          NAMESPACE: ${{ matrix.namespace }}
+          DEPLOYMENT: ${{ matrix.deployment }}
         run: |
           mkdir -p .mirrord-tmp
           cat > .mirrord-tmp/ci.json <<EOF
           {
             "target": {
-              "namespace": "${{ matrix.namespace }}",
-              "path": { "deployment": "${{ matrix.deployment }}" }
+              "namespace": "${NAMESPACE}",
+              "path": { "deployment": "${DEPLOYMENT}" }
             },
             "ci": { "output_dir": "/tmp/mirrord" },
             "feature": {
@@ -255,12 +262,14 @@ jobs:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
           SHOP_URL: https://playground.metalbear.dev
           BAGGAGE_HEADER: mirrord=${{ env.SERVICE_KEY }}
+          E2E_COMMAND: ${{ matrix.e2e_command }}
+          E2E_SCRIPT: ${{ matrix.e2e_script }}
         run: |
-          chmod +x ${{ matrix.e2e_script }}
+          chmod +x "$E2E_SCRIPT"
           mirrord ci start --config-file .mirrord-tmp/ci.json -- bash -c '
-            ${{ matrix.e2e_command }} &
+            $E2E_COMMAND &
             APP_PID=$!
-            ${{ matrix.e2e_script }}
+            "$E2E_SCRIPT"
             TEST_RC=$?
             kill $APP_PID 2>/dev/null || true
             exit $TEST_RC
