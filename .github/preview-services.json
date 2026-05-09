@@ -14,7 +14,9 @@
       "deployment": "order-service",
       "namespace": "shop",
       "build_args": "",
-      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600},\"db_branches\":[{\"id\":\"{{ key }}\",\"type\":\"pg\",\"ttl_secs\":30,\"version\":\"16.0\",\"connection\":{\"url\":\"DATABASE_URL\"},\"copy\":{\"mode\":\"schema\"}}]}}"
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600},\"db_branches\":[{\"id\":\"{{ key }}\",\"type\":\"pg\",\"ttl_secs\":30,\"version\":\"16.0\",\"connection\":{\"url\":\"DATABASE_URL\"},\"copy\":{\"mode\":\"schema\"}}]}}",
+      "e2e_command": "node apps/shop/order-service/dist/index.js",
+      "e2e_script": "apps/shop/order-service/ci/demo_e2e.sh"
     },
     {
       "name": "delivery-service",

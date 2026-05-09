@@ -2,16 +2,20 @@
 # This workflow is intentionally lightweight: it parses `/preview` comments on PRs
 # and dispatches preview-shop-pr.yml, but never checks out or executes PR code in
 # the trusted issue_comment context.
+#
+# NOTE: `/preview` is now handled by preview-shop-on-comment.yml, which adds a
+# mirrord-ci E2E gate before dispatching. To avoid both workflows running on the
+# same comment, this workflow is kept as a manually-invokable template only —
+# it no longer auto-triggers on PR comments.
 name: Preview Environment - Shop Command
 
 on:
-  issue_comment:
-    types: [created]
+  workflow_dispatch:
 
 jobs:
   dispatch-preview:
     name: Dispatch preview from /preview comment
-    if: github.event.issue.pull_request && github.event.comment.body == '/preview'
+    if: false  # disabled: /preview is now handled by preview-shop-on-comment.yml
     runs-on: ubuntu-latest
     permissions:
       actions: write
