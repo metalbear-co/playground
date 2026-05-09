@@ -268,7 +268,7 @@ jobs:
       - name: Run E2E test
         env:
           SHOP_URL: https://playground.metalbear.dev
-          BAGGAGE_HEADER: mirrord=mirrord-ci-shop
+          BAGGAGE_HEADER: mirrord-session=mirrord-ci-shop
         run: |
           chmod +x apps/shop/order-service/ci/demo_e2e.sh
           ./apps/shop/order-service/ci/demo_e2e.sh

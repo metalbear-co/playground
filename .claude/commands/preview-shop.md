@@ -142,18 +142,18 @@ Follow these steps in order:
    | | |
    |---|---|
    | **Preview URL** | https://playground.metalbear.dev/shop |
-   | **Header** | `baggage: mirrord=<branch-name>` |
+   | **Header** | `baggage: mirrord-session=<branch-name>` |
 
    ### How to Test
 
    **Option 1: mirrord Browser Extension** (Recommended)
    1. Install the mirrord Browser Extension
-   2. Set the header `baggage: mirrord=<branch-name>` for the preview URL
+   2. Set the header `baggage: mirrord-session=<branch-name>` for the preview URL
    3. Navigate to the preview URL - your changes will be served!
 
    **Option 2: curl**
    ```bash
-   curl -H "baggage: mirrord=<branch-name>" https://playground.metalbear.dev/shop
+   curl -H "baggage: mirrord-session=<branch-name>" https://playground.metalbear.dev/shop
    ```
 
    **Option 3: Browser DevTools**
