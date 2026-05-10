@@ -18,7 +18,11 @@ name: Preview Environment - Shop Command
 on:
   issue_comment:
     types: [created]
-  pull_request:
+  # pull_request_target (not pull_request) so the workflow file always comes
+  # from the base branch and the GITHUB_TOKEN has the requested write perms,
+  # regardless of repo Actions settings. Safe here because we never check out
+  # PR code in this workflow.
+  pull_request_target:
     types: [opened, edited, reopened]
 
 concurrency:
@@ -30,7 +34,7 @@ jobs:
     name: Dispatch E2E gate from /preview
     if: |
       (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/preview'))
-      || (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '/preview'))
+      || (github.event_name == 'pull_request_target' && contains(github.event.pull_request.body, '/preview'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -46,13 +50,22 @@ jobs:
             const allowedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
             let pr;
-            let assoc;
-            if (context.eventName === 'pull_request') {
+            let assocCheck;       // true = allowed, false = reject
+            let assocReason = ''; // populated when assocCheck is false
+
+            if (context.eventName === 'pull_request_target') {
+              // Same-repo PRs require push access to create the head branch,
+              // so author_association adds nothing on top of the sameRepo gate.
+              // (pull_request payload reports CONTRIBUTOR for org members,
+              // which would falsely reject legitimate maintainers.)
               pr = context.payload.pull_request;
-              assoc = pr.author_association || 'NONE';
+              assocCheck = true;
             } else {
-              // issue_comment
-              assoc = context.payload.comment.author_association || 'NONE';
+              // issue_comment: anyone can comment, so we still gate on the
+              // commenter's repo role.
+              const assoc = context.payload.comment.author_association || 'NONE';
+              assocCheck = allowedAssociations.has(assoc);
+              if (!assocCheck) assocReason = `commenter-not-allowed:${assoc}`;
               const { data } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -62,14 +75,14 @@ jobs:
             }
 
             const sameRepo = pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;
-            const allowed = sameRepo && allowedAssociations.has(assoc);
+            const allowed = sameRepo && assocCheck;
 
             core.setOutput('allowed', allowed ? 'true' : 'false');
             core.setOutput('branch', pr.head.ref);
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('pr_number', String(pr.number));
             core.setOutput('pr_url', pr.html_url);
-            core.setOutput('reason', !sameRepo ? 'fork-pr-not-supported' : (!allowedAssociations.has(assoc) ? `actor-not-allowed:${assoc}` : 'ok'));
+            core.setOutput('reason', !sameRepo ? 'fork-pr-not-supported' : (!assocCheck ? assocReason : 'ok'));
 
       - name: Acknowledge rejected request
         if: steps.resolve.outputs.allowed != 'true'
