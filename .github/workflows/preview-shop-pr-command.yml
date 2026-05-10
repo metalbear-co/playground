@@ -1,12 +1,15 @@
 # Slash-command entry point for shop previews.
 #
-# This workflow listens for `/preview` PR comments and dispatches the E2E
-# gate workflow (preview-shop-on-comment.yml). It is intentionally lightweight:
-# no checkout of PR code, no execution of PR scripts, no access to the GCP /
-# mirrord secrets. That keeps it CodeQL-clean for `issue_comment` triggers.
+# Listens for `/preview` in two places:
+#   - PR comments (issue_comment: created)
+#   - PR description / body (pull_request: opened, edited, reopened)
+# Both paths validate author + same-repo, then dispatch the E2E gate workflow
+# (preview-shop-on-comment.yml). This file never checks out PR code, never
+# executes PR scripts, and never accesses the GCP / mirrord secrets — that
+# keeps it CodeQL-clean for issue_comment and pull_request triggers.
 #
 # Chain:
-#   PR comment `/preview`
+#   PR comment OR PR body containing `/preview`
 #     → preview-shop-pr-command.yml (this file, validates)
 #       → preview-shop-on-comment.yml (workflow_dispatch, runs E2E gate)
 #         → preview-shop-pr.yml (workflow_dispatch, publishes preview)
@@ -15,11 +18,19 @@ name: Preview Environment - Shop Command
 on:
   issue_comment:
     types: [created]
+  pull_request:
+    types: [opened, edited, reopened]
+
+concurrency:
+  group: preview-shop-command-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   dispatch-gate:
-    name: Dispatch E2E gate from /preview comment
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '/preview')
+    name: Dispatch E2E gate from /preview
+    if: |
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/preview'))
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '/preview'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -33,14 +44,22 @@ jobs:
         with:
           script: |
             const allowedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
-            const assoc = context.payload.comment.author_association || 'NONE';
-            const prNumber = context.payload.issue.number;
 
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
+            let pr;
+            let assoc;
+            if (context.eventName === 'pull_request') {
+              pr = context.payload.pull_request;
+              assoc = pr.author_association || 'NONE';
+            } else {
+              // issue_comment
+              assoc = context.payload.comment.author_association || 'NONE';
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.issue.number,
+              });
+              pr = data;
+            }
 
             const sameRepo = pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;
             const allowed = sameRepo && allowedAssociations.has(assoc);
@@ -50,13 +69,14 @@ jobs:
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('pr_number', String(pr.number));
             core.setOutput('pr_url', pr.html_url);
-            core.setOutput('reason', !sameRepo ? 'fork-pr-not-supported' : (!allowedAssociations.has(assoc) ? `commenter-not-allowed:${assoc}` : 'ok'));
+            core.setOutput('reason', !sameRepo ? 'fork-pr-not-supported' : (!allowedAssociations.has(assoc) ? `actor-not-allowed:${assoc}` : 'ok'));
 
       - name: Acknowledge rejected request
         if: steps.resolve.outputs.allowed != 'true'
         uses: actions/github-script@v7
         env:
           REASON: ${{ steps.resolve.outputs.reason }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
         with:
           script: |
             const body = [
@@ -66,13 +86,13 @@ jobs:
               '',
               'Requirements:',
               '- PR branch must live in this repository, not a fork',
-              '- commenter must be an OWNER, MEMBER, or COLLABORATOR',
+              '- author / commenter must be an OWNER, MEMBER, or COLLABORATOR',
             ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
+              issue_number: Number(process.env.PR_NUMBER),
               body,
             });
 
@@ -103,11 +123,13 @@ jobs:
       - name: Acknowledge accepted request
         if: steps.resolve.outputs.allowed == 'true'
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
         with:
           script: |
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
+              issue_number: Number(process.env.PR_NUMBER),
               body: '/preview accepted. Dispatching `preview-shop-on-comment.yml` (E2E gate) now.',
             });
