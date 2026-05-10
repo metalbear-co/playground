@@ -1,12 +1,7 @@
 # Shop preview workflow with an inline mirrord-ci gate.
 #
-# This file is additive: it does not modify the existing /preview command
-# workflow chain. It listens to PR body changes, runs the E2E gate for changed
-# services that opt in, and starts/stops previews from the same workflow file.
-#
-# NOTE: The repo already has preview-shop-pr-command.yml wired to `/preview`
-# in the PR body. Keeping that file unchanged means both flows can trigger
-# until the older dispatch chain is retired.
+# This workflow runs directly on pull_request instead of pull_request_target so
+# it can safely check out and execute branch code for same-repo PRs.
 name: Preview Environment - Shop (Gated Inline)
 run-name: >-
   Preview Shop Gated -
@@ -17,8 +12,11 @@ run-name: >-
   }}
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, edited, reopened, closed]
+
+permissions:
+  contents: read
 
 concurrency:
   group: preview-shop-gated-${{ github.event.pull_request.number }}
@@ -67,7 +65,7 @@ jobs:
             const branch = pr.head.ref;
             const isSameRepo = pr.head.repo.full_name === sameRepoName;
             const hasPreviewRequest = (pr.body || '').includes('/preview');
-            const previewKey = `pr-${pr.number}`;
+            const previewKey = branch;
 
             const out = {
               should_run: 'false',
@@ -86,13 +84,13 @@ jobs:
               out.services_reason = 'fork-pr-not-supported';
             } else if (action === 'closed') {
               out.should_run = 'true';
-              out.services_reason = 'pull_request_target:closed';
+              out.services_reason = 'pull_request:closed';
             } else if (hasPreviewRequest) {
               out.should_run = 'true';
               out.should_comment = 'true';
-              out.services_reason = 'pull_request_target:preview-requested';
+              out.services_reason = 'pull_request:preview-requested';
             } else {
-              out.services_reason = 'pull_request_target:no-preview-request';
+              out.services_reason = 'pull_request:no-preview-request';
             }
 
             for (const [key, value] of Object.entries(out)) {
@@ -104,6 +102,8 @@ jobs:
     needs: resolve-context
     if: needs.resolve-context.outputs.should_run == 'true' && needs.resolve-context.outputs.mode == 'start'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
@@ -553,6 +553,7 @@ jobs:
     needs: [resolve-context, detect-changes, build-and-preview]
     if: needs.resolve-context.outputs.mode == 'start' && needs.detect-changes.outputs.has_changes == 'true' && needs.build-and-preview.result == 'success' && !cancelled()
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Post preview link to Slack
         uses: slackapi/slack-github-action@v1.27.0
