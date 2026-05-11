@@ -12,7 +12,20 @@
           "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
         }
       },
-      "outgoing": true
+    "db_branches": [
+      {
+        "id": "{{key}}-inventory-db",
+        "type": "pg",
+        "ttl_secs": 30,
+        "version": "16.0",
+        "connection": {
+          "url": "DATABASE_URL"
+        },
+        "copy": {
+          "mode": "all"
+        }
+      }
+    ]
     }
   }
 }

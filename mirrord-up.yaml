@@ -13,3 +13,9 @@ services:
       path: deployment/inventory-service
     run:
        command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"] 
+  delivery-service:
+    target:
+      namespace: shop
+      path: deployment/delivery-service
+    run:
+       command: ["npm", "--prefix", "apps/shop/delivery-service", "run", "dev"]      

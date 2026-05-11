@@ -13,8 +13,24 @@
         "http_filter": {
           "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
         }
+      }
+    },
+    "db_branches": [
+    {
+      "id": "{{key}}-order-db",
+      "type": "pg",
+      "ttl_secs": 30,    
+      "version": "16.0",
+      "connection": {
+        "url": {
+          "type": "env",
+          "variable": "DATABASE_URL"
+        }
       },
-      "outgoing": true
+      "copy": {
+        "mode": "schema"                 
+      }
     }
+  ]
   }
 }
