@@ -1,9 +1,0 @@
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: order-events-pubsub-consumer
-data:
-  # Replace before enabling in a real cluster (or patch via overlay / Argo).
-  GOOGLE_CLOUD_PROJECT: REPLACE_WITH_GCP_PROJECT
-  PUBSUB_SUBSCRIPTION_ID: REPLACE_WITH_SUBSCRIPTION_ID

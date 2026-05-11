@@ -5,7 +5,7 @@ metadata:
   name: order-events-pubsub-consumer
   annotations:
     metalbear.co/note: >-
-      Scale replicas to 1 after replacing ConfigMap placeholders and configuring GCP credentials (Workload Identity recommended).
+      Scale replicas to 1 when using Pub/Sub; ensure topic/subscription exist in GOOGLE_CLOUD_PROJECT and configure GCP credentials (Workload Identity recommended).
 spec:
   replicas: 0
   selector:
@@ -29,15 +29,9 @@ spec:
             - name: PORT
               value: "80"
             - name: GOOGLE_CLOUD_PROJECT
-              valueFrom:
-                configMapKeyRef:
-                  name: order-events-pubsub-consumer
-                  key: GOOGLE_CLOUD_PROJECT
+              value: playground-383912
             - name: PUBSUB_SUBSCRIPTION_ID
-              valueFrom:
-                configMapKeyRef:
-                  name: order-events-pubsub-consumer
-                  key: PUBSUB_SUBSCRIPTION_ID
+              value: metal-mart-order-events-sub
           livenessProbe:
             httpGet:
               path: /health
