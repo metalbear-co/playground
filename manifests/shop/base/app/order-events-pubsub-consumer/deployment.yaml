@@ -5,9 +5,9 @@ metadata:
   name: order-events-pubsub-consumer
   annotations:
     metalbear.co/note: >-
-      Scale replicas to 1 when using Pub/Sub; ensure topic/subscription exist in GOOGLE_CLOUD_PROJECT and configure GCP credentials (Workload Identity recommended).
+      Ensure Pub/Sub topic/subscription exist in GOOGLE_CLOUD_PROJECT; pods need GCP ADC (e.g. GKE Workload Identity).
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: order-events-pubsub-consumer
