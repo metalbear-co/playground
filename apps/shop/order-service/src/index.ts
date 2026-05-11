@@ -13,6 +13,7 @@ import { inventoryUrl } from "./connections.js";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
 import { publishOrderNotification } from "./rabbit.js";
+import { publishOrderEventToPubSub } from "./pubsub.js";
 import * as activities from "./activities.js";
 import { CheckoutWorkflow } from "./workflows/checkout.js";
 
@@ -247,6 +248,15 @@ async function createOrderDirect(
   });
 
   await publishOrderNotification({
+    orderId,
+    status: "confirmed",
+    customer_email: customer_email ?? null,
+    total_cents: totalCents,
+    event: "order_confirmed",
+    baggage,
+  });
+
+  await publishOrderEventToPubSub({
     orderId,
     status: "confirmed",
     customer_email: customer_email ?? null,

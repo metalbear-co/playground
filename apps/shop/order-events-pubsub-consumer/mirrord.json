@@ -1,13 +1,13 @@
 {
   "target": {
-    "namespace": "ip-visit-counter",
+    "namespace": "shop",
     "path": {
-      "deployment": "ip-visit-gcp-pubsub-consumer"
+      "deployment": "order-events-pubsub-consumer"
     }
   },
   "feature": {
     "split_queues": {
-      "ip-pubsub": {
+      "order-pubsub": {
         "queue_type": "GCPPubSub",
         "message_filter": {
           "tenant": "demo-local.*"

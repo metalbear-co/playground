@@ -6,15 +6,16 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 
 - **metal-mart-frontend** (Next.js 16) – Product catalogue, cart, checkout, order tracking
 - **inventory-service** – Products, stock (PostgreSQL)
-- **order-service** – Orders, orchestrates checkout (PostgreSQL, Kafka producer). Whether to use Temporal is controlled only by `USE_TEMPORAL` in `order-service/src/config.ts` (read from env); default is direct checkout. When using Temporal, run `npm run build` before `npm start` so the workflow bundle is pre-built (no webpack at runtime).
+- **order-service** – Orders, orchestrates checkout (PostgreSQL, Kafka producer). Whether to use Temporal is controlled only by `USE_TEMPORAL` in `order-service/src/config.ts` (read from env); default is direct checkout. When using Temporal, run `npm run build` before `npm start` so the workflow bundle is pre-built (no webpack at runtime). Optionally publishes **GCP Pub/Sub** order events when `GOOGLE_CLOUD_PROJECT` and `GCP_ORDER_EVENTS_TOPIC` are set (see `order-service/src/pubsub.ts`).
 - **payment-service** – Mock payment (no external API)
 - **delivery-service** – Kafka consumer, creates deliveries
+- **order-events-pubsub-consumer** – Optional Python subscriber for order events on GCP Pub/Sub (mirrord queue splitting); see `order-events-pubsub-consumer/README.md` and `manifests/shop/base/app/order-events-pubsub-consumer/`
 
 ## Mirrord Demo Features
 
 1. **HTTP Filtering** – Order service uses `baggage: mirrord=<key>` header to route traffic (see `order-service/mirrord.json`)
-2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord=<key>` (see `delivery-service/mirrord.json`)
-3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart)
+2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord=<key>` (see `delivery-service/mirrord.json`). **GCP Pub/Sub** splitting uses `order-events-pubsub-consumer` with the `tenant` message attribute (`demo-local.*`); order-service sets `tenant` from the same `baggage` pattern when Pub/Sub publishing is enabled (see `order-events-pubsub-consumer/mirrord.json` and operator `gcpPubsubSplitting`).
+3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart).
 
 ## Local Development
 

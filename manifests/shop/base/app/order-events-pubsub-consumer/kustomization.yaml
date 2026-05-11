@@ -4,4 +4,5 @@ kind: Kustomization
 resources:
   - configmap.yaml
   - deployment.yaml
+  - svc.yaml
   - workload-queue-registry.yaml

@@ -1,15 +1,15 @@
 # Queue entry key MUST match feature.split_queues in
-# apps/ip-visit/ip-visit-gcp-pubsub-consumer/mirrord.json ("ip-pubsub").
+# apps/shop/order-events-pubsub-consumer/mirrord.json ("order-pubsub").
 apiVersion: queues.mirrord.metalbear.co/v1alpha
 kind: MirrordWorkloadQueueRegistry
 metadata:
-  name: ip-visit-gcp-pubsub-queue-registry
+  name: order-events-pubsub-queue-registry
 spec:
   queues:
-    ip-pubsub:
+    order-pubsub:
       queueType: GCPPubSub
       nameSource:
         envVar: PUBSUB_SUBSCRIPTION_ID
   consumer:
-    name: ip-visit-gcp-pubsub-consumer
+    name: order-events-pubsub-consumer
     workloadType: Deployment

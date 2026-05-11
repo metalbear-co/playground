@@ -1,10 +1,10 @@
-name: Release ip visit GCP Pub/Sub consumer
+name: Release shop order events GCP Pub/Sub consumer
 on:
   push:
     branches: [main]
     paths:
-      - "apps/ip-visit/ip-visit-gcp-pubsub-consumer/**"
-      - ".github/workflows/build-ip-visit-gcp-pubsub-consumer.yaml"
+      - "apps/shop/order-events-pubsub-consumer/**"
+      - ".github/workflows/build-order-events-pubsub-consumer.yaml"
   workflow_dispatch:
 
 jobs:
@@ -30,10 +30,10 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          file: apps/ip-visit/ip-visit-gcp-pubsub-consumer/Dockerfile
+          file: apps/shop/order-events-pubsub-consumer/Dockerfile
           platforms: linux/amd64,linux/arm64
-          context: apps/ip-visit/ip-visit-gcp-pubsub-consumer/
+          context: apps/shop/order-events-pubsub-consumer/
           push: true
           tags: |
-            ghcr.io/metalbear-co/playground-ip-visit-gcp-pubsub-consumer:latest
-            ghcr.io/metalbear-co/playground-ip-visit-gcp-pubsub-consumer:${{ github.sha }}
+            ghcr.io/metalbear-co/playground-order-events-pubsub-consumer:latest
+            ghcr.io/metalbear-co/playground-order-events-pubsub-consumer:${{ github.sha }}

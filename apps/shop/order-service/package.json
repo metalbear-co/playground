@@ -10,8 +10,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "amqplib": "^0.10.4",
     "@aws-sdk/client-sqs": "^3.1006.0",
+    "@google-cloud/pubsub": "^4.11.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.71.0",
     "@opentelemetry/sdk-node": "^0.213.0",
@@ -19,6 +19,7 @@
     "@temporalio/client": "^1.11.0",
     "@temporalio/worker": "^1.11.0",
     "@temporalio/workflow": "^1.11.0",
+    "amqplib": "^0.10.4",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.3",

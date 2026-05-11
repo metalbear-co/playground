@@ -1,5 +1,5 @@
 """
-Pull subscriber for GCP Pub/Sub — mirrors ip-visit-sqs-consumer for mirrord queue splitting demos.
+Pull subscriber for GCP Pub/Sub — MetalMart order events (mirrord queue splitting).
 
 Reads subscription ID from PUBSUB_SUBSCRIPTION_ID and project from GOOGLE_CLOUD_PROJECT
 (or GCP_PROJECT). Uses Application Default Credentials (Workload Identity on GKE, or

@@ -2,6 +2,7 @@ import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { pool, producer, inventoryUrl, sqsClient, sqsQueueUrl } from "./connections.js";
 import { sendOrderToKafka } from "./kafka.js";
 import { publishOrderNotification } from "./rabbit.js";
+import { publishOrderEventToPubSub } from "./pubsub.js";
 
 export type CheckoutInput = {
   items: Array<{ productId: number; quantity: number }>;
@@ -111,6 +112,23 @@ export async function publishOrderNotificationActivity(input: {
   baggage?: string;
 }): Promise<void> {
   await publishOrderNotification({
+    orderId: input.orderId,
+    status: "confirmed",
+    customer_email: input.customer_email ?? null,
+    total_cents: input.total_cents,
+    event: "order_confirmed",
+    baggage: input.baggage,
+  });
+}
+
+/** Async order event to GCP Pub/Sub; optional when GOOGLE_CLOUD_PROJECT + GCP_ORDER_EVENTS_TOPIC unset. */
+export async function publishOrderEventToPubSubActivity(input: {
+  orderId: number;
+  total_cents: number;
+  customer_email?: string;
+  baggage?: string;
+}): Promise<void> {
+  await publishOrderEventToPubSub({
     orderId: input.orderId,
     status: "confirmed",
     customer_email: input.customer_email ?? null,

@@ -6,6 +6,7 @@ namespace: shop
 resources:
   - ./base/app/inventory-service
   - ./base/app/order-service
+  - ./base/app/order-events-pubsub-consumer
   - ./base/app/payment-service
   - ./base/app/delivery-service
   - ./base/app/receipt-service
