@@ -5,4 +5,4 @@ resources:
   - configmap.yaml
   - deployment.yaml
   - svc.yaml
-  - workload-queue-registry.yaml
+  - mirrord-split-config.yaml

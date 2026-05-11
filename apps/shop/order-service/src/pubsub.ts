@@ -1,6 +1,9 @@
 import { PubSub } from "@google-cloud/pubsub";
 
-const projectId = process.env.GOOGLE_CLOUD_PROJECT?.trim() || "";
+const projectId =
+  process.env.GOOGLE_CLOUD_PROJECT?.trim() ||
+  process.env.GCP_PROJECT?.trim() ||
+  "";
 const topicName = process.env.GCP_ORDER_EVENTS_TOPIC?.trim() || "";
 
 export const orderEventsPubSubEnabled = Boolean(projectId && topicName);

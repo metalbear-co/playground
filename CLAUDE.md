@@ -75,4 +75,3 @@ Helper functions: `getPrimaryImageUrl(product)` returns first image, `getImageUr
 | `payment-service` | `apps/shop/payment-service/` | Payment processing |
 | `delivery-service` | `apps/shop/delivery-service/` | Delivery management |
 | `receipt-service` | `apps/shop/receipt-service/` | Receipt generation |
-| `order-events-pubsub-consumer` | `apps/shop/order-events-pubsub-consumer/` | Optional GCP Pub/Sub subscriber for order events (mirrord queue splitting) |

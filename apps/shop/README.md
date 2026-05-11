@@ -9,7 +9,7 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 - **order-service** – Orders, orchestrates checkout (PostgreSQL, Kafka producer). Whether to use Temporal is controlled only by `USE_TEMPORAL` in `order-service/src/config.ts` (read from env); default is direct checkout. When using Temporal, run `npm run build` before `npm start` so the workflow bundle is pre-built (no webpack at runtime). Optionally publishes **GCP Pub/Sub** order events when `GOOGLE_CLOUD_PROJECT` and `GCP_ORDER_EVENTS_TOPIC` are set (see `order-service/src/pubsub.ts`).
 - **payment-service** – Mock payment (no external API)
 - **delivery-service** – Kafka consumer, creates deliveries
-- **order-events-pubsub-consumer** – Optional Python subscriber for order events on GCP Pub/Sub (mirrord queue splitting); see `order-events-pubsub-consumer/README.md` and `manifests/shop/base/app/order-events-pubsub-consumer/`
+- **order-events-pubsub-consumer** – Optional Python subscriber for order events on GCP Pub/Sub (mirrord queue splitting); see `manifests/shop/base/app/order-events-pubsub-consumer/`
 
 ## Mirrord Demo Features
 
