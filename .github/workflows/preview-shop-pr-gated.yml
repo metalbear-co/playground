@@ -6,20 +6,24 @@ name: Preview Environment - Shop (Gated Inline)
 run-name: >-
   Preview Shop Gated -
   ${{
-    github.event.action == 'closed' &&
-    format('stop PR #{0}', github.event.pull_request.number) ||
+    (github.event_name == 'issue_comment' &&
+      format('comment on PR #{0}', github.event.issue.number)) ||
+    (github.event.action == 'closed' &&
+      format('stop PR #{0}', github.event.pull_request.number)) ||
     format('{0} PR #{1}', github.event.action, github.event.pull_request.number)
   }}
 
 on:
   pull_request:
     types: [opened, edited, reopened, closed]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 concurrency:
-  group: preview-shop-gated-${{ github.event.pull_request.number }}
+  group: preview-shop-gated-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
@@ -48,11 +52,9 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const pr = context.payload.pull_request;
-            const action = context.payload.action;
+            const eventName = context.eventName;
             const sameRepoName = `${owner}/${repo}`;
 
-            const trimmed = value => (value || '').trim();
             const sanitizeTag = value => {
               const sanitized = (value || '')
                 .toLowerCase()
@@ -62,35 +64,56 @@ jobs:
               return sanitized || 'preview';
             };
 
-            const branch = pr.head.ref;
-            const isSameRepo = pr.head.repo.full_name === sameRepoName;
-            const hasPreviewRequest = (pr.body || '').includes('/preview');
-            const previewKey = branch;
+            let pr = null;
+            let action = '';
+            let earlyReason = '';
+
+            if (eventName === 'issue_comment') {
+              const issue = context.payload.issue;
+              if (!issue || !issue.pull_request) {
+                earlyReason = 'issue_comment:not-a-pr';
+              } else {
+                const { data } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: issue.number,
+                });
+                pr = data;
+                action = pr.state === 'closed' ? 'closed' : 'comment';
+              }
+            } else {
+              pr = context.payload.pull_request;
+              action = context.payload.action;
+            }
 
             const out = {
               should_run: 'false',
               mode: action === 'closed' ? 'stop' : 'start',
-              branch,
-              base_ref: pr.base.ref,
-              preview_key: previewKey,
-              image_tag_key: sanitizeTag(branch || previewKey),
-              pr_number: String(pr.number),
-              pr_url: pr.html_url,
+              branch: pr ? pr.head.ref : '',
+              base_ref: pr ? pr.base.ref : '',
+              preview_key: pr ? pr.head.ref : '',
+              image_tag_key: pr ? sanitizeTag(pr.head.ref) : 'preview',
+              pr_number: pr ? String(pr.number) : '',
+              pr_url: pr ? pr.html_url : '',
               should_comment: 'false',
-              services_reason: '',
+              services_reason: earlyReason,
             };
 
-            if (!isSameRepo) {
-              out.services_reason = 'fork-pr-not-supported';
-            } else if (action === 'closed') {
-              out.should_run = 'true';
-              out.services_reason = 'pull_request:closed';
-            } else if (hasPreviewRequest) {
-              out.should_run = 'true';
-              out.should_comment = 'true';
-              out.services_reason = 'pull_request:preview-requested';
-            } else {
-              out.services_reason = 'pull_request:no-preview-request';
+            if (pr) {
+              const isSameRepo = pr.head.repo.full_name === sameRepoName;
+              const hasPreviewRequest = (pr.body || '').includes('/preview');
+              if (!isSameRepo) {
+                out.services_reason = `${eventName}:fork-pr-not-supported`;
+              } else if (action === 'closed') {
+                out.should_run = 'true';
+                out.services_reason = `${eventName}:closed`;
+              } else if (hasPreviewRequest) {
+                out.should_run = 'true';
+                out.should_comment = 'true';
+                out.services_reason = `${eventName}:preview-requested`;
+              } else {
+                out.services_reason = `${eventName}:no-preview-request`;
+              }
             }
 
             for (const [key, value] of Object.entries(out)) {
