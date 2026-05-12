@@ -254,24 +254,24 @@ jobs:
           }
           EOF
 
-      - name: Start mirrord ci and run E2E
-        id: gate-run
+      - name: Start mirrord ci session
         if: steps.gate-config.outputs.skip != 'true'
         env:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+          E2E_COMMAND: ${{ matrix.e2e_command }}
+        run: |
+          mirrord ci start --config-file .mirrord-tmp/ci.json -- $E2E_COMMAND
+
+      - name: Run E2E tests
+        id: gate-run
+        if: steps.gate-config.outputs.skip != 'true'
+        env:
           SHOP_URL: https://playground.metalbear.dev
           BAGGAGE_HEADER: mirrord=${{ env.SERVICE_KEY }}
-          E2E_COMMAND: ${{ matrix.e2e_command }}
           E2E_SCRIPT: ${{ matrix.e2e_script }}
         run: |
           chmod +x "$E2E_SCRIPT"
-          mirrord ci start --config-file .mirrord-tmp/ci.json -- bash -c '
-            set -e
-            $E2E_COMMAND &
-            APP_PID=$!
-            trap "kill $APP_PID 2>/dev/null || true" EXIT
-            "$E2E_SCRIPT"
-          '
+          "$E2E_SCRIPT"
 
       - name: Stop mirrord ci session
         if: always() && steps.gate-config.outputs.skip != 'true'
