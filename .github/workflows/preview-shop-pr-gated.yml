@@ -254,6 +254,10 @@ jobs:
           }
           EOF
 
+      - name: Verify mirrord ci config
+        if: steps.gate-config.outputs.skip != 'true'
+        run: mirrord verify-config .mirrord-tmp/ci.json
+
       - name: Start mirrord ci session
         if: steps.gate-config.outputs.skip != 'true'
         env:
@@ -261,6 +265,30 @@ jobs:
           E2E_COMMAND: ${{ matrix.e2e_command }}
         run: |
           mirrord ci start --config-file .mirrord-tmp/ci.json -- $E2E_COMMAND
+
+      - name: Wait for local service to be ready
+        if: steps.gate-config.outputs.skip != 'true'
+        env:
+          READY_MARKER: ${{ matrix.ready_marker }}
+        run: |
+          set -euo pipefail
+          MARKER="${READY_MARKER:-Listening on port}"
+          DEADLINE=$(( $(date +%s) + 120 ))
+          echo "Waiting up to 120s for local service log to contain: $MARKER"
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if grep -RFq "$MARKER" /tmp/mirrord 2>/dev/null; then
+              echo "Local service is ready."
+              grep -RF "$MARKER" /tmp/mirrord || true
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for local service to log: $MARKER"
+          echo "--- mirrord stdout dump ---"
+          for f in $(find /tmp/mirrord -name stdout); do echo "=== $f ==="; cat "$f"; done || true
+          echo "--- mirrord stderr dump ---"
+          for f in $(find /tmp/mirrord -name stderr); do echo "=== $f ==="; cat "$f"; done || true
+          exit 1
 
       - name: Run E2E tests
         id: gate-run
