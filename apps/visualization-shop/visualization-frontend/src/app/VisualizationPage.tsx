@@ -45,6 +45,9 @@ const MIRRORD_NODE_SHADOW = "0px 30px 60px rgba(79, 70, 229, 0.3)";
 /** Static mascot for the mirrord Operator node (`public/mirrord/mirrord-operator-mascot.png`). */
 const MIRRORD_OPERATOR_MASCOT_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/mirrord/mirrord-operator-mascot.png`;
 const MIRRORD_CI_LABEL = "Mirrord CI";
+const MIRRORD_CI_K8S_USERNAMES = new Set([
+  "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
+]);
 const MIRRORD_CI_HOSTNAMES = new Set(["runnervmeorf1"]);
 
 /**
@@ -348,7 +351,7 @@ type OperatorStatusResponse = {
 
 type AgentGroup = {
   targetName: string;
-  owners: { username: string; hostname: string }[];
+  owners: { username: string; k8sUsername?: string; hostname: string }[];
   sessions: OperatorSession[];
   isCopyTarget: boolean;
   scaleDown: boolean;
@@ -565,16 +568,17 @@ const DYNAMIC_LOCAL_SPACING_X =
 const sanitizeHostname = (hostname: string) =>
   hostname.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
 
-const isMirrordCiOwner = (owner: { username?: string; hostname?: string }) =>
+const isMirrordCiOwner = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
+  (owner.k8sUsername !== undefined && MIRRORD_CI_K8S_USERNAMES.has(owner.k8sUsername)) ||
   owner.username === "runner" ||
   (owner.hostname !== undefined && MIRRORD_CI_HOSTNAMES.has(owner.hostname));
 
-const formatMirrordOwnerLabel = (owner: { username?: string; hostname?: string }) =>
+const formatMirrordOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
     ? MIRRORD_CI_LABEL
     : `${owner.username ?? "unknown"} (${owner.hostname ?? "unknown"})`;
 
-const formatMirrordAgentOwnerLabel = (owner: { username?: string; hostname?: string }) =>
+const formatMirrordAgentOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
     ? MIRRORD_CI_LABEL
     : (owner.hostname ?? "unknown");
@@ -1097,6 +1101,7 @@ export default function VisualizationPage() {
       if (!group.owners.some((o) => o.hostname === session.owner.hostname)) {
         group.owners.push({
           username: session.owner.username,
+          k8sUsername: session.owner.k8sUsername,
           hostname: session.owner.hostname,
         });
       }
@@ -1984,7 +1989,11 @@ export default function VisualizationPage() {
   // create per-hostname local machine nodes instead.
   const hasMultipleKafkaTopics = kafkaTopics.length > 1;
 
-  type LocalMachineEntry = { ownerName: string; hostname: string };
+  type LocalMachineEntry = {
+    ownerName: string;
+    k8sUsername?: string;
+    hostname: string;
+  };
 
   const localMachineEntries = useMemo((): LocalMachineEntry[] => {
     if (hasMultipleKafkaTopics) {
@@ -1995,6 +2004,7 @@ export default function VisualizationPage() {
         if (!uniqueByHostname.has(hostname)) {
           uniqueByHostname.set(hostname, {
             ownerName: session?.owner.username ?? "Unknown",
+            k8sUsername: session?.owner.k8sUsername,
             hostname,
           });
         }
@@ -2010,6 +2020,7 @@ export default function VisualizationPage() {
       if (!uniqueHostnames.has(session.owner.hostname)) {
         uniqueHostnames.set(session.owner.hostname, {
           ownerName: session.owner.username,
+          k8sUsername: session.owner.k8sUsername,
           hostname: session.owner.hostname,
         });
       }
@@ -2293,6 +2304,7 @@ export default function VisualizationPage() {
 
     localMachineEntries.forEach((entry, index) => {
       const ownerName = entry.ownerName;
+      const k8sUsername = entry.k8sUsername;
       const hostname = entry.hostname;
       const localId = `dynamic-local-${index}`;
       const layerId = `dynamic-layer-${index}`;
@@ -2309,7 +2321,7 @@ export default function VisualizationPage() {
                 Developer machine
               </span>
               <p className="text-xs leading-snug text-slate-600">
-                {formatMirrordOwnerLabel({ username: ownerName, hostname })}
+                {formatMirrordOwnerLabel({ username: ownerName, k8sUsername, hostname })}
               </p>
             </div>
           ),
