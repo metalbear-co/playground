@@ -635,6 +635,7 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
   const palette = groupPalette[data.group];
   const label = typeof data.label === "string" ? data.label : "";
   const isService = data.group === "service";
+  const isCiRunnerLocal = id === "local-process" && data.ciRunner === true;
   /** Postgres boxes use infra styling but keep the DB viewer action. */
   const showDbViewer =
     data.group === "data" || id.startsWith("postgres-");
@@ -642,11 +643,13 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
     <div
       className="flex h-full w-full flex-col justify-between text-left"
       style={{
-        border: `2px solid ${palette.border}`,
+        border: `2px solid ${isCiRunnerLocal ? "#0D9488" : palette.border}`,
         borderRadius: 18,
-        backgroundColor: palette.background,
+        backgroundColor: isCiRunnerLocal ? "rgba(204, 251, 241, 0.45)" : palette.background,
         color: palette.text,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+        boxShadow: isCiRunnerLocal
+          ? "0px 30px 60px rgba(13,148,136,0.35)"
+          : "0 1px 3px rgba(0,0,0,0.08)",
         padding: isService ? 16 : 14,
       }}
     >
@@ -767,15 +770,16 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
   const isDynamicLayer = id.startsWith("dynamic-layer-");
   const isDynamicPgBranch = id.startsWith("pg-branch-");
   const isDynamicPreview = id.startsWith("preview-");
-  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview;
+  const isDynamicCiRunner = id.startsWith("ci-runner-");
+  const useHighlightBorder = data.highlight || isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || isDynamicCiRunner;
   const isOperator = id === "mirrord-operator";
   /** Static `local-process` or per-session `dynamic-local-*` — styled blue like the Local Machine zone. */
   const isLocalProcess = id === "local-process" || id.startsWith("dynamic-local-");
-  const isCiRunnerAgent = isDynamicAgent && data.ciRunner === true;
+  const isCiRunnerNode = (isDynamicAgent || isLocalProcess) && data.ciRunner === true;
   /** Kafka / SQS / RabbitMQ split-queue topics — same border as infrastructure (not a separate legend color). */
   const isQueueStreamSplitNode =
     isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue;
-  const borderColor = isCiRunnerAgent
+  const borderColor = isCiRunnerNode
     ? "#0D9488"
     : isLocalProcess
       ? "#3B82F6"
@@ -789,6 +793,8 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
               ? palette.border
               : isDynamicPreview
                 ? "#0EA5E9"
+                : isDynamicCiRunner
+                  ? "#0D9488"
                 : palette.border;
   const borderWidth = useHighlightBorder ? 3 : 2;
   const label = info?.label ?? id;
@@ -801,9 +807,13 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
       style={{
         border: `${borderWidth}px solid ${borderColor}`,
         backgroundColor: isLocalProcess
-          ? "rgba(191, 219, 254, 0.45)"
+          ? isCiRunnerNode
+            ? "rgba(204, 251, 241, 0.45)"
+            : "rgba(191, 219, 254, 0.45)"
           : isQueueStreamSplitNode
             ? groupPalette.infra.background
+            : isDynamicCiRunner
+              ? "rgba(204, 251, 241, 0.45)"
             : palette.background,
         color: palette.text,
       }}
@@ -904,7 +914,15 @@ const MirrordNode = ({ id, data }: NodeProps<MirrordNodeType>) => {
           <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
         </>
       )}
-      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || data.focusedCombined) ? (
+      {isDynamicCiRunner && (
+        <>
+          <Handle type="target" position={Position.Left} id={`${id}-target-left`} style={handleStyle} />
+          <Handle type="target" position={Position.Bottom} id={`${id}-target-bottom`} style={handleStyle} />
+          <Handle type="source" position={Position.Right} id={`${id}-source-right`} style={handleStyle} />
+          <Handle type="source" position={Position.Top} id={`${id}-source-top`} style={handleStyle} />
+        </>
+      )}
+      {(isDynamicAgent || isDynamicKafkaTopic || isDynamicSqsQueue || isDynamicRmqQueue || isDynamicLocal || isDynamicLayer || isDynamicPgBranch || isDynamicPreview || isDynamicCiRunner || data.focusedCombined) ? (
         data.label
       ) : isOperator ? (
         <div className="flex items-center gap-2 text-left">
@@ -1020,6 +1038,7 @@ export default function VisualizationPage() {
   const useQueueSplittingMock =
     searchParams.get("queue_splitting") === "true";
   const useDbBranchMock = searchParams.get("db_branch") === "true";
+  const useCiRunnerMock = searchParams.get("ci-runner") === "true";
   const useMultipleSessionMock =
     searchParams.get("multiple_session") === "true";
   const useSharableVisualizationMock =
@@ -1063,6 +1082,18 @@ export default function VisualizationPage() {
   const [focusedSession, setFocusedSession] = useState<FocusedSession | null>(null);
   const [focusedMode, setFocusedMode] = useState<"mirror" | "steal">("mirror");
   const [focusPanelTab, setFocusPanelTab] = useState<"db-branch" | "queue-split" | "mirror" | "steal">("mirror");
+  const shopOperatorSessions = useMemo(
+    () => operatorSessions.filter((s) => s.namespace === "shop"),
+    [operatorSessions],
+  );
+  const ciRunnerSessions = useMemo(
+    () => shopOperatorSessions.filter((s) => isMirrordCiOwner(s.owner)),
+    [shopOperatorSessions],
+  );
+  const localOperatorSessions = useMemo(
+    () => shopOperatorSessions.filter((s) => !isMirrordCiOwner(s.owner)),
+    [shopOperatorSessions],
+  );
 
   // Keep the module-level ref in sync so ArchitectureNode can open the dialog.
   useEffect(() => {
@@ -1073,11 +1104,8 @@ export default function VisualizationPage() {
   // Group operator sessions by target.name, filtering to namespace "shop".
   // Multiple owners targeting the same service share one agent node.
   const agentGroups = useMemo((): AgentGroup[] => {
-    const shopSessions = operatorSessions.filter(
-      (s) => s.namespace === "shop",
-    );
     const map = new Map<string, AgentGroup>();
-    for (const session of shopSessions) {
+    for (const session of shopOperatorSessions) {
       const key = session.target.name;
       if (!map.has(key)) {
         map.set(key, {
@@ -1130,7 +1158,7 @@ export default function VisualizationPage() {
     }
 
     return Array.from(map.values());
-  }, [operatorSessions, previewSessions, aliasIndex]);
+  }, [shopOperatorSessions, previewSessions, aliasIndex]);
 
   // Create one React Flow node per unique target (agent).
   // Sort agent groups so that agents targeting services further left (lower X) in the architecture
@@ -1945,7 +1973,8 @@ export default function VisualizationPage() {
     return replaced;
   }, [rmqQueues]);
 
-  const hasShopSessions = agentGroups.some(g => g.sessions.length > 0);
+  const hasShopSessions = shopOperatorSessions.length > 0;
+  const hasLocalShopSessions = localOperatorSessions.length > 0;
 
   // Set of architecture node IDs whose deployment has been scaled down by a copy target.
   // These nodes should appear "ghosted" and incoming edges should be redirected to the agent.
@@ -2000,6 +2029,7 @@ export default function VisualizationPage() {
       const uniqueByHostname = new Map<string, LocalMachineEntry>();
       for (const topic of kafkaTopics) {
         const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
+        if (!session || isMirrordCiOwner(session.owner)) continue;
         const hostname = session?.owner.hostname ?? "";
         if (!uniqueByHostname.has(hostname)) {
           uniqueByHostname.set(hostname, {
@@ -2015,8 +2045,7 @@ export default function VisualizationPage() {
       return [];
     }
     const uniqueHostnames = new Map<string, LocalMachineEntry>();
-    const shopSessions = operatorSessions.filter((s) => s.namespace === "shop");
-    for (const session of shopSessions) {
+    for (const session of localOperatorSessions) {
       if (!uniqueHostnames.has(session.owner.hostname)) {
         uniqueHostnames.set(session.owner.hostname, {
           ownerName: session.owner.username,
@@ -2029,7 +2058,7 @@ export default function VisualizationPage() {
       return Array.from(uniqueHostnames.values());
     }
     return [];
-  }, [kafkaTopics, operatorSessions, hasMultipleKafkaTopics]);
+  }, [kafkaTopics, operatorSessions, hasMultipleKafkaTopics, localOperatorSessions]);
 
   const hasDynamicLocalMachines = localMachineEntries.length > 1;
 
@@ -2199,13 +2228,14 @@ export default function VisualizationPage() {
           (g) => `agent-${sanitizeHostname(g.targetName)}` === node.id,
         );
         if (group) {
-          const firstSession = group.sessions[0];
-          const ownerHostname = firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
+          const preferredSession =
+            group.sessions.find((s) => !isMirrordCiOwner(s.owner)) ?? group.sessions[0];
+          const ownerHostname = preferredSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
           setFocusedSession({
             targetName: group.targetName,
             agentId: node.id,
             ownerUsername:
-              firstSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
+              preferredSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
             ownerHostname,
           });
           setFocusedMode("mirror");
@@ -2251,13 +2281,14 @@ export default function VisualizationPage() {
         }
         if (group) {
           const agentId = `agent-${sanitizeHostname(group.targetName)}`;
-          const firstSession = group.sessions[0];
-          const ownerHostname = firstSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
+          const preferredSession =
+            group.sessions.find((s) => !isMirrordCiOwner(s.owner)) ?? group.sessions[0];
+          const ownerHostname = preferredSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
           setFocusedSession({
             targetName: group.targetName,
             agentId,
             ownerUsername:
-              firstSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
+              preferredSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
             ownerHostname,
           });
           setFocusedMode("mirror");
@@ -2306,6 +2337,11 @@ export default function VisualizationPage() {
       const ownerName = entry.ownerName;
       const k8sUsername = entry.k8sUsername;
       const hostname = entry.hostname;
+      const isCiRunnerLocal = isMirrordCiOwner({
+        username: ownerName,
+        k8sUsername,
+        hostname,
+      });
       const localId = `dynamic-local-${index}`;
       const layerId = `dynamic-layer-${index}`;
 
@@ -2314,11 +2350,14 @@ export default function VisualizationPage() {
         type: "mirrord",
         data: {
           group: "mirrord" as const,
+          ciRunner: isCiRunnerLocal,
           label: (
             <div className="flex flex-col gap-1 text-left">
-              <span className="text-sm font-semibold text-slate-900">Local process</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {isCiRunnerLocal ? "CI Runner" : "Local process"}
+              </span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Developer machine
+                {isCiRunnerLocal ? "Mirrord session" : "Developer machine"}
               </span>
               <p className="text-xs leading-snug text-slate-600">
                 {formatMirrordOwnerLabel({ username: ownerName, k8sUsername, hostname })}
@@ -2330,7 +2369,12 @@ export default function VisualizationPage() {
           x: localProcessBasePos.x + index * DYNAMIC_LOCAL_SPACING_X,
           y: localProcessBasePos.y,
         },
-        style: sharedStyle,
+        style: {
+          ...sharedStyle,
+          boxShadow: isCiRunnerLocal
+            ? "0px 30px 60px rgba(13,148,136,0.35)"
+            : MIRRORD_NODE_SHADOW,
+        },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         connectable: false,
@@ -2443,6 +2487,11 @@ export default function VisualizationPage() {
       if (!localNode || !layerNode) return;
 
       const ownerName = entry.ownerName;
+      const isCiRunnerLocal = isMirrordCiOwner({
+        username: entry.ownerName,
+        k8sUsername: entry.k8sUsername,
+        hostname: entry.hostname,
+      });
 
       const minX = Math.min(localNode.position.x, layerNode.position.x);
       const minY = Math.min(localNode.position.y, layerNode.position.y);
@@ -2459,11 +2508,13 @@ export default function VisualizationPage() {
           y: minY - padding,
         },
         data: {
-          label: `Local Machine – ${ownerName}`,
-          description: "Developer laptop running the binary with mirrord-layer inserted.",
-          background: "rgba(191, 219, 254, 0.4)",
-          border: "#60A5FA",
-          accent: "#3B82F6",
+          label: isCiRunnerLocal ? "CI Runner" : `Local Machine – ${ownerName}`,
+          description: isCiRunnerLocal
+            ? "GitHub Actions runner executing the binary with mirrord CI attached."
+            : "Developer laptop running the binary with mirrord-layer inserted.",
+          background: isCiRunnerLocal ? "rgba(204, 251, 241, 0.4)" : "rgba(191, 219, 254, 0.4)",
+          border: isCiRunnerLocal ? "#0D9488" : "#60A5FA",
+          accent: isCiRunnerLocal ? "#0D9488" : "#3B82F6",
           zoneWidth,
           zoneHeight,
         },
@@ -2480,6 +2531,63 @@ export default function VisualizationPage() {
 
     return zones;
   }, [localMachineEntries, dynamicLocalMachineNodes, hasDynamicLocalMachines]);
+
+  const ciRunnerNodes = useMemo((): Node<NodeData>[] => {
+    if (ciRunnerSessions.length === 0) return [];
+    const palette = groupPalette.mirrord;
+    const operatorPos = adjustedNodes.find((n) => n.id === "mirrord-operator")?.position ?? { x: 0, y: 0 };
+    const operatorShiftedY = operatorPos.y + (sortedAgentGroups.length > 0
+      ? (sortedAgentGroups.length - 1) * DYNAMIC_AGENT_SPACING_Y
+      : 0);
+
+    return ciRunnerSessions.map((session, index) => {
+      const nodeId = `ci-runner-${sanitizeHostname(session.sessionId)}`;
+      const position = dynamicNodePositions.get(nodeId) ?? {
+        x: operatorPos.x - nodeWidth - 200,
+        y: operatorShiftedY - ((ciRunnerSessions.length - index) * (nodeHeight + 40)),
+      };
+
+      return {
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-bold text-slate-900">
+                CI Runner
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {session.target.name}
+              </span>
+              {session.branchName && (
+                <p className="break-all text-[11px] text-slate-500">
+                  {session.branchName}
+                </p>
+              )}
+              <p className="text-[11px] font-medium text-[#0D9488]">
+                {formatMirrordOwnerLabel(session.owner)}
+              </p>
+            </div>
+          ),
+        },
+        position,
+        style: {
+          borderRadius: 18,
+          backgroundColor: "transparent",
+          color: palette.text,
+          boxShadow: "0px 30px 60px rgba(13,148,136,0.25)",
+          width: nodeWidth,
+          zIndex: 10,
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      };
+    });
+  }, [ciRunnerSessions, adjustedNodes, sortedAgentGroups, dynamicNodePositions]);
 
   // Build dynamic nodes for PgBranchDatabase resources.
   // Each branch is positioned to the right of its target deployment's postgres data node.
@@ -2815,6 +2923,39 @@ export default function VisualizationPage() {
     return edges;
   }, [previewSessions]);
 
+  const ciRunnerEdges = useMemo((): Edge[] => {
+    if (ciRunnerSessions.length === 0) return [];
+    const mirroredStyle = intentStyles.mirrored;
+    const edgeLabelDefaults = {
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 10,
+      labelShowBg: true,
+      labelBgStyle: { fill: "#FFFFFF" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+    };
+
+    return ciRunnerSessions.map((session) => {
+      const nodeId = `ci-runner-${sanitizeHostname(session.sessionId)}`;
+      return {
+        id: `${nodeId}-to-operator`,
+        source: nodeId,
+        target: "mirrord-operator",
+        label: "CI Runner",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-right`,
+        targetHandle: "operator-target-left",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: {
+          stroke: "#0D9488",
+          strokeWidth: 2.75,
+          strokeDasharray: mirroredStyle.dash,
+        },
+        ...edgeLabelDefaults,
+      } satisfies Edge;
+    });
+  }, [ciRunnerSessions]);
+
   // Combine static edges with dynamic agent edges and kafka edges.
   // When multiple kafka topics exist, static local-to-layer and layer-to-agent are replaced
   // by per-topic dynamic local edges.
@@ -2828,7 +2969,7 @@ export default function VisualizationPage() {
       // Hide static local edges when dynamic local machines replace them
       if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) continue;
       if (edge.id === "local-to-layer" || edge.id === "layer-to-agent") {
-        if (!hasShopSessions) continue;
+        if (!hasLocalShopSessions) continue;
         // These edges pass through — skip the SESSION_NODE_IDS filter below
         staticEdges.push(edge);
         continue;
@@ -2854,13 +2995,13 @@ export default function VisualizationPage() {
       if (scaleDownTargets.has(edge.source)) continue;
       staticEdges.push(edge);
     }
-    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...rmqQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, rmqQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, hasShopSessions, kafkaReplacedEdges, sqsReplacedEdges, rmqReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
+    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...rmqQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges, ...ciRunnerEdges];
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, rmqQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, ciRunnerEdges, hasLocalShopSessions, kafkaReplacedEdges, sqsReplacedEdges, rmqReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
     if (!clusterZoneNode) return null;
-    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
+    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0 && ciRunnerNodes.length === 0) return clusterZoneNode;
 
     // Apply operator bottom-shift so cluster zone encompasses the shifted operator position
     const opBottomShift = sortedAgentGroups.length > 0
@@ -2875,7 +3016,7 @@ export default function VisualizationPage() {
       }
       return n;
     });
-    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...pgBranchNodes, ...previewSessionNodes];
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...pgBranchNodes, ...previewSessionNodes, ...ciRunnerNodes];
     const padding = 48;
     const xs = allClusterNodes.map((n) => n.position.x);
     const ys = allClusterNodes.map((n) => n.position.y);
@@ -2909,7 +3050,7 @@ export default function VisualizationPage() {
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, sortedAgentGroups]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, ciRunnerNodes, previewSessionZoneNodes, sortedAgentGroups]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -2940,10 +3081,10 @@ export default function VisualizationPage() {
         },
       }));
       nodes.push(...shiftedDynamicLocalZones);
-    } else if (localZoneNode) {
+    } else if (localZoneNode && hasLocalShopSessions) {
       // When a single session exists, append the owner's name to the zone label
       const singleShopSession = !hasDynamicLocalMachines
-        ? operatorSessions.find((s) => s.namespace === "shop")
+        ? localOperatorSessions[0]
         : undefined;
       const shifted = {
         ...localZoneNode,
@@ -2970,9 +3111,15 @@ export default function VisualizationPage() {
     // Resolve owner info for single-session local-process node
     const singleSessionOwner = (() => {
       if (hasDynamicLocalMachines) return undefined;
-      const session = operatorSessions.find((s) => s.namespace === "shop");
+      const session = localOperatorSessions[0];
       if (!session) return undefined;
       return formatMirrordOwnerLabel(session.owner);
+    })();
+    const singleSessionIsCiRunner = (() => {
+      if (hasDynamicLocalMachines) return false;
+      const session = localOperatorSessions[0];
+      if (!session) return false;
+      return isMirrordCiOwner(session.owner);
     })();
 
     const shiftedArchNodes = visibleArchitectureNodes
@@ -2980,8 +3127,9 @@ export default function VisualizationPage() {
         if (hasDynamicLocalMachines && (node.id === "local-process" || node.id === "mirrord-layer")) {
           return false;
         }
-        // Hide mirrord-layer when no shop sessions exist
-        if (node.id === "mirrord-layer" && !hasShopSessions) return false;
+        if ((node.id === "local-process" || node.id === "mirrord-layer") && !hasLocalShopSessions) {
+          return false;
+        }
         return true;
       })
       .map((node) => {
@@ -2991,7 +3139,13 @@ export default function VisualizationPage() {
         if (mapped.id === "local-process" && singleSessionOwner) {
           mapped = {
             ...mapped,
-            data: { ...mapped.data, description: singleSessionOwner },
+            data: {
+              ...mapped.data,
+              label: singleSessionIsCiRunner ? MIRRORD_CI_LABEL : mapped.data.label,
+              stack: singleSessionIsCiRunner ? "CI Runner" : mapped.data.stack,
+              description: singleSessionOwner,
+              ciRunner: singleSessionIsCiRunner,
+            },
           };
         }
         // Push operator to the bottom, aligned with the last agent
@@ -3043,8 +3197,9 @@ export default function VisualizationPage() {
       }));
       nodes.push(...shiftedDynamicLocalNodes);
     }
+    nodes.push(...ciRunnerNodes);
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, operatorSessions]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasLocalShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, localOperatorSessions, ciRunnerNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -3055,6 +3210,7 @@ export default function VisualizationPage() {
   const mockQueryString = useMemo(() => {
     const params = new URLSearchParams();
     if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
+    else if (useCiRunnerMock) params.set("ciRunnerMock", "true");
     else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
     else if (useSharableVisualizationMock)
       params.set("sharableVisualizationMock", "true");
@@ -3063,6 +3219,7 @@ export default function VisualizationPage() {
     return str ? `?${str}` : "";
   }, [
     useQueueSplittingMock,
+    useCiRunnerMock,
     useDbBranchMock,
     useMultipleSessionMock,
     useSharableVisualizationMock,
@@ -3091,6 +3248,7 @@ export default function VisualizationPage() {
         const params = new URLSearchParams();
         if (options?.forceRefresh) params.set("refresh", "1");
         if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
+        else if (useCiRunnerMock) params.set("ciRunnerMock", "true");
         else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
         else if (useSharableVisualizationMock)
           params.set("sharableVisualizationMock", "true");
@@ -3126,6 +3284,7 @@ export default function VisualizationPage() {
     [
       snapshotUrl,
       useMultipleSessionMock,
+      useCiRunnerMock,
       useQueueSplittingMock,
       useSharableVisualizationMock,
       useDbBranchMock,
@@ -3207,7 +3366,7 @@ export default function VisualizationPage() {
         if ("id" in change && change.id.startsWith("zone-")) continue;
         const isDynamic =
           "id" in change &&
-          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("sqs-queue-") || change.id.startsWith("sqs-deployed-queue-") || change.id.startsWith("rmq-queue-") || change.id.startsWith("rmq-deployed-queue-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-"));
+          (change.id.startsWith("agent-") || change.id.startsWith("kafka-topic-") || change.id.startsWith("kafka-deployed-topic-") || change.id.startsWith("sqs-queue-") || change.id.startsWith("sqs-deployed-queue-") || change.id.startsWith("rmq-queue-") || change.id.startsWith("rmq-deployed-queue-") || change.id.startsWith("dynamic-local-") || change.id.startsWith("dynamic-layer-") || change.id.startsWith("pg-branch-") || change.id.startsWith("preview-") || change.id.startsWith("ci-runner-"));
         if (
           isDynamic &&
           change.type === "position" &&
@@ -3268,26 +3427,26 @@ export default function VisualizationPage() {
     );
   }, []);
 
-  // When shop-namespace sessions are active, add highlight (glow) to local-process and mirrord-layer.
-  // mirrord-layer is hidden when no shop sessions exist.
+  // When local shop sessions are active, add highlight (glow) to local-process and mirrord-layer.
+  // mirrord-layer is hidden when no local shop sessions exist.
   useEffect(() => {
     setArchitectureNodesState((nodes) =>
       nodes.map((node) => {
         if (node.id === "local-process" || node.id === "mirrord-layer") {
           const baseStyle = { ...(originalNodeStyles.get(node.id) ?? {}) };
-          const styleWithGlow = hasShopSessions
+          const styleWithGlow = hasLocalShopSessions
             ? {
                 ...baseStyle,
                 opacity: 1,
                 boxShadow: MIRRORD_NODE_SHADOW,
               }
             : { ...baseStyle, opacity: 1 };
-          const dataWithHighlight = hasShopSessions
+          const dataWithHighlight = hasLocalShopSessions
             ? { ...node.data, highlight: true as const }
             : { ...node.data, highlight: undefined };
           return {
             ...node,
-            hidden: node.id === "mirrord-layer" ? !hasShopSessions : false,
+            hidden: node.id === "mirrord-layer" ? !hasLocalShopSessions : false,
             style: styleWithGlow,
             data: dataWithHighlight,
           };
@@ -3295,7 +3454,7 @@ export default function VisualizationPage() {
         return node;
       }),
     );
-  }, [hasShopSessions]);
+  }, [hasLocalShopSessions]);
 
   // Auto-close the focused view when its session disappears.
   useEffect(() => {

@@ -152,7 +152,8 @@ app.get(snapshotPaths, async (req, res) => {
   if (
     req.query.queueSplittingMock === "true" ||
     req.query.multipleSessionMock === "true" ||
-    req.query.dbBranchMock === "true"
+    req.query.dbBranchMock === "true" ||
+    req.query.ciRunnerMock === "true"
   ) {
     res.json(mockSnapshot);
     return;
@@ -734,8 +735,17 @@ app.get(operatorStatusPaths, async (req, res) => {
   const requestUseMock = req.query.queueSplittingMock === "true";
   const requestUseDbBranchMock = req.query.dbBranchMock === "true";
   const requestUseMultipleSessionMock = req.query.multipleSessionMock === "true";
+  const requestUseCiRunnerMock = req.query.ciRunnerMock === "true";
   const requestUseSharableVisualizationMock =
     req.query.sharableVisualizationMock === "true";
+  if (requestUseCiRunnerMock) {
+    const response: OperatorStatusResponse = {
+      ...mockCiRunnerOperatorStatus,
+      fetchedAt: new Date().toISOString(),
+    };
+    res.json(response);
+    return;
+  }
   if (requestUseMultipleSessionMock) {
     const response: OperatorStatusResponse = {
       ...mockMultipleSessionsOperatorStatus,
@@ -1276,6 +1286,56 @@ const mockMultipleSessionsOperatorStatus: OperatorStatusResponse = {
     },
   ],
   fetchedAt: new Date().toISOString(),
+};
+
+const mockCiRunnerOperatorStatus: OperatorStatusResponse = {
+  sessions: [
+    {
+      sessionId: "53d05e61363b6bdb",
+      target: {
+        kind: "Deployment",
+        name: "order-service",
+        container: "main",
+        apiVersion: "apps/v1",
+      },
+      namespace: "shop",
+      owner: {
+        username: "unknown",
+        k8sUsername: "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
+        hostname: "runnervmeorf1",
+      },
+      branchName: "testing-ci",
+      createdAt: "2026-05-13T04:28:36Z",
+      connectedAt: "2026-05-13T04:28:45.010350Z",
+      durationSeconds: 12,
+    },
+    {
+      sessionId: "cc8ec0440518d57a",
+      target: {
+        kind: "Deployment",
+        name: "order-service",
+        container: "main",
+        apiVersion: "apps/v1",
+      },
+      namespace: "shop",
+      owner: {
+        username: "Ari Sprung",
+        k8sUsername: "aris@metalbear.com",
+        hostname: "Aris-MacBook-Pro.local",
+      },
+      branchName: "visual-ci-runner",
+      createdAt: "2026-05-13T04:27:16Z",
+      connectedAt: "2026-05-13T04:27:25.006619Z",
+      durationSeconds: 92,
+    },
+  ],
+  sessionCount: 2,
+  kafkaTopics: [],
+  sqsQueues: [],
+  rmqQueues: [],
+  pgBranches: [],
+  previewSessions: [],
+  fetchedAt: "2026-05-13T04:28:48.139Z",
 };
 
 const mockDbBranchSession: OperatorSession = {
