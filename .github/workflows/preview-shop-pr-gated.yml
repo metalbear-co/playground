@@ -1,7 +1,8 @@
 # Shop preview workflow with an inline mirrord-ci gate.
 #
 # This workflow runs directly on pull_request instead of pull_request_target so
-# it can safely check out and execute branch code for same-repo PRs.
+# it can safely check out and execute branch code for same-repo PRs. Preview
+# creation is gated by a `preview` label on same-repo PRs.
 name: Preview Environment - Shop (Gated Inline)
 run-name: >-
   Preview Shop Gated -
@@ -13,7 +14,7 @@ run-name: >-
 
 on:
   pull_request:
-    types: [opened, edited, reopened, closed]
+    types: [opened, reopened, synchronize, labeled, unlabeled, closed]
 
 permissions:
   contents: read
@@ -64,12 +65,15 @@ jobs:
 
             const branch = pr.head.ref;
             const isSameRepo = pr.head.repo.full_name === sameRepoName;
-            const hasPreviewRequest = (pr.body || '').includes('/preview');
+            const labels = (pr.labels || []).map(label => label.name);
+            const hasPreviewLabel = labels.includes('preview');
+            const changedLabel = context.payload.label?.name || '';
+            const isPreviewLabelEvent = changedLabel === 'preview';
             const previewKey = branch;
 
             const out = {
               should_run: 'false',
-              mode: action === 'closed' ? 'stop' : 'start',
+              mode: (action === 'closed' || (action === 'unlabeled' && isPreviewLabelEvent)) ? 'stop' : 'start',
               branch,
               base_ref: pr.base.ref,
               preview_key: previewKey,
@@ -85,12 +89,19 @@ jobs:
             } else if (action === 'closed') {
               out.should_run = 'true';
               out.services_reason = 'pull_request:closed';
-            } else if (hasPreviewRequest) {
+            } else if (action === 'unlabeled' && isPreviewLabelEvent) {
+              out.should_run = 'true';
+              out.services_reason = 'pull_request:preview-label-removed';
+            } else if (action === 'labeled' && isPreviewLabelEvent) {
               out.should_run = 'true';
               out.should_comment = 'true';
-              out.services_reason = 'pull_request:preview-requested';
+              out.services_reason = 'pull_request:preview-label-added';
+            } else if (hasPreviewLabel) {
+              out.should_run = 'true';
+              out.should_comment = 'true';
+              out.services_reason = `pull_request:${action}-with-preview-label`;
             } else {
-              out.services_reason = 'pull_request:no-preview-request';
+              out.services_reason = `pull_request:${action}-without-preview-label`;
             }
 
             for (const [key, value] of Object.entries(out)) {
