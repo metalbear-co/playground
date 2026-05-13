@@ -44,6 +44,11 @@ const MIRRORD_PLANE_BORDER = groupPalette.mirrord.border;
 const MIRRORD_NODE_SHADOW = "0px 30px 60px rgba(79, 70, 229, 0.3)";
 /** Static mascot for the mirrord Operator node (`public/mirrord/mirrord-operator-mascot.png`). */
 const MIRRORD_OPERATOR_MASCOT_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/mirrord/mirrord-operator-mascot.png`;
+const MIRRORD_CI_LABEL = "Mirrord CI";
+const MIRRORD_CI_K8S_USERNAMES = new Set([
+  "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
+]);
+const MIRRORD_CI_HOSTNAMES = new Set(["runnervmeorf1"]);
 
 /**
  * Custom data payload carried by each React Flow node rendered in the visualization.
@@ -346,7 +351,7 @@ type OperatorStatusResponse = {
 
 type AgentGroup = {
   targetName: string;
-  owners: { username: string; hostname: string }[];
+  owners: { username: string; k8sUsername?: string; hostname: string }[];
   sessions: OperatorSession[];
   isCopyTarget: boolean;
   scaleDown: boolean;
@@ -562,6 +567,21 @@ const DYNAMIC_LOCAL_SPACING_X =
 
 const sanitizeHostname = (hostname: string) =>
   hostname.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
+
+const isMirrordCiOwner = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
+  (owner.k8sUsername !== undefined && MIRRORD_CI_K8S_USERNAMES.has(owner.k8sUsername)) ||
+  owner.username === "runner" ||
+  (owner.hostname !== undefined && MIRRORD_CI_HOSTNAMES.has(owner.hostname));
+
+const formatMirrordOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
+  isMirrordCiOwner(owner)
+    ? MIRRORD_CI_LABEL
+    : `${owner.username ?? "unknown"} (${owner.hostname ?? "unknown"})`;
+
+const formatMirrordAgentOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
+  isMirrordCiOwner(owner)
+    ? MIRRORD_CI_LABEL
+    : (owner.hostname ?? "unknown");
 
 /**
  * Build an index of possible string aliases for each architecture node so snapshot targets can be
@@ -1081,6 +1101,7 @@ export default function VisualizationPage() {
       if (!group.owners.some((o) => o.hostname === session.owner.hostname)) {
         group.owners.push({
           username: session.owner.username,
+          k8sUsername: session.owner.k8sUsername,
           hostname: session.owner.hostname,
         });
       }
@@ -1132,7 +1153,7 @@ export default function VisualizationPage() {
     const palette = groupPalette.mirrord;
     return sortedAgentGroups.map((group, index) => {
       const agentId = `agent-${sanitizeHostname(group.targetName)}`;
-      const isCiRunner = group.owners.length > 0 && group.owners.every((o) => o.username === "runner");
+      const isCiRunner = group.owners.length > 0 && group.owners.every(isMirrordCiOwner);
       const isCopy = group.isCopyTarget;
       const copyLabel = isCopy && group.originalDeployment
         ? `Copy of ${group.originalDeployment}`
@@ -1166,7 +1187,7 @@ export default function VisualizationPage() {
                 )}
                 {group.owners.map((owner) => (
                   <p key={owner.hostname} className="text-xs leading-snug text-[#3730A3] font-semibold">
-                    {owner.username === "runner" ? "mirrord CI" : owner.hostname}
+                    {formatMirrordAgentOwnerLabel(owner)}
                   </p>
                 ))}
                 {group.previewEnvKeys.length > 0 && (
@@ -1968,7 +1989,11 @@ export default function VisualizationPage() {
   // create per-hostname local machine nodes instead.
   const hasMultipleKafkaTopics = kafkaTopics.length > 1;
 
-  type LocalMachineEntry = { ownerName: string; hostname: string };
+  type LocalMachineEntry = {
+    ownerName: string;
+    k8sUsername?: string;
+    hostname: string;
+  };
 
   const localMachineEntries = useMemo((): LocalMachineEntry[] => {
     if (hasMultipleKafkaTopics) {
@@ -1979,6 +2004,7 @@ export default function VisualizationPage() {
         if (!uniqueByHostname.has(hostname)) {
           uniqueByHostname.set(hostname, {
             ownerName: session?.owner.username ?? "Unknown",
+            k8sUsername: session?.owner.k8sUsername,
             hostname,
           });
         }
@@ -1994,6 +2020,7 @@ export default function VisualizationPage() {
       if (!uniqueHostnames.has(session.owner.hostname)) {
         uniqueHostnames.set(session.owner.hostname, {
           ownerName: session.owner.username,
+          k8sUsername: session.owner.k8sUsername,
           hostname: session.owner.hostname,
         });
       }
@@ -2277,6 +2304,7 @@ export default function VisualizationPage() {
 
     localMachineEntries.forEach((entry, index) => {
       const ownerName = entry.ownerName;
+      const k8sUsername = entry.k8sUsername;
       const hostname = entry.hostname;
       const localId = `dynamic-local-${index}`;
       const layerId = `dynamic-layer-${index}`;
@@ -2293,7 +2321,7 @@ export default function VisualizationPage() {
                 Developer machine
               </span>
               <p className="text-xs leading-snug text-slate-600">
-                {ownerName === "runner" ? "mirrord CI" : `${ownerName} (${hostname})`}
+                {formatMirrordOwnerLabel({ username: ownerName, k8sUsername, hostname })}
               </p>
             </div>
           ),
@@ -2498,7 +2526,7 @@ export default function VisualizationPage() {
                 </p>
                 {branch.owners.map((owner) => (
                   <p key={owner.hostname} className="text-[11px] text-slate-500">
-                    {owner.username === "runner" ? "mirrord CI" : `${owner.username} (${owner.hostname})`}
+                    {formatMirrordOwnerLabel(owner)}
                   </p>
                 ))}
                 <button
@@ -2944,10 +2972,7 @@ export default function VisualizationPage() {
       if (hasDynamicLocalMachines) return undefined;
       const session = operatorSessions.find((s) => s.namespace === "shop");
       if (!session) return undefined;
-      const owner = session.owner;
-      return owner.username === "runner"
-        ? "mirrord CI"
-        : `${owner.username} (${owner.hostname})`;
+      return formatMirrordOwnerLabel(session.owner);
     })();
 
     const shiftedArchNodes = visibleArchitectureNodes
