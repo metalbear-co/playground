@@ -1,19 +1,22 @@
 {
-  "key": "{{ get_env(name='USER', default='changeme') }}",
-   "target": {
-    "namespace": "shop",
-    "path": {
-      "deployment": "order-service"
-    }
+  "key": "kiran",
+  "target": {
+    "path": "deployment/equipment-query",
+    "namespace": "minerva"
   },
   "feature": {
+    "env": {
+      "include": "*"
+    },
     "network": {
       "incoming": {
         "mode": "steal",
         "http_filter": {
           "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
-        }
-      }
+        },
+        "port_mapping": [[8085, 8080]]
+      },
+      "outgoing": true
     }
   }
 }
