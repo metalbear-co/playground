@@ -1,0 +1,649 @@
+# Shop preview workflow with an inline mirrord-ci gate.
+#
+# This workflow runs directly on pull_request instead of pull_request_target so
+# it can safely check out and execute branch code for same-repo PRs. Preview
+# creation is gated by a `preview` label on same-repo PRs.
+name: Preview Environment - Shop (Gated Inline)
+run-name: >-
+  Preview Shop Gated -
+  ${{
+    github.event.action == 'closed' &&
+    format('stop PR #{0}', github.event.pull_request.number) ||
+    format('{0} PR #{1}', github.event.action, github.event.pull_request.number)
+  }}
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-shop-gated-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-context:
+    name: Resolve trigger context
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      mode: ${{ steps.resolve.outputs.mode }}
+      branch: ${{ steps.resolve.outputs.branch }}
+      base_ref: ${{ steps.resolve.outputs.base_ref }}
+      preview_key: ${{ steps.resolve.outputs.preview_key }}
+      image_tag_key: ${{ steps.resolve.outputs.image_tag_key }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      pr_url: ${{ steps.resolve.outputs.pr_url }}
+      should_comment: ${{ steps.resolve.outputs.should_comment }}
+      services_reason: ${{ steps.resolve.outputs.services_reason }}
+    steps:
+      - name: Resolve PR event into shared outputs
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            const action = context.payload.action;
+            const sameRepoName = `${owner}/${repo}`;
+
+            const trimmed = value => (value || '').trim();
+            const sanitizeTag = value => {
+              const sanitized = (value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9._-]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 60);
+              return sanitized || 'preview';
+            };
+
+            const branch = pr.head.ref;
+            const isSameRepo = pr.head.repo.full_name === sameRepoName;
+            const labels = (pr.labels || []).map(label => label.name);
+            const hasPreviewLabel = labels.includes('preview');
+            const changedLabel = context.payload.label?.name || '';
+            const isPreviewLabelEvent = changedLabel === 'preview';
+            const previewKey = branch;
+
+            const out = {
+              should_run: 'false',
+              mode: (action === 'closed' || (action === 'unlabeled' && isPreviewLabelEvent)) ? 'stop' : 'start',
+              branch,
+              base_ref: pr.base.ref,
+              preview_key: previewKey,
+              image_tag_key: sanitizeTag(branch || previewKey),
+              pr_number: String(pr.number),
+              pr_url: pr.html_url,
+              should_comment: 'false',
+              services_reason: '',
+            };
+
+            if (!isSameRepo) {
+              out.services_reason = 'fork-pr-not-supported';
+            } else if (action === 'closed') {
+              out.should_run = 'true';
+              out.services_reason = 'pull_request:closed';
+            } else if (action === 'unlabeled' && isPreviewLabelEvent) {
+              out.should_run = 'true';
+              out.services_reason = 'pull_request:preview-label-removed';
+            } else if (action === 'labeled' && isPreviewLabelEvent) {
+              out.should_run = 'true';
+              out.should_comment = 'true';
+              out.services_reason = 'pull_request:preview-label-added';
+            } else if (hasPreviewLabel) {
+              out.should_run = 'true';
+              out.should_comment = 'true';
+              out.services_reason = `pull_request:${action}-with-preview-label`;
+            } else {
+              out.services_reason = `pull_request:${action}-without-preview-label`;
+            }
+
+            for (const [key, value] of Object.entries(out)) {
+              core.setOutput(key, value);
+            }
+
+  detect-changes:
+    name: Detect changed services
+    needs: resolve-context
+    if: needs.resolve-context.outputs.should_run == 'true' && needs.resolve-context.outputs.mode == 'start'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+      has_changes: ${{ steps.build-matrix.outputs.has_changes }}
+      services_list: ${{ steps.build-matrix.outputs.services_list }}
+      head_sha: ${{ steps.build-matrix.outputs.head_sha }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.resolve-context.outputs.branch }}
+
+      - name: Detect changed services via git diff
+        id: build-matrix
+        env:
+          BASE_REF: ${{ needs.resolve-context.outputs.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
+          CHANGED_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          CHANGES='[]'
+          for path in $(jq -r '.services[].path' .github/preview-services.json); do
+            name=$(jq -r --arg p "$path" '.services[] | select(.path == $p) | .name' .github/preview-services.json)
+            if echo "$CHANGED_FILES" | grep -q "^${path}/"; then
+              CHANGES=$(echo "$CHANGES" | jq -c --arg n "$name" '. + [$n]')
+            fi
+          done
+          MATRIX=$(jq -c --argjson changes "$CHANGES" \
+            '{include: [.services[] | select(.name as $n | $changes | index($n))]}' \
+            .github/preview-services.json)
+          SERVICES_LIST=$(jq -r --argjson changes "$CHANGES" \
+            '[.services[] | select(.name as $n | $changes | index($n)) | .name] | join(", ")' \
+            .github/preview-services.json)
+          COUNT=$(echo "$CHANGES" | jq 'length')
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "services_list=$SERVICES_LIST" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Changed services ($COUNT): $SERVICES_LIST"
+
+  e2e-gate:
+    name: E2E Gate (${{ matrix.name }})
+    needs: [resolve-context, detect-changes]
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SERVICE_KEY: ci-${{ github.run_id }}-${{ matrix.name }}
+    steps:
+      - name: Decide whether this service has a gate
+        id: gate-config
+        env:
+          MATRIX_NAME: ${{ matrix.name }}
+          E2E_COMMAND: ${{ matrix.e2e_command }}
+          E2E_SCRIPT: ${{ matrix.e2e_script }}
+        run: |
+          if [ -z "$E2E_COMMAND" ] || [ -z "$E2E_SCRIPT" ]; then
+            echo "No E2E configured for $MATRIX_NAME, skipping gate."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout PR branch
+        if: steps.gate-config.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-context.outputs.branch }}
+
+      - name: Setup Node.js
+        if: steps.gate-config.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build service
+        if: steps.gate-config.outputs.skip != 'true'
+        working-directory: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci
+            npm run build
+          elif [ -f package.json ]; then
+            npm install
+            npm run build
+          else
+            echo "No package.json in $PWD, assuming build is not required."
+          fi
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        if: steps.gate-config.outputs.skip != 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        if: steps.gate-config.outputs.skip != 'true'
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
+
+      - name: Install mirrord
+        if: steps.gate-config.outputs.skip != 'true'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          mirrord --version
+
+      - name: Generate mirrord ci config
+        if: steps.gate-config.outputs.skip != 'true'
+        env:
+          NAMESPACE: ${{ matrix.namespace }}
+          DEPLOYMENT: ${{ matrix.deployment }}
+        run: |
+          mkdir -p .mirrord-tmp
+          cat > .mirrord-tmp/ci.json <<EOF
+          {
+            "target": {
+              "namespace": "${NAMESPACE}",
+              "path": { "deployment": "${DEPLOYMENT}" }
+            },
+            "ci": { "output_dir": "/tmp/mirrord" },
+            "feature": {
+              "network": {
+                "incoming": {
+                  "mode": "steal",
+                  "http_filter": {
+                    "header_filter": "baggage:\\\\s*[^\\\\n]*\\\\bmirrord=${SERVICE_KEY}\\\\b"
+                  }
+                },
+                "outgoing": true
+              },
+              "fs": { "mode": "read" }
+            }
+          }
+          EOF
+
+      - name: Verify mirrord ci config
+        if: steps.gate-config.outputs.skip != 'true'
+        run: mirrord verify-config .mirrord-tmp/ci.json
+
+      - name: Start mirrord ci session
+        if: steps.gate-config.outputs.skip != 'true'
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+          E2E_COMMAND: ${{ matrix.e2e_command }}
+        run: |
+          mirrord ci start --config-file .mirrord-tmp/ci.json -- $E2E_COMMAND
+
+      - name: Wait for local service to be ready
+        if: steps.gate-config.outputs.skip != 'true'
+        env:
+          READY_MARKER: ${{ matrix.ready_marker }}
+        run: |
+          set -euo pipefail
+          MARKER="${READY_MARKER:-Listening on port}"
+          DEADLINE=$(( $(date +%s) + 120 ))
+          echo "Waiting up to 120s for local service log to contain: $MARKER"
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if grep -RFq "$MARKER" /tmp/mirrord 2>/dev/null; then
+              echo "Local service is ready."
+              grep -RF "$MARKER" /tmp/mirrord || true
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for local service to log: $MARKER"
+          echo "--- mirrord stdout dump ---"
+          for f in $(find /tmp/mirrord -name stdout); do echo "=== $f ==="; cat "$f"; done || true
+          echo "--- mirrord stderr dump ---"
+          for f in $(find /tmp/mirrord -name stderr); do echo "=== $f ==="; cat "$f"; done || true
+          exit 1
+
+      - name: Run E2E tests
+        id: gate-run
+        if: steps.gate-config.outputs.skip != 'true'
+        env:
+          SHOP_URL: https://playground.metalbear.dev
+          BAGGAGE_HEADER: mirrord=${{ env.SERVICE_KEY }}
+          E2E_SCRIPT: ${{ matrix.e2e_script }}
+        run: |
+          chmod +x "$E2E_SCRIPT"
+          "$E2E_SCRIPT"
+
+      - name: Stop mirrord ci session
+        if: always() && steps.gate-config.outputs.skip != 'true'
+        run: mirrord ci stop || true
+
+      - name: Write gate result artifact
+        if: always()
+        env:
+          E2E_COMMAND: ${{ matrix.e2e_command }}
+          E2E_SCRIPT: ${{ matrix.e2e_script }}
+        run: |
+          mkdir -p /tmp/gate-results
+          if [ -z "$E2E_COMMAND" ] || [ -z "$E2E_SCRIPT" ]; then
+            status="skipped"
+          elif [ "${{ steps.gate-run.outcome }}" = "success" ]; then
+            status="passed"
+          else
+            status="failed"
+          fi
+          printf '{"name":"%s","gate_status":"%s"}\n' "${{ matrix.name }}" "$status" > /tmp/gate-results/${{ matrix.name }}.json
+
+      - name: Upload gate result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-result-${{ matrix.name }}
+          path: /tmp/gate-results/${{ matrix.name }}.json
+          retention-days: 1
+
+      - name: Upload mirrord logs
+        if: always() && steps.gate-config.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-gate-${{ matrix.name }}-mirrord-logs
+          path: /tmp/mirrord
+          if-no-files-found: ignore
+
+  build-and-preview:
+    name: Build & Preview (${{ matrix.name }})
+    needs: [resolve-context, detect-changes, e2e-gate]
+    if: needs.detect-changes.outputs.has_changes == 'true' && needs.e2e-gate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-context.outputs.branch }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.path }}
+          file: ${{ matrix.path }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
+
+      - name: Start mirrord preview
+        id: start-preview
+        uses: metalbear-co/mirrord-preview@master
+        with:
+          action: start
+          target: deployment/${{ matrix.deployment }}
+          namespace: ${{ matrix.namespace }}
+          image: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
+          mode: steal
+          filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+          ttl_mins: '120'
+          key: ${{ needs.resolve-context.outputs.preview_key }}
+          extra_config: ${{ matrix.extra_config }}
+
+      - name: Write preview result artifact
+        if: always()
+        run: |
+          mkdir -p /tmp/preview-results
+          if [ "${{ steps.start-preview.outcome }}" = "success" ]; then
+            status="started"
+          elif [ "${{ steps.build-image.outcome }}" = "failure" ]; then
+            status="build-failed"
+          else
+            status="failed"
+          fi
+          printf '{"name":"%s","preview_status":"%s"}\n' "${{ matrix.name }}" "$status" > /tmp/preview-results/${{ matrix.name }}.json
+
+      - name: Upload preview result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-result-${{ matrix.name }}
+          path: /tmp/preview-results/${{ matrix.name }}.json
+          retention-days: 1
+
+  notify:
+    name: Post PR status
+    needs: [resolve-context, detect-changes, e2e-gate, build-and-preview]
+    if: always() && needs.resolve-context.outputs.mode == 'start' && needs.resolve-context.outputs.should_comment == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Download gate result artifacts
+        if: needs.detect-changes.outputs.has_changes == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gate-result-*
+          path: /tmp/gate-results
+          merge-multiple: true
+
+      - name: Download preview result artifacts
+        if: needs.detect-changes.outputs.has_changes == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: preview-result-*
+          path: /tmp/preview-results
+          merge-multiple: true
+
+      - name: Post sticky PR comment
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_KEY: ${{ needs.resolve-context.outputs.preview_key }}
+          PR_NUMBER: ${{ needs.resolve-context.outputs.pr_number }}
+          SERVICES_LIST: ${{ needs.detect-changes.outputs.services_list }}
+          HAS_CHANGES: ${{ needs.detect-changes.outputs.has_changes }}
+          GATE_RESULT: ${{ needs.e2e-gate.result }}
+          PREVIEW_RESULT: ${{ needs.build-and-preview.result }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const issueNumber = Number(process.env.PR_NUMBER);
+            const key = process.env.PREVIEW_KEY;
+            const hasChanges = process.env.HAS_CHANGES === 'true';
+            const gateResult = process.env.GATE_RESULT || 'skipped';
+            const previewResult = process.env.PREVIEW_RESULT || 'skipped';
+            const url = 'https://playground.metalbear.dev/shop';
+            const marker = '<!-- preview-shop-pr-gated -->';
+
+            const readJsonDir = dir => {
+              if (!fs.existsSync(dir)) return [];
+              return fs.readdirSync(dir)
+                .filter(file => file.endsWith('.json'))
+                .map(file => JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')));
+            };
+
+            const gateResults = readJsonDir('/tmp/gate-results');
+            const previewResults = readJsonDir('/tmp/preview-results');
+            const previewByName = new Map(previewResults.map(item => [item.name, item.preview_status]));
+            const services = gateResults.map(item => ({
+              name: item.name,
+              gate: item.gate_status,
+              preview: previewByName.get(item.name) || 'not-started',
+            }));
+
+            const gateBadge = {
+              success: ':white_check_mark: passed',
+              failure: ':x: failed',
+              cancelled: ':grey_exclamation: cancelled',
+              skipped: ':white_circle: skipped',
+            }[gateResult] || `:question: ${gateResult}`;
+
+            const previewBadge = {
+              success: ':rocket: started',
+              failure: ':x: failed',
+              cancelled: ':grey_exclamation: cancelled',
+              skipped: ':white_circle: not started',
+            }[previewResult] || `:question: ${previewResult}`;
+
+            const tableRows = services.length > 0
+              ? services.map(service => `| \`${service.name}\` | \`${service.gate}\` | \`${service.preview}\` |`).join('\n')
+              : '| _(no registered service paths changed)_ | | |';
+
+            const body = [
+              marker,
+              '## mirrord Preview Environment - Metal Mart',
+              '',
+              hasChanges
+                ? `**Changed services:** ${process.env.SERVICES_LIST}`
+                : '**No registered service paths changed** — nothing to gate or preview.',
+              '',
+              `**E2E gate:** ${gateBadge}`,
+              `**Preview:** ${previewBadge}`,
+              '',
+              '| Service | E2E gate | Preview |',
+              '|---|---|---|',
+              tableRows,
+            ];
+
+            if (previewResult === 'success') {
+              body.push(
+                '',
+                '| | |',
+                '|---|---|',
+                `| **Preview URL** | [${url}](${url}) |`,
+                `| **Header** | \`baggage: mirrord-session=${key}\` |`,
+                '',
+                'To send traffic to this preview:',
+                '- Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or',
+                `- \`curl -H "baggage: mirrord-session=${key}" ${url}\``,
+                '',
+                '*Preview is stopped when the PR is merged or closed.*',
+              );
+            } else if (gateResult !== 'success') {
+              body.push(
+                '',
+                'Preview creation did not run because the E2E gate did not pass.'
+              );
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find(comment =>
+              comment.body && (comment.body.includes(marker) || comment.body.includes('## mirrord Preview Environment - Metal Mart'))
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: body.join('\n'),
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: body.join('\n'),
+              });
+            }
+
+  notify-slack:
+    name: Post preview link to Slack
+    needs: [resolve-context, detect-changes, build-and-preview]
+    if: needs.resolve-context.outputs.mode == 'start' && needs.detect-changes.outputs.has_changes == 'true' && needs.build-and-preview.result == 'success' && !cancelled()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Post preview link to Slack
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": { "type": "plain_text", "text": "mirrord Preview Environment - Metal Mart" }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*PR:*\n<${{ needs.resolve-context.outputs.pr_url }}|#${{ needs.resolve-context.outputs.pr_number }}>" },
+                    { "type": "mrkdwn", "text": "*Services:*\n${{ needs.detect-changes.outputs.services_list }}" },
+                    { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
+                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord-session=${{ needs.resolve-context.outputs.preview_key }}`" }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  preview-stop:
+    name: Stop all previews
+    needs: resolve-context
+    if: needs.resolve-context.outputs.should_run == 'true' && needs.resolve-context.outputs.mode == 'stop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
+
+      - name: Stop mirrord preview
+        uses: metalbear-co/mirrord-preview@master
+        with:
+          action: stop
+          key: ${{ needs.resolve-context.outputs.preview_key }}

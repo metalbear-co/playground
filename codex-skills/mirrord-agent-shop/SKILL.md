@@ -94,7 +94,7 @@ Write `/tmp/mirrord-agent-shop/e2e.js` from the Phase 2 plan. Use:
 
 - `PREVIEW_KEY`
 - `ITER`
-- `baggage: mirrord=<branch>`
+- `baggage: mirrord-session=<branch>`
 - one `check()` per functional assertion
 - one `shoot()` per visual assertion
 

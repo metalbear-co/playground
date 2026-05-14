@@ -12,10 +12,9 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 - **order-events-pubsub-consumer** – Optional Python subscriber for order events on GCP Pub/Sub (mirrord queue splitting); see `manifests/shop/base/app/order-events-pubsub-consumer/`
 
 ## Mirrord Demo Features
-
-1. **HTTP Filtering** – Order service uses `baggage: mirrord=<key>` header to route traffic (see `order-service/mirrord.json`)
-2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord=<key>` (see `delivery-service/mirrord.json`). **GCP Pub/Sub** splitting uses `order-events-pubsub-consumer` with the `tenant` message attribute (`demo-local.*`); order-service sets `tenant` from the same `baggage` pattern when Pub/Sub publishing is enabled (see `order-events-pubsub-consumer/mirrord.json` and operator `gcpPubsubSplitting`).
-3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart).
+1. **HTTP Filtering** – Order service uses `baggage: mirrord-session=<key>` header to route traffic (see `order-service/mirrord.json`)
+2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord-session=<key>` (see `delivery-service/mirrord.json`)
+3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart)
 
 ## Local Development
 
