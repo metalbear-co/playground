@@ -42,6 +42,10 @@ spec:
               value: "temporal"
             - name: BANNERFILE
               value: "/app/banner.txt"
+            - name: GOOGLE_CLOUD_PROJECT
+              value: playground-383912
+            - name: GCP_ORDER_EVENTS_TOPIC
+              value: metal-mart-order-events
           ports:
             - containerPort: 80
               protocol: TCP

@@ -1,0 +1,18 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-events-pubsub-consumer"
+    }
+  },
+  "feature": {
+    "split_queues": {
+      "order-pubsub": {
+        "queue_type": "GCPPubSub",
+        "message_filter": {
+          "tenant": "demo-local.*"
+        }
+      }
+    }
+  }
+}

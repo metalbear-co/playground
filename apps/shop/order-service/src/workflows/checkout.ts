@@ -7,6 +7,7 @@ const {
   createOrder,
   publishOrderToKafka,
   publishOrderNotificationActivity,
+  publishOrderEventToPubSubActivity,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "2 minutes",
 });
@@ -37,6 +38,12 @@ export async function CheckoutWorkflow(
     baggage: input.baggage,
   });
   await publishOrderNotificationActivity({
+    orderId,
+    total_cents: input.total_cents,
+    customer_email: input.customer_email,
+    baggage: input.baggage,
+  });
+  await publishOrderEventToPubSubActivity({
     orderId,
     total_cents: input.total_cents,
     customer_email: input.customer_email,

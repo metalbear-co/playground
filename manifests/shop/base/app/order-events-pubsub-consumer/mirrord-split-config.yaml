@@ -1,0 +1,24 @@
+# GCP Pub/Sub uses MirrordSplitConfig (not MirrordWorkloadQueueRegistry — that CRD only allows SQS/RMQ).
+# Requires mirrord-operator with operator.gcpPubsubSplitting=true (installs MirrordSplitConfig CRD).
+# Queue id must match feature.split_queues in apps/shop/order-events-pubsub-consumer/mirrord.json ("order-pubsub").
+apiVersion: queues.mirrord.metalbear.co/v1
+kind: MirrordSplitConfig
+metadata:
+  name: order-events-pubsub-split
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: order-events-pubsub-consumer
+  queues:
+    - id: order-pubsub
+      kind: googlePubSub
+      appConfig:
+        subscription:
+          - env: PUBSUB_SUBSCRIPTION_ID
+            containers:
+              - main
+        projectId:
+          - env: GOOGLE_CLOUD_PROJECT
+            containers:
+              - main
