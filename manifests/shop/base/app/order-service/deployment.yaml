@@ -11,6 +11,7 @@ spec:
       labels:
         app: order-service
     spec:
+      serviceAccountName: order-service-pubsub
       containers:
         - name: main
           image: ghcr.io/metalbear-co/playground-order-service:latest
