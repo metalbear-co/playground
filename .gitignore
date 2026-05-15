@@ -18,6 +18,10 @@ base/charts
 # Local-only minikube shop script (contains mirrord license key; do not commit)
 apps/shop/scripts/setup-minikube-shop.sh
 
+# Python virtual environments
+.venv/
+venv/
+
 # Node dependencies
 **/node_modules
 

@@ -16,8 +16,7 @@ spec:
       labels:
         app: order-events-pubsub-consumer
     spec:
-      # Bind a GCP service account with roles/pubsub.subscriber via Workload Identity:
-      # serviceAccountName: order-events-pubsub
+      serviceAccountName: order-events-pubsub
       containers:
         - name: main
           image: ghcr.io/metalbear-co/playground-order-events-pubsub-consumer:latest
