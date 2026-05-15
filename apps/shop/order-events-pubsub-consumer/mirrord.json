@@ -6,6 +6,13 @@
     }
   },
   "feature": {
+    "fs": "local",
+    "env": {
+      "include": "GOOGLE_CLOUD_PROJECT;PUBSUB_SUBSCRIPTION_ID;LOG_LEVEL",
+      "override": {
+        "PORT": "8080"
+      }
+    },
     "split_queues": {
       "order-pubsub": {
         "queue_type": "GCPPubSub",
