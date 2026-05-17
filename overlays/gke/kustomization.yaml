@@ -8,7 +8,6 @@ resources:
   - ip-visit
   - shop-application.yaml
   - shop-mirrord-application.yaml
-  - temporal-application.yaml
   - shop
   - visualization-application.yaml
   - visualization

@@ -1,26 +1,16 @@
 import "./otel.js";
-import path from "path";
-import { fileURLToPath } from "url";
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
-import { NativeConnection, Worker } from "@temporalio/worker";
-import { Connection, Client } from "@temporalio/client";
-import { orderMode } from "./config.js";
 import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
 import { inventoryUrl } from "./connections.js";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
 import { publishOrderNotification } from "./rabbit.js";
 import { publishOrderEventToPubSub } from "./pubsub.js";
-import * as activities from "./activities.js";
-import { CheckoutWorkflow } from "./workflows/checkout.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "demo-secret-key";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const workflowBundlePath = path.join(__dirname, "workflow-bundle.js");
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -128,37 +118,7 @@ class OrderError extends Error {
   }
 }
 
-/** Create order via Temporal workflow (durable, retries, etc.). */
-async function createOrderViaTemporal(
-  input: OrderInput
-): Promise<{ orderId: number; status: string }> {
-  const temporalAddress = process.env.TEMPORAL_ADDRESS || "localhost:7233";
-  const namespace = process.env.TEMPORAL_NAMESPACE || "temporal";
-  console.log("[Temporal] Client connecting to", temporalAddress, "namespace", namespace);
-  const connection = await Connection.connect({ address: temporalAddress });
-  const client = new Client({
-    connection,
-    namespace,
-  });
-  const taskQueue = process.env.TEMPORAL_TASK_QUEUE || "order-checkout";
-  const workflowId = `checkout-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  console.log("[Temporal] Starting workflow", workflowId, "taskQueue", taskQueue);
-  const handle = await client.workflow.start(CheckoutWorkflow, {
-    taskQueue,
-    workflowId,
-    args: [input],
-  });
-  const resultTimeoutMs = 90_000; // 90s so gateway does not 502 before we respond
-  const result = await Promise.race([
-    handle.result(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Workflow result timeout (no worker?)")), resultTimeoutMs)
-    ),
-  ]);
-  return result;
-}
-
-/** Create order via original direct path: inventory → payment → DB → Kafka. */
+/** Create order via direct path: inventory → payment → DB → Kafka. */
 async function createOrderDirect(
   input: OrderInput
 ): Promise<{ orderId: number; status: string }> {
@@ -288,17 +248,11 @@ app.post("/orders", async (req, res) => {
   const input: OrderInput = { items, total_cents, customer_email, baggage };
 
   try {
-    const result =
-      orderMode === "temporal"
-        ? await createOrderViaTemporal(input)
-        : await createOrderDirect(input);
+    const result = await createOrderDirect(input);
     console.log("Order response:", JSON.stringify(result, null, 2));
     return res.status(201).json(result);
   } catch (err) {
-    console.error(
-      orderMode === "temporal" ? "Temporal order error:" : "Order error:",
-      err
-    );
+    console.error("Order error:", err);
     if (err instanceof OrderError) {
       return res.status(err.status).json(err.body);
     }
@@ -328,54 +282,13 @@ app.get("/orders/:id", orderReadLimiter, async (req, res) => {
   }
 });
 
-async function runTemporalWorker() {
-  const temporalAddress = process.env.TEMPORAL_ADDRESS || "localhost:7233";
-  const namespace = process.env.TEMPORAL_NAMESPACE || "temporal";
-  console.log("[Temporal] Starting worker, address:", temporalAddress, "namespace:", namespace);
-  try {
-    console.log("[Temporal] Connecting...");
-    const connection = await NativeConnection.connect({
-      address: temporalAddress,
-    });
-    console.log("[Temporal] Connected");
-    const workerOptions = {
-      connection,
-      namespace,
-      taskQueue: process.env.TEMPORAL_TASK_QUEUE || "order-checkout",
-      activities,
-    };
-    const workflowOpt = existsSync(workflowBundlePath)
-      ? { workflowBundle: { codePath: workflowBundlePath } }
-      : { workflowsPath: path.join(__dirname, "workflows") };
-    console.log("[Temporal] Creating worker, workflowBundle:", existsSync(workflowBundlePath));
-    const worker = await Worker.create({
-      ...workerOptions,
-      ...workflowOpt,
-    });
-    console.log("[Temporal] Worker started (task queue: order-checkout)");
-    await worker.run();
-  } catch (err) {
-    console.error("[Temporal] Worker error (server stays up, Temporal checkout will fail until fixed):", err);
-    // Do not process.exit(1) so the pod stays up and health/other routes keep working
-  }
-}
-
 async function main() {
-  console.log("[Order] Starting, orderMode:", orderMode);
+  console.log("[Order] Starting");
   await producer.connect();
   await initDb();
 
-  if (orderMode === "temporal") {
-    runTemporalWorker().catch((err) => {
-      console.error("[Temporal] Unhandled worker error:", err);
-      process.exit(1);
-    });
-  }
-
   app.listen(port, "0.0.0.0", () => {
-    console.log(
-      `[Order] Listening on port ${port} (order mode: ${orderMode})`
-    );
+    console.log(`[Order] Listening on port ${port}`);
   });
 }
 

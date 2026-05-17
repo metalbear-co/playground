@@ -171,7 +171,7 @@ jobs:
         run: |
           kubectl apply -k manifests/shop/base/app/order-service -n shop
 
-          # Patch for kind: local image + LocalStack SQS + disable Temporal
+          # Patch for kind: local image + LocalStack SQS
           kubectl set image deployment/order-service \
             main=order-service:ci-demo-${{ github.sha }} -n shop
           kubectl set env deployment/order-service \
@@ -184,7 +184,6 @@ jobs:
             AWS_SECRET_ACCESS_KEY="test" \
             KAFKA_ADDRESS="kafka.infra.svc.cluster.local:9092" \
             KAFKA_TOPIC="orders" \
-            USE_TEMPORAL="false" \
             -n shop
           kubectl patch deployment order-service -n shop \
             --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'

@@ -61,7 +61,6 @@ export const architectureZones: ArchitectureZone[] = [
       "postgres-inventory",
       "postgres-orders",
       "postgres-deliveries",
-      // "temporal",
       "mirrord-operator",
       "mirrord-agent",
     ],
@@ -141,8 +140,8 @@ export const architectureNodes: ArchitectureNode[] = [
   {
     id: "order-service",
     label: "order-service",
-    stack: "Node.js / Express / Temporal",
-    description: "Order orchestration with optional durable workflows.",
+    stack: "Node.js / Express",
+    description: "Order orchestration: stock check, payment, Kafka emit, notifications.",
     group: "service",
     repoPath: "shop/order-service/",
     zone: "cluster",
@@ -231,14 +230,6 @@ export const architectureNodes: ArchitectureNode[] = [
     group: "infra",
     zone: "cluster",
   },
-  // {
-  //   id: "temporal",
-  //   label: "Temporal",
-  //   stack: "Workflow engine",
-  //   description: "Durable workflow orchestration for the checkout flow.",
-  //   group: "infra",
-  //   zone: "cluster",
-  // },
 ];
 
 export const architectureEdges: ArchitectureEdge[] = [
@@ -326,13 +317,6 @@ export const architectureEdges: ArchitectureEdge[] = [
     label: "Consume messages",
     intent: "data",
   },
-  // {
-  //   id: "order-to-temporal",
-  //   source: "order-service",
-  //   target: "temporal",
-  //   label: "Checkout workflow",
-  //   intent: "control",
-  // },
   {
     id: "order-to-postgres",
     source: "order-service",

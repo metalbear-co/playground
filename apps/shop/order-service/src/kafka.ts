@@ -7,10 +7,7 @@ export type SendOrderPayload = {
   baggage?: string;
 };
 
-/**
- * Kafka function: sends order event to the orders topic.
- * Used by both the current implementation and the Temporal publishOrderToKafka activity.
- */
+/** Kafka function: sends order event to the orders topic. */
 export async function sendOrderToKafka(payload: SendOrderPayload): Promise<void> {
   const { orderId, items, status, baggage } = payload;
   const message = {

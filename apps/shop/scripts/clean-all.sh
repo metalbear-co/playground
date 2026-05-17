@@ -6,9 +6,6 @@
 
 set -e
 
-TEMPORAL_UI="temporal-ui"
-TEMPORAL_SVC="temporal"
-TEMPORAL_PG="temporal-postgresql"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
 RABBIT_CONTAINER="shop-rabbitmq"
@@ -18,7 +15,7 @@ APP_CONTAINERS="metal-mart-frontend order-service delivery-service inventory-ser
 
 echo "Stopping and removing shop Docker resources..."
 
-for name in "${TEMPORAL_UI}" "${TEMPORAL_SVC}" "${TEMPORAL_PG}" "${SHOP_PG}" "${KAFKA_CONTAINER}" "${RABBIT_CONTAINER}" ${APP_CONTAINERS}; do
+for name in "${SHOP_PG}" "${KAFKA_CONTAINER}" "${RABBIT_CONTAINER}" ${APP_CONTAINERS}; do
   if docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
     docker rm -f "${name}" 2>/dev/null || true
     echo "  removed ${name}"

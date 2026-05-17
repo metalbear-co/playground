@@ -3,8 +3,6 @@
 # Builds images, then runs infra + shop app containers. No npm on host.
 # Run from repo root: ./apps/shop/scripts/start-all-docker.sh
 # Or from apps/shop: ./scripts/start-all-docker.sh
-#
-# To use direct checkout at runtime: set USE_TEMPORAL=false when running order-service.
 
 set -e
 
@@ -13,9 +11,6 @@ SHOP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${SHOP_DIR}"
 
 NETWORK="shop-network"
-TEMPORAL_PG="temporal-postgresql"
-TEMPORAL_SVC="temporal"
-TEMPORAL_UI="temporal-ui"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
 RABBIT_CONTAINER="shop-rabbitmq"
@@ -23,36 +18,6 @@ RABBIT_CONTAINER="shop-rabbitmq"
 # --- Docker: network ---
 echo "Creating network ${NETWORK}..."
 docker network create "${NETWORK}" 2>/dev/null || true
-
-# --- Docker: Temporal Postgres ---
-echo "Starting Temporal Postgres..."
-docker run -d --name "${TEMPORAL_PG}" --network "${NETWORK}" \
-  -e POSTGRES_PASSWORD=temporal -e POSTGRES_USER=temporal \
-  postgres:15 2>/dev/null || docker start "${TEMPORAL_PG}"
-
-echo "Waiting for Temporal Postgres (10s)..."
-sleep 10
-
-# --- Docker: Temporal server ---
-echo "Starting Temporal server (port 7233)..."
-docker run -d --name "${TEMPORAL_SVC}" --network "${NETWORK}" -p 7233:7233 \
-  -e DB=postgres12 -e DB_PORT=5432 -e POSTGRES_USER=temporal -e POSTGRES_PWD=temporal \
-  -e POSTGRES_SEEDS="${TEMPORAL_PG}" \
-  temporalio/auto-setup:1.24.2 2>/dev/null || docker start "${TEMPORAL_SVC}"
-
-echo "Waiting for Temporal (20s)..."
-sleep 20
-
-echo "Registering namespace 'temporal'..."
-docker run --rm --network "${NETWORK}" \
-  -e TEMPORAL_ADDRESS="${TEMPORAL_SVC}:7233" -e TEMPORAL_CLI_ADDRESS="${TEMPORAL_SVC}:7233" \
-  temporalio/admin-tools:1.24.2 \
-  tctl --namespace default namespace register temporal --description "Shop" 2>/dev/null || true
-
-# --- Docker: Temporal Web UI ---
-echo "Starting Temporal Web UI (port 8080)..."
-docker run -d --name "${TEMPORAL_UI}" --network "${NETWORK}" -p 8080:8080 \
-  -e TEMPORAL_ADDRESS="${TEMPORAL_SVC}:7233" temporalio/ui:2.22.2 2>/dev/null || docker start "${TEMPORAL_UI}"
 
 # --- Docker: Shop Postgres ---
 echo "Starting Shop Postgres (port 5432)..."
@@ -146,9 +111,6 @@ docker run -d --name order-service --network "${NETWORK}" \
   -e KAFKA_ADDRESS="${KAFKA_CONTAINER}:9092" \
   -e RABBITMQ_URL="amqp://shop:playground@${RABBIT_CONTAINER}:5672/" \
   -e RABBITMQ_QUEUE="order-notifications" \
-  -e USE_TEMPORAL=true \
-  -e TEMPORAL_ADDRESS="${TEMPORAL_SVC}:7233" \
-  -e TEMPORAL_NAMESPACE=temporal \
   shop-order-service 2>/dev/null || docker start order-service
 
 docker run -d --name metal-mart-frontend --network "${NETWORK}" -p 3000:3000 \
@@ -161,7 +123,6 @@ docker run -d --name metal-mart-frontend --network "${NETWORK}" -p 3000:3000 \
 echo ""
 echo "Shop is up (all from Dockerfiles)."
 echo "  Shop:        http://localhost:3000/shop"
-echo "  Temporal UI: http://localhost:8080"
 echo ""
-echo "To stop: docker stop metal-mart-frontend order-service notifications-service delivery-service inventory-service payment-service ${TEMPORAL_UI} ${TEMPORAL_SVC} ${TEMPORAL_PG} ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"
+echo "To stop: docker stop metal-mart-frontend order-service notifications-service delivery-service inventory-service payment-service ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"
 echo "Or run: ./apps/shop/scripts/clean-all.sh"
