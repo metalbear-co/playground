@@ -2391,10 +2391,10 @@ export default function VisualizationPage() {
             <div className="flex flex-col gap-1 text-left">
               <span className="text-sm font-semibold text-slate-900">mirrord-layer</span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                LD_PRELOAD
+                LD_PRELOAD / DLL injection
               </span>
               <p className="text-xs leading-snug text-slate-600">
-                Intercepts libc calls.
+                Intercepts libc (Linux/macOS) and kernel32 (Windows) calls.
               </p>
             </div>
           ),
