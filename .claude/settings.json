@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mirrord exec -f *)",
+      "Bash(mirrord --version)",
+      "Bash(kubectl config current-context)",
+      "Bash(mkdir -p /tmp/mirrord-run)",
+      "Bash(kubectl -n * get *)",
+      "Bash(mkdir -p /tmp/mirrord-run*)",
+      "Bash(curl -sS * https://playground.metalbear.dev/*)",
+      "Bash(until grep *)",
+      "Bash(ls *)"
+    ]
+  }
+}
