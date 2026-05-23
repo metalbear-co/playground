@@ -103,22 +103,6 @@
             ]
         },
         {
-            "name": "temp-demo (Debug Kafka Consumer)",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/apps/temp-demo",
-            "args": ["-wf-cnt=2"],
-            "env": {
-                "TEMPORAL_HOST_PORT": "localhost:7233",
-                "TEMPORAL_NAMESPACE": "default",
-                "KAFKA_BROKERS": "localhost:9092",
-                "KAFKA_TOPIC": "temporal-topic",
-                "KAFKA_CONSUMER_GROUP": "consumer-group-1"
-            },
-            "cwd": "${workspaceFolder}/apps/temp-demo"
-        },
-        {
             "name": "payment-service",
             "type": "node",
             "request": "launch",

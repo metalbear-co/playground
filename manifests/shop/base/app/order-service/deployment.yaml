@@ -34,12 +34,6 @@ spec:
               value: "amqp://shop:playground@rabbitmq.infra.svc.cluster.local:5672/"
             - name: RABBITMQ_QUEUE
               value: "order-notifications"
-            - name: USE_TEMPORAL
-              value: "false"
-            - name: TEMPORAL_ADDRESS
-              value: "temporal-frontend.temporal.svc.cluster.local:7233"
-            - name: TEMPORAL_NAMESPACE
-              value: "temporal"
             - name: BANNERFILE
               value: "/app/banner.txt"
             - name: GOOGLE_CLOUD_PROJECT
