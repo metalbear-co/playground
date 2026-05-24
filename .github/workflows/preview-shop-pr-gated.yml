@@ -546,6 +546,7 @@ jobs:
                 '|---|---|',
                 `| **Preview URL** | [${url}](${url}) |`,
                 `| **Header** | \`baggage: mirrord-session=${key}\` |`,
+                '| **Sessions** | [all mirrord sessions](http://127.0.0.1:59281/) (or run `mirrord ui` in terminal) |',
                 '',
                 'To send traffic to this preview:',
                 '- Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or',
