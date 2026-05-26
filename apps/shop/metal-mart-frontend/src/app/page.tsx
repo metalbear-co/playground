@@ -186,6 +186,7 @@ export default function Home() {
             {hasProducts && (
               <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
                 Featured products
+                <br />This is a test
               </h1>
             )}
             {hasProducts ? (
