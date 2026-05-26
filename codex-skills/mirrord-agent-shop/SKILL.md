@@ -46,12 +46,12 @@ Echo the plan briefly, do not ask for approval, and proceed unless the developer
 
 ## Phase 3: Branch, Edit, Commit, Push, PR
 
-Branch naming must match `^[a-z]+-[a-z]+$` with exactly two lowercase ASCII words.
+The preview key is the full branch if there is no slash, or the part after the final slash. The
+preview key must match `^[a-z]+-[a-z]+$` with exactly two lowercase ASCII words.
 
-- No `claude/` prefix
-- No slashes
 - No random suffixes
-- No `demo-` prefix
+- Namespace prefixes such as `feature/` are allowed because they are not part of the preview key
+- No `demo-` prefix on the preview key
 
 Edit only the touched app or service paths.
 
@@ -71,7 +71,7 @@ Capture:
 BRANCH=<branch>
 PR_NUMBER=<n>
 PR_URL=<url>
-PREVIEW_KEY=<branch>
+PREVIEW_KEY=<preview-key>
 ```
 
 ## Phase 3a: Dispatch Preview and Wait
@@ -94,7 +94,7 @@ Write `/tmp/mirrord-agent-shop/e2e.js` from the Phase 2 plan. Use:
 
 - `PREVIEW_KEY`
 - `ITER`
-- `baggage: mirrord-session=<branch>`
+- `baggage: mirrord-session=<preview-key>`
 - one `check()` per functional assertion
 - one `shoot()` per visual assertion
 
