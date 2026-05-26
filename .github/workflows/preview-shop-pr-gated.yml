@@ -62,6 +62,11 @@ jobs:
                 .slice(0, 60);
               return sanitized || 'preview';
             };
+            const previewKeyFromBranch = value => {
+              const branch = trimmed(value);
+              const segments = branch.split('/').filter(Boolean);
+              return segments[segments.length - 1] || branch;
+            };
 
             const branch = pr.head.ref;
             const isSameRepo = pr.head.repo.full_name === sameRepoName;
@@ -69,7 +74,7 @@ jobs:
             const hasPreviewLabel = labels.includes('preview');
             const changedLabel = context.payload.label?.name || '';
             const isPreviewLabelEvent = changedLabel === 'preview';
-            const previewKey = branch;
+            const previewKey = previewKeyFromBranch(branch);
 
             const out = {
               should_run: 'false',

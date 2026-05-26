@@ -12,27 +12,28 @@ Read `docs/AI_ROOT_CONTEXT.md` first for repo and deployment context.
 ## Workflow
 
 1. Pull the latest `main`.
-2. Create a manual two-word preview-safe branch name.
+2. Create a branch whose final path segment is a two-word preview-safe key.
 3. Implement the requested change in `apps/shop/metal-mart-frontend/` or `apps/shop/<service>/`.
 4. Commit and push the branch.
 5. Create a PR against `main`.
 6. Wait for the `preview-shop-pr.yml` workflow to finish before presenting any preview URL or header.
 7. Present the preview URL, baggage header, and shareable preview URL only after the workflow succeeds.
 
-## Branch Rule
+## Branch And Preview Key Rule
 
-The branch name is load-bearing because it is reused as the preview key and mirrord routing value.
+The workflow checks out the full branch ref, but the preview key and mirrord routing value are the
+branch's final path segment after `/`.
 
-- Format must be exactly `^[a-z]+-[a-z]+$`
-- Exactly two lowercase ASCII words
-- No `claude/` prefix
-- No slashes
+- Preview key format must be exactly `^[a-z]+-[a-z]+$`
+- The preview key is the full branch if there is no slash, or the part after the final slash
 - No random suffixes
-- No `demo-` prefix
+- No `demo-` prefix on the preview key
 
 Examples:
 - `product-search`
+- `feature/product-search`
 - `cart-fix`
+- `aviram/cart-fix`
 - `rename-swag`
 
 ## PR and Preview Flow
@@ -60,7 +61,7 @@ After the PR is open:
 When the preview succeeds, provide:
 
 - Preview URL: `https://playground.metalbear.dev/shop`
-- Header: `baggage: mirrord-session=<branch>`
-- Shareable URL: `https://preview.metalbear.dev/<branch>/shop`
+- Header: `baggage: mirrord-session=<preview-key>`
+- Shareable URL: `https://preview.metalbear.dev/<preview-key>/shop`
 
 Also include short testing instructions for the browser extension, `curl`, or request-header tools.

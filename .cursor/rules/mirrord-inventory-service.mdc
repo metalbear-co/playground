@@ -11,6 +11,22 @@ alwaysApply: false
 Use this rule whenever changing `apps/shop/inventory-service` or product catalogue API behavior.
 Verify against the live playground cluster with mirrord filtered traffic before reporting the change as done.
 
+## Do Not Finish Without mirrord
+
+If you changed `apps/shop/inventory-service/**`, you MUST NOT:
+
+- mark the task complete
+- open or update the PR as ready
+- say "verified" in the summary
+
+until you have run mirrord and pasted filtered + unfiltered curl output showing:
+
+- filtered traffic hits the local process
+- changed behavior is visible in the filtered response
+- unfiltered traffic does not hit the local process
+
+Lint/build alone is NOT sufficient verification.
+
 ## Target
 
 - Service path: `apps/shop/inventory-service`
@@ -109,13 +125,11 @@ Never use `http://inventory-service/...`, a port-forward, or an in-cluster curl 
 verification path for inventory-service changes. The demo must go through the same public path a user
 uses.
 
-## Header Forwarding Requirement
+## Header Injection
 
-The public product API route must forward the incoming `baggage` header when it calls
-`inventory-service`; otherwise the inventory-service mirrord filter will never see the session key.
-If the filtered public request does not reach the local inventory-service, inspect and fix the relevant
-frontend proxy route under `apps/shop/metal-mart-frontend/src/app/api/products*/` before changing the
-mirrord filter.
+mirrord injects the session header when traffic is stolen; do not modify frontend proxy routes for this.
+If the filtered public request does not reach the local inventory-service, inspect the mirrord session,
+target, filter, and request path before changing product code.
 
 ## Completion Criteria
 

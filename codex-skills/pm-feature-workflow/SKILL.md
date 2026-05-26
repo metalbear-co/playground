@@ -9,34 +9,36 @@ This skill automates the end-to-end workflow for PM-driven MetalMart changes in 
 
 Read `docs/AI_ROOT_CONTEXT.md` first.
 
-> Branch naming is load-bearing. The branch name becomes both a Docker tag input and the `baggage: mirrord-session=<branch>` routing value.
+> The full branch is used for checkout and Docker tag input. The preview key and `baggage` routing
+> value are the branch's final path segment after `/`.
 
 ## Workflow Overview
 
 1. Pull latest `main`.
-2. Create a preview-safe branch name manually.
+2. Create a branch whose final path segment is preview-safe.
 3. Implement the requested change.
 4. Commit and push.
 5. Create a PR.
 6. Wait for the preview workflow to succeed.
 7. Hand the PM the preview details.
 
-## Branch Rule
+## Branch And Preview Key Rule
 
-The branch must match `^[a-z]+-[a-z]+$`.
+The preview key is the full branch if there is no slash, or the part after the final slash. The
+preview key must match `^[a-z]+-[a-z]+$`.
 
-- Exactly two lowercase ASCII words joined by one hyphen
-- No `claude/` prefix
-- No `feature/` or other namespace prefix
-- No slashes
+- Exactly two lowercase ASCII words joined by one hyphen in the preview key
 - No random suffixes
+- Namespace prefixes such as `feature/` are allowed because they are not part of the preview key
 
 Examples:
 - `product-search`
+- `feature/product-search`
 - `cart-fix`
+- `aviram/cart-fix`
 - `checkout-button`
 
-If the branch does not match the rule, delete it and recreate it correctly before continuing.
+If the preview key does not match the rule, delete the branch and recreate it correctly before continuing.
 
 ## Implementation Scope
 
@@ -92,7 +94,7 @@ If the workflow fails:
 When the preview succeeds, return:
 
 - Preview URL: `https://playground.metalbear.dev/shop`
-- Header: `baggage: mirrord-session=<branch>`
-- Shareable URL: `https://preview.metalbear.dev/<branch>/shop`
+- Header: `baggage: mirrord-session=<preview-key>`
+- Shareable URL: `https://preview.metalbear.dev/<preview-key>/shop`
 
 Also provide concise testing instructions using either the mirrord browser extension, `curl`, or a request-header tool.

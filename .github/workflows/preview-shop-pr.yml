@@ -95,6 +95,11 @@ jobs:
                 .slice(0, 60);
               return sanitized || 'preview';
             };
+            const previewKeyFromBranch = value => {
+              const branch = trimmed(value);
+              const segments = branch.split('/').filter(Boolean);
+              return segments[segments.length - 1] || branch;
+            };
 
             const out = {
               should_run: 'false',
@@ -114,7 +119,7 @@ jobs:
               out.mode = inputs.action || 'start';
               out.branch = trimmed(inputs.branch);
               out.base_ref = trimmed(inputs.base_ref) || 'main';
-              out.preview_key = trimmed(inputs.preview_key) || out.branch;
+              out.preview_key = trimmed(inputs.preview_key) || previewKeyFromBranch(out.branch);
               out.pr_number = trimmed(inputs.pr_number);
               out.pr_url = trimmed(inputs.pr_url) || (out.pr_number ? `${context.serverUrl}/${owner}/${repo}/pull/${out.pr_number}` : '');
               out.image_tag_key = sanitizeTag(out.branch || out.preview_key);
@@ -133,7 +138,7 @@ jobs:
               out.mode = action === 'closed' ? 'stop' : 'start';
               out.branch = branch;
               out.base_ref = pr.base.ref;
-              out.preview_key = branch;
+              out.preview_key = previewKeyFromBranch(branch);
               out.pr_number = String(pr.number);
               out.pr_url = pr.html_url;
               out.image_tag_key = sanitizeTag(branch);
