@@ -1,0 +1,125 @@
+---
+description: Use mirrord filtered traffic when implementing or testing MetalMart inventory-service changes.
+globs:
+  - apps/shop/inventory-service/**
+  - apps/shop/metal-mart-frontend/src/app/api/products*/**
+alwaysApply: false
+---
+
+# Inventory Service Mirrord Workflow
+
+Use this rule whenever changing `apps/shop/inventory-service` or product catalogue API behavior.
+Verify against the live playground cluster with mirrord filtered traffic before reporting the change as done.
+
+## Target
+
+- Service path: `apps/shop/inventory-service`
+- Kubernetes deployment: `deploy/inventory-service`
+- Namespace: `shop`
+- mirrord config: `apps/shop/inventory-service/mirrord.json`
+- Public shop URL: `https://playground.metalbear.dev/shop`
+- Shop visualization: `https://playground.metalbear.dev/visualization-shop`
+
+## Before Running
+
+From the repo root, confirm the cluster and target:
+
+```bash
+mirrord --version
+kubectl config current-context
+kubectl -n shop get deploy inventory-service
+```
+
+The expected kube context is:
+
+```text
+gke_playground-383912_us-central1-c_playground-cluster-1
+```
+
+Do not continue against an unexpected cluster.
+
+## Run Inventory Locally With Filtered Traffic
+
+Use a stable session key and run inventory-service under mirrord:
+
+```bash
+export MIRRORD_SESSION="${MIRRORD_SESSION:-${USER:-cursor-inventory}}"
+USER="$MIRRORD_SESSION" \
+  mirrord exec -f apps/shop/inventory-service/mirrord.json -- \
+  npm --prefix apps/shop/inventory-service run dev
+```
+
+`mirrord.json` steals only HTTP requests whose `baggage` header contains:
+
+```text
+mirrord-session=<MIRRORD_SESSION>
+```
+
+Do not remove or widen the `http_filter` to make a test pass.
+
+## Send Filtered Test Traffic
+
+In another shell, send traffic through the public user-facing shop URL with the matching baggage
+header. This must exercise the gateway, `metal-mart-frontend`, its product API route, and then
+`inventory-service`.
+
+```bash
+export MIRRORD_SESSION="${MIRRORD_SESSION:-${USER:-cursor-inventory}}"
+curl -sS \
+  -H "baggage: mirrord-session=${MIRRORD_SESSION}" \
+  https://playground.metalbear.dev/shop/api/products
+```
+
+The request must appear in the local inventory-service logs. Also send an unfiltered request and confirm
+it does not hit the local process:
+
+```bash
+curl -sS https://playground.metalbear.dev/shop/api/products
+```
+
+## HTTP Checks
+
+Use only public shop endpoints for mirrord verification:
+
+```bash
+# List products
+curl -sS \
+  -H "baggage: mirrord-session=${MIRRORD_SESSION}" \
+  https://playground.metalbear.dev/shop/api/products
+
+# Single product
+curl -sS \
+  -H "baggage: mirrord-session=${MIRRORD_SESSION}" \
+  https://playground.metalbear.dev/shop/api/products/1
+```
+
+For UI-level verification, use Playwright or a browser with the same request header and navigate to
+`https://playground.metalbear.dev/shop/products` or the product page affected by the change. In
+Playwright, set the header on the browser context:
+
+```ts
+const context = await browser.newContext({
+  extraHTTPHeaders: {
+    baggage: `mirrord-session=${process.env.MIRRORD_SESSION}`,
+  },
+});
+```
+
+Never use `http://inventory-service/...`, a port-forward, or an in-cluster curl pod as the primary
+verification path for inventory-service changes. The demo must go through the same public path a user
+uses.
+
+## Header Forwarding Requirement
+
+The public product API route must forward the incoming `baggage` header when it calls
+`inventory-service`; otherwise the inventory-service mirrord filter will never see the session key.
+If the filtered public request does not reach the local inventory-service, inspect and fix the relevant
+frontend proxy route under `apps/shop/metal-mart-frontend/src/app/api/products*/` before changing the
+mirrord filter.
+
+## Completion Criteria
+
+- `npm --prefix apps/shop/inventory-service run build` or `npm --prefix apps/shop/inventory-service run lint` passes.
+- A filtered request to `https://playground.metalbear.dev/shop/api/products...` with `baggage: mirrord-session=<MIRRORD_SESSION>` reaches the local service.
+- An unfiltered request to the same public endpoint does not reach the local service.
+- The changed inventory behavior is verified through the public shop path and the local mirrord process.
