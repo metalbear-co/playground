@@ -3,7 +3,7 @@ description: Use mirrord filtered traffic when implementing or testing MetalMart
 globs:
   - apps/shop/inventory-service/**
   - apps/shop/metal-mart-frontend/src/app/api/products*/**
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Inventory Service Mirrord Workflow
