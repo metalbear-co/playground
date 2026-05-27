@@ -10,7 +10,7 @@
     "env": {
       "include": "GOOGLE_CLOUD_PROJECT;PUBSUB_SUBSCRIPTION_ID;LOG_LEVEL",
       "override": {
-        "PORT": "8080"
+        "PORT": "8081"
       }
     },
     "split_queues": {

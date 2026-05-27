@@ -180,6 +180,39 @@
             "env": {
                 "NEXT_PUBLIC_VISUALIZATION_BACKEND_URL": "http://localhost:8080"
             }
+        },
+        {
+            "name": "shop-pubsub-consumer (mirrord)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer",
+            "python": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer/.venv/bin/python",
+            "env": {
+                "PYTHONNOUSERSITE": "1",
+                "GOOGLE_CLOUD_PROJECT": "playground-383912",
+                "PUBSUB_SUBSCRIPTION_ID": "metal-mart-order-events-sub",
+                "PORT": "8081",
+                "MIRRORD_ACTIVE": "1",
+                "MIRRORD_CONFIG_FILE": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer/mirrord.json"
+            }
+        },
+        {
+            "name": "shop-pubsub-consumer (local, no mirrord)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer",
+            "python": "${workspaceFolder}/apps/shop/order-events-pubsub-consumer/.venv/bin/python",
+            "env": {
+                "PYTHONNOUSERSITE": "1",
+                "GOOGLE_CLOUD_PROJECT": "playground-383912",
+                "PUBSUB_SUBSCRIPTION_ID": "metal-mart-order-events-sub",
+                "PORT": "8081",
+                "MIRRORD_ACTIVE": "0"
+            }
         }
     ]
 }
