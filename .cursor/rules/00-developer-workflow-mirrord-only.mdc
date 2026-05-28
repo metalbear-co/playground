@@ -1,0 +1,45 @@
+---
+description: Forbid debugging via public playground endpoints unless traffic is routed through mirrord.
+alwaysApply: true
+---
+
+# Developer workflow: public endpoints only via mirrord
+
+This rule applies to **every** task in this repository.
+
+## Forbidden — public endpoint debugging
+
+Do **not** use deployed or public URLs to debug, inspect, or verify application behavior unless mirrord is actively stealing filtered traffic to your local process.
+
+That includes:
+
+- **Unfiltered HTTP to the playground** — do not `curl`, `wget`, or use an HTTP client against `https://playground.metalbear.dev/...` (or other live shop URLs) to check whether a code change works, to read API responses as ground truth, or to iterate on fixes.
+- **Treating cluster/production responses as the primary test signal** — do not mark work complete because an unfiltered public request returned the expected JSON or status.
+- **In-cluster shortcuts instead of mirrord** — do not use `kubectl port-forward`, in-cluster service URLs (`http://inventory-service/...`), or curl pods inside the cluster as the main way to validate shop backend behavior.
+
+Unfiltered requests to the same public URL are allowed **only** to confirm that traffic **does not** reach your local process while mirrord is running (traffic isolation), not to verify feature behavior.
+
+## Allowed — mirrord-filtered public path
+
+Public shop URLs may be used **only** when all of the following are true:
+
+1. The target service runs **locally** under `mirrord exec` with the repo’s `mirrord.json` (do not widen `http_filter`).
+2. Requests include the session baggage header, e.g. `baggage: mirrord-session=<MIRRORD_SESSION>`, matching the active mirrord session.
+3. You confirm filtered traffic hits the local process (logs) and changed behavior appears in the **filtered** response.
+
+For inventory-service and product catalogue API work, follow the full workflow in `.cursor/rules/00-mirrord-inventory-service.mdc` and the `mirrord-run-shop` skill.
+
+## Allowed — normal local development
+
+Without mirrord, use the workflow a developer runs on their machine:
+
+- Edit and build source in the repo
+- Run services locally (`npm run dev`, tests, Docker Compose, etc.)
+- Unit, integration, and e2e tests defined in the project
+- Browser or Playwright against a **local** dev server
+
+If a dependency is not available locally, prefer mocks, fixtures, and project test suites — or ask the user to run a check — instead of probing live public endpoints.
+
+## Completion
+
+Do not claim playground or production verification from unfiltered public traffic. For shop inventory changes, completion requires mirrord filtered verification as described in the inventory mirrord rule.
