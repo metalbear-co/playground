@@ -1,9 +1,9 @@
 # docs/
 
-Project context and planning documents for humans and AI agents.
+Planning and design documents for the playground repo.
 
-- **Start here:** [AI_ROOT_CONTEXT.md](AI_ROOT_CONTEXT.md) – project overview, layout, deployment.
-- **Pattern we use:** [AGENTIC-CONTEXT-GIT-PATTERN.md](AGENTIC-CONTEXT-GIT-PATTERN.md) – how we commit context/planning with feature work.
-- **Feature/area docs:** Add planning, end-state, or migration docs here (e.g. `SHOP-EXPERIENCE-END-STATE.md`, `INFRA-NAMESPACE-MIGRATION.md`) and commit them on the same branch as the implementation.
+- [SHOP-EXPERIENCE-END-STATE.md](SHOP-EXPERIENCE-END-STATE.md) – shop experience planning
+- [INFRA-NAMESPACE-MIGRATION.md](INFRA-NAMESPACE-MIGRATION.md) – namespace migration notes
+- [preview-env-ci.md](preview-env-ci.md) – preview environment CI
 
-Root [AGENTS.md](../AGENTS.md) points agents at this folder.
+Add feature end-state or migration docs here and commit them on the same branch as the implementation.
