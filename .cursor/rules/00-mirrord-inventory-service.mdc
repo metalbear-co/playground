@@ -6,7 +6,7 @@ globs:
 alwaysApply: true
 ---
 
-# Inventory Service Mirrord Workflow
+# Inventory Service mirrord Workflow
 
 Use this rule whenever changing `apps/shop/inventory-service` or product catalogue API behavior.
 Verify against the live playground cluster with mirrord filtered traffic before reporting the change as done.
