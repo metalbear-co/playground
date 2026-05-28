@@ -1,0 +1,31 @@
+---
+description: Restrict agents to the normal local developer workflow only.
+alwaysApply: true
+---
+
+# Developer workflow only
+
+This rule applies to **every** task in this repository.
+
+## Allowed
+
+Use only the workflow a human developer would use on their machine:
+
+- **Source code** — read, edit, and refactor in the repo
+- **Local app** — build and run services locally (`npm run dev`, `go run`, Docker Compose, etc.)
+- **Tests** — unit, integration, and e2e tests defined in the project
+- **Browser** — manual or automated UI checks against a **local** dev server or test harness (Playwright, etc.)
+
+## Forbidden
+
+Do **not** use operational or production shortcuts:
+
+- **No direct public API probing** — do not `curl`, `wget`, or HTTP-client the live playground or other deployed URLs to verify behavior. Do not treat production/staging HTTP responses as the primary test signal.
+- **No database access** — do not connect to Postgres, Redis, or other data stores in the cluster or cloud (no `psql`, ORM consoles against remote DBs, port-forwards to DB pods, etc.).
+- **No kubectl** — do not run `kubectl` (get, apply, logs, port-forward, exec, etc.) or other cluster-admin tooling to inspect or drive the environment.
+
+If verification requires a running dependency you do not have locally, use mocks, test fixtures, or project test suites — or ask the user to run the check — instead of reaching into the cluster or public endpoints.
+
+## Completion
+
+Report results from local builds, tests, and browser runs. Do not claim production or cluster verification unless the user explicitly performed it outside the agent.
