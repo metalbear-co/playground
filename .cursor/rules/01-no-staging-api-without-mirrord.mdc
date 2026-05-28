@@ -1,0 +1,70 @@
+---
+description: Do not call playground/staging shop APIs unless mirrord is running and traffic is session-filtered.
+alwaysApply: true
+---
+
+# No Direct Staging API Without mirrord
+
+The playground cluster (`https://playground.metalbear.dev`) is **staging**. Do not use it as a backend or verification target unless a shop service is running locally under `mirrord exec` with its `mirrord.json` config.
+
+## What Counts as Staging API
+
+Treat all of the following as staging — **forbidden without mirrord**:
+
+- Public shop HTTP APIs, e.g. `https://playground.metalbear.dev/shop/api/*`
+- Other playground paths that reach shop backends (orders, products, banner, deliveries)
+- In-cluster service URLs (`http://inventory-service`, `http://order-service`, `*.shop.svc`, etc.)
+- `kubectl port-forward` (or similar) into `shop` namespace deployments
+- Env vars or scripts that point a local app at cluster URLs instead of `localhost`
+
+Preview hosts (`https://preview.metalbear.dev/...`) are separate; this rule is about the shared playground/staging cluster.
+
+## Prohibited (No mirrord Running)
+
+You MUST NOT:
+
+- `curl`, `fetch`, Playwright, or browser checks against `playground.metalbear.dev/shop/api/...` to validate local code changes
+- Point `metal-mart-frontend` (or other local services) at staging URLs for manual testing
+- Use port-forward or in-cluster HTTP as a substitute for local dev or mirrord verification
+- Treat an unfiltered staging response as proof that **your** local change works
+
+Lint, unit tests, and builds that do not call staging are fine.
+
+## Allowed Ways to Hit Staging
+
+### 1. mirrord + session-filtered traffic (primary)
+
+1. Start the target service with `mirrord exec -f apps/shop/<service>/mirrord.json -- ...`
+2. Send traffic through the **public** shop URL with the matching baggage header:
+
+```text
+baggage: mirrord-session=<MIRRORD_SESSION>
+```
+
+Use the same `MIRRORD_SESSION` / `USER` value passed to `mirrord exec`. Do not widen `http_filter` in `mirrord.json`.
+
+For inventory and product catalogue work, follow `.cursor/rules/00-mirrord-inventory-service.mdc` end-to-end.
+
+### 2. Prove traffic is NOT stolen (mirrord running only)
+
+While mirrord is active, you may send **one** unfiltered request to the same public endpoint to confirm it does **not** reach the local process. That is not validation of your change.
+
+### 3. No staging at all
+
+Run services on `localhost` / Docker Compose (`apps/shop/scripts/start-all.sh`, per-service `npm run dev`) and test against local URLs only.
+
+## Before Any Staging Request
+
+Confirm mirrord is running for the service you are changing:
+
+```bash
+mirrord --version
+kubectl config current-context   # gke_playground-383912_us-central1-c_playground-cluster-1
+# local process started via mirrord exec -f apps/shop/<service>/mirrord.json
+```
+
+If mirrord is not running, stop — use local-only testing or start mirrord first.
+
+## Completion
+
+Do not mark shop backend work verified, and do not say responses were validated on staging, unless mirrord was running and filtered traffic showed the local behavior. See also `.cursor/skills/mirrord-run-shop/SKILL.md`.
