@@ -13,7 +13,8 @@ Use this file and `docs/` for project context when working in this repo.
 - When starting a feature, look in `docs/` for an existing plan (end-state, migration) and follow it.
 - Commit planning or context docs in the **same branch/PR** as the implementation so git history carries the plan.
 - Prefer minimal, directive context; avoid long prose.
-- For inventory-service changes, use the mirrord filtered-traffic workflow in `.cursor/rules/mirrord-inventory-service.mdc`.
+- All agents: `.cursor/rules/00-developer-workflow-only.mdc` (local source, app, tests, browser only — no public API, DB, or kubectl).
+- For inventory-service changes: `.cursor/rules/01-mirrord-inventory-service.mdc` (mirrord + app verification).
 
 ## Build and deploy
 
