@@ -63,7 +63,7 @@ tail -n 40 /tmp/mirrord-run/<service>.log
 
 If readiness regex never matches within ~3 minutes, surface the last 60 lines of the log and stop — most failures are: wrong kube context, target deployment missing, mirrord operator not authorized, or a `DATABASE_URL` mismatch.
 
-## Phase 5 — Verify the steal works
+## Phase 5 — Verify the steal works (curl)
 
 Hit staging through the public URL with the routing header, confirming the response shows the developer's local code path:
 
@@ -77,6 +77,17 @@ Pick an endpoint that actually exercises the change (the developer just told you
 
 If the response shows the **old** behavior, the request didn't get stolen. Most common causes: wrong `USER` value, header name typo, or the steal `http_filter` in `mirrord.json` is more restrictive than expected. Re-read the `header_filter` from `mirrord.json` and adapt the curl command.
 
+## Phase 5b — Verify the shop UI (Playwright) — required for catalog / image changes
+
+`curl` is not sufficient when the change affects product data the UI renders (e.g. `image_urls`, catalogue fields). Follow `.cursor/skills/mirrord-run-shop/SKILL.md`:
+
+1. Install Playwright under `/tmp/mirrord-run-shop/` (once per session).
+2. Write and run `e2e.js` with `extraHTTPHeaders: { baggage: 'mirrord-session=' + $USER }`.
+3. Assert API rows have no empty `image_urls[0]`, and that `/shop/products` and affected detail pages show loaded images (`naturalWidth > 0`, no `No image` tiles).
+4. Review screenshots in `/tmp/screenshots/mirrord-run-*.png`.
+
+**Never** run ad-hoc `kubectl exec` SQL against the shared playground database to fix or test data. Validate only through mirrord + public shop URLs.
+
 ## Phase 6 — Hand off to the developer
 
 Print exactly this block, with values filled in:
@@ -87,6 +98,7 @@ Print exactly this block, with values filled in:
 Local log:   /tmp/mirrord-run/<service>.log
 Routing:     baggage: mirrord-session=<USER>
 Quick check: curl -H "baggage: mirrord-session=<USER>" https://playground.metalbear.dev/shop/api/<endpoint>
+Playwright:  /tmp/screenshots/mirrord-run-results.json (see mirrord-run-shop skill)
 
 To see it in the browser, install the mirrord Browser Extension and set
 the same baggage header — only your requests will hit the local process.
