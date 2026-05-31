@@ -1,6 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -26,38 +26,34 @@ type ProductRow = {
 
 type ProductResponse = Omit<ProductRow, "image_urls"> & { image_urls: string[] };
 
+/** Canonical Cloudinary public IDs for the core catalog (matches CI seed). */
+const CANONICAL_IMAGE_URLS: Record<number, string[]> = {
+  1: ["team_work_makes_the_Dream_work_ljp4we"],
+  2: ["team_Work_makes_the_Dream_Work_-_front_w5qdnb", "team_work_makes_the_dream_work_-_back_onanux"],
+  3: ["Mind_the_Gap_pkyuc6"],
+  4: ["Mind_the_gap_-_Front_anazkh", "Mind_the_gap_-_Back_oh9jyf"],
+  5: ["Increase_velocity_mfsov2"],
+  6: ["Increase_Velocity_-_Front_c2dgw6", "Increase_Velocity_-_Back_ywhxi6"],
+  7: ["Cloudboat_Willie_-_Front_wpgqi2", "Cloudboat_Willie_-_Back_z05dna"],
+  8: ["A_mirrord_is_born_-_Front_xy8l8p", "A_mirrord_is_born_-_Back_bytwh2"],
+};
+
 function isNonEmptyImageUrl(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-/** Coerce JSONB image_urls into a string[] the shop UI can render; fall back to image_url. */
+/** Drop empty entries; use image_url only when the array has no usable URLs. */
 function normalizeImageUrls(raw: unknown, legacyImageUrl: string | null | undefined): string[] {
   const fallback = isNonEmptyImageUrl(legacyImageUrl) ? legacyImageUrl.trim() : null;
+  const fromArray = Array.isArray(raw)
+    ? raw.filter(isNonEmptyImageUrl).map((url) => url.trim())
+    : isNonEmptyImageUrl(raw)
+      ? [raw.trim()]
+      : [];
 
-  if (raw == null) {
-    return fallback ? [fallback] : [];
+  if (fromArray.length > 0) {
+    return fromArray;
   }
-
-  if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (trimmed.startsWith("[")) {
-      try {
-        return normalizeImageUrls(JSON.parse(trimmed), legacyImageUrl);
-      } catch {
-        return fallback ? [fallback] : [];
-      }
-    }
-    return isNonEmptyImageUrl(trimmed) ? [trimmed] : fallback ? [fallback] : [];
-  }
-
-  if (Array.isArray(raw)) {
-    const urls = raw.filter(isNonEmptyImageUrl).map((url) => url.trim());
-    if (urls.length > 0) {
-      return urls;
-    }
-    return fallback ? [fallback] : [];
-  }
-
   return fallback ? [fallback] : [];
 }
 
@@ -65,9 +61,42 @@ function toProductResponse(row: ProductRow): ProductResponse {
   const image_urls = normalizeImageUrls(row.image_urls, row.image_url);
   return {
     ...row,
-    image_url: image_urls[0] ?? row.image_url,
+    image_url: image_urls[0] ?? null,
     image_urls,
   };
+}
+
+/** Repair JSONB arrays that contain empty strings or known-bad demo edits. */
+async function repairMalformedImageUrls(client: PoolClient) {
+  await client.query(`
+    UPDATE products
+    SET image_urls = COALESCE(
+      (
+        SELECT jsonb_agg(to_jsonb(trim(elem)))
+        FROM jsonb_array_elements_text(image_urls) AS elem
+        WHERE trim(elem) <> ''
+      ),
+      '[]'::jsonb
+    )
+    WHERE image_urls IS NOT NULL
+      AND jsonb_typeof(image_urls) = 'array'
+      AND image_urls::text LIKE '%""%'
+  `);
+
+  for (const [idStr, canonical] of Object.entries(CANONICAL_IMAGE_URLS)) {
+    const id = Number(idStr);
+    await client.query(
+      `UPDATE products
+       SET image_urls = $1::jsonb, image_url = NULL
+       WHERE id = $2
+         AND (
+           image_urls::text LIKE '%""%'
+           OR image_url ILIKE '%mirrord-hoodie%'
+           OR image_urls::text ILIKE '%mirrord-hoodie%'
+         )`,
+      [JSON.stringify(canonical), id]
+    );
+  }
 }
 
 async function initDb() {
@@ -108,6 +137,7 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
+    await repairMalformedImageUrls(client);
   } finally {
     client.release();
   }
