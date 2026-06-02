@@ -1,6 +1,7 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { Pool } from "pg";
+import { mapProductRow } from "./productImages.js";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -46,10 +47,42 @@ async function initDb() {
     }
     // Mark first two products as "new" for existing DBs
     await client.query("UPDATE products SET is_new = true WHERE id IN (1, 2)");
-    // Migrate image_url to image_urls for existing rows
+    // Migrate image_url to image_urls for existing rows (skip blank legacy URLs)
     await client.query(`
       UPDATE products SET image_urls = jsonb_build_array(image_url)
-      WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
+      WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb)
+        AND image_url IS NOT NULL
+        AND trim(image_url) <> ''
+    `);
+    // Drop empty strings from image_urls arrays (e.g. after bad image_url migration)
+    await client.query(`
+      UPDATE products p
+      SET image_urls = COALESCE(
+        (
+          SELECT jsonb_agg(to_jsonb(trim(elem)))
+          FROM jsonb_array_elements_text(p.image_urls) AS elem
+          WHERE trim(elem) <> ''
+        ),
+        '[]'::jsonb
+      )
+      WHERE jsonb_typeof(image_urls) = 'array'
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(p.image_urls) AS elem
+          WHERE trim(elem) = ''
+        )
+    `);
+    // Repair product 2 tee images when the row was left without usable URLs
+    await client.query(`
+      UPDATE products
+      SET image_urls = '["team_Work_makes_the_Dream_Work_-_front_w5qdnb", "team_work_makes_the_dream_work_-_back_onanux"]'::jsonb,
+          image_url = NULL
+      WHERE id = 2
+        AND (
+          image_urls IS NULL
+          OR image_urls = '[]'::jsonb
+          OR COALESCE(image_urls->>0, '') = ''
+          OR jsonb_typeof(image_urls) <> 'array'
+        )
     `);
   } finally {
     client.release();
@@ -73,7 +106,7 @@ app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    res.json(rows.map(mapProductRow));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,7 +126,7 @@ app.get("/products/:id", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(mapProductRow(rows[0]));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
