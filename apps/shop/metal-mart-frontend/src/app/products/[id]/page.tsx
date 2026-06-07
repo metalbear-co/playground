@@ -83,6 +83,7 @@ export default function ProductDetailPage() {
                     className="h-full w-full object-cover"
                     fill
                     sizes="(max-width: 768px) 100vw, 50vw"
+                    priority
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-slate-400">

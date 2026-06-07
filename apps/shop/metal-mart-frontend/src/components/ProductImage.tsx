@@ -43,6 +43,7 @@ export default function ProductImage({
   if (useCloudinary) {
     return (
       <CldImage
+        key={src}
         src={resolveCloudinaryId(src)}
         alt={alt}
         className={className}
@@ -57,6 +58,13 @@ export default function ProductImage({
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} className={className} />
+    <img
+      key={src}
+      src={src}
+      alt={alt}
+      className={className}
+      loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : undefined}
+    />
   );
 }
