@@ -13,6 +13,49 @@ if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
 
 const pool = new Pool({ connectionString: dbUrl });
 
+type ProductRow = {
+  id: number;
+  image_url: string | null;
+  image_urls: unknown;
+};
+
+type ProductResponse<T extends ProductRow> = Omit<T, "image_url" | "image_urls"> & {
+  image_url: string | null;
+  image_urls: string[];
+};
+
+const PRODUCT_IMAGE_REPAIRS: Record<number, string[]> = {
+  2: [
+    "team_Work_makes_the_Dream_Work_-_front_w5qdnb",
+    "team_work_makes_the_dream_work_-_back_onanux",
+  ],
+};
+
+const BROKEN_IMAGE_URLS = new Set(["Metal Mart/samples/mirrord-hoodie-front"]);
+
+function normalizeImageUrl(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  const trimmed = url.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeProductImages<T extends ProductRow>(product: T): ProductResponse<T> {
+  const imageUrls = Array.isArray(product.image_urls)
+    ? product.image_urls.map(normalizeImageUrl).filter((url): url is string => url !== null)
+    : [];
+  const imageUrl = normalizeImageUrl(product.image_url);
+  const repairedUrls = PRODUCT_IMAGE_REPAIRS[product.id];
+  const hasBrokenImage =
+    imageUrls.some((url) => BROKEN_IMAGE_URLS.has(url)) ||
+    (imageUrl ? BROKEN_IMAGE_URLS.has(imageUrl) : false);
+
+  if (repairedUrls && (imageUrls.length === 0 || hasBrokenImage)) {
+    return { ...product, image_url: repairedUrls[0], image_urls: repairedUrls };
+  }
+
+  return { ...product, image_url: imageUrl, image_urls: imageUrls };
+}
+
 async function initDb() {
   const client = await pool.connect();
   try {
@@ -73,7 +116,7 @@ app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    res.json(rows.map(normalizeProductImages));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,7 +136,7 @@ app.get("/products/:id", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(normalizeProductImages(rows[0]));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
