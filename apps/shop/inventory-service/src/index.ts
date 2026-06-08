@@ -13,6 +13,34 @@ if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
 
 const pool = new Pool({ connectionString: dbUrl });
 
+type ProductRow = {
+  id: number;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  stock: number;
+  image_url: string | null;
+  image_urls: unknown;
+  is_new: boolean;
+};
+
+function normalizeImageUrl(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function normalizeProductImages(product: ProductRow): ProductRow & { image_url: string | null; image_urls: string[] } {
+  const imageUrl = normalizeImageUrl(product.image_url);
+  const imageUrls = Array.isArray(product.image_urls)
+    ? product.image_urls.filter((url): url is string => normalizeImageUrl(url) !== null)
+    : [];
+
+  return {
+    ...product,
+    image_url: imageUrl,
+    image_urls: imageUrls.length > 0 ? imageUrls : imageUrl ? [imageUrl] : [],
+  };
+}
+
 async function initDb() {
   const client = await pool.connect();
   try {
@@ -72,8 +100,8 @@ app.get("/health", (_req, res) => {
 app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
-    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    const { rows } = await pool.query<ProductRow>("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
+    res.json(rows.map(normalizeProductImages));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,7 +121,7 @@ app.get("/products/:id", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(normalizeProductImages(rows[0]));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
