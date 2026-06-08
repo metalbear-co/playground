@@ -24,19 +24,24 @@ type ProductRow = {
   is_new: boolean;
 };
 
+const productImageOverrides: Record<number, string[]> = {
+  // Runtime repair for the stale shared catalog row; do not mutate the playground DB.
+  2: ["team_Work_makes_the_Dream_Work_-_front_w5qdnb", "team_work_makes_the_dream_work_-_back_onanux"],
+};
+
 function normalizeImageUrl(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function normalizeProductImages(product: ProductRow): ProductRow & { image_url: string | null; image_urls: string[] } {
   const imageUrl = normalizeImageUrl(product.image_url);
-  const imageUrls = Array.isArray(product.image_urls)
+  const imageUrls = productImageOverrides[product.id] ?? (Array.isArray(product.image_urls)
     ? product.image_urls.filter((url): url is string => normalizeImageUrl(url) !== null)
-    : [];
+    : []);
 
   return {
     ...product,
-    image_url: imageUrl,
+    image_url: imageUrls[0] ?? imageUrl,
     image_urls: imageUrls.length > 0 ? imageUrls : imageUrl ? [imageUrl] : [],
   };
 }
