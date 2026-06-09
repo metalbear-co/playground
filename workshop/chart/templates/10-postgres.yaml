@@ -1,0 +1,77 @@
+{{/* Shared, seeded Postgres. Read-only /products, safe for all attendees to share.
+       emptyDir => init scripts re-run on restart, reseeding from files/seed.sql. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-seed
+  namespace: {{ .Values.namespaces.infra }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+data:
+  # Runs against POSTGRES_DB (=inventory) on first init.
+  seed.sql: |
+{{ .Files.Get "files/seed.sql" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespaces.infra }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels:
+        app: postgres
+        {{- include "ws.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgres.password | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.db | quote }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: seed
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "{{ .Values.postgres.user }}", "-d", "{{ .Values.postgres.db }}"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: seed
+          configMap:
+            name: postgres-seed
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespaces.infra }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432

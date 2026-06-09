@@ -1,0 +1,2 @@
+Placeholder so //go:embed all:assets compiles before build.sh runs.
+build.sh copies ../backends here (assets/backends) prior to `go build`.

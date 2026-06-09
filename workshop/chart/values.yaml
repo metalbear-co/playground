@@ -1,0 +1,74 @@
+# ── mirrord workshop chart values ───────────────────────────────────────────
+# Provision a buffer of seats for stragglers/late signups (50 attendees -> 60 seats).
+attendeeCount: 60
+
+# Single host, path-based routing (GKE managed certs don't support wildcards).
+host: workshop.metalbear.dev
+
+# Seat a01..aNN -> namespace ws-a01..ws-aNN, served at /a01/ ../aNN/.
+seatPrefix: a
+namespacePrefix: ws-
+
+# Shared namespaces.
+namespaces:
+  infra: workshop-infra
+  shared: workshop-shared
+  system: workshop-system
+  finale: workshop-finale
+
+images:
+  # Pinned to a digest for reproducibility (resolved from the running cluster 2026-06).
+  inventory: ghcr.io/metalbear-co/playground-inventory-service@sha256:195dd3edf7046ea1cf446477e08420f5b9da742d0bf79c6c80354ca8f4213f1a
+  ui: nginx:1.27-alpine
+  postgres: postgres:16-alpine
+
+postgres:
+  db: inventory
+  user: postgres
+  password: postgres          # throwaway cluster; rotate/secretize if reused
+  storage: emptyDir           # reseeds on restart from files/seed.sql (init runs on empty data dir)
+
+# Per-attendee inventory pod is intentionally tiny — it's only a steal target.
+resources:
+  inventory:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits:   { cpu: 200m, memory: 192Mi }
+  ui:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 64Mi }
+
+gateway:
+  className: gke-l7-global-external-managed
+  # Certificate Manager map for real Google-managed TLS (GKE Gateway annotation). When set, the LB
+  # serves the mapped cert for the host; keep tls.mode=secret+selfSigned as the listener placeholder.
+  certMap: ""                  # e.g. workshop-map
+  tls:
+    # preSharedCert: reference a GKE ManagedCertificate's provisioned compute cert (matches the
+    #                playground repo's pattern). Two-step: install -> wait for cert -> set name.
+    # secret:        reference a kubernetes.io/tls Secret via standard Gateway certificateRefs
+    #                (easier for a self-signed dry run).
+    mode: preSharedCert        # preSharedCert | secret
+    preSharedCertName: ""      # set to the mcrt-... name after the ManagedCertificate provisions
+    secretName: workshop-tls
+    selfSigned: false          # secret mode only: chart generates a self-signed cert (testing)
+  managedCertificate:
+    enabled: true              # creates a ManagedCertificate for .host (provisions the mcrt-...)
+
+finale:
+  enabled: true
+
+# In-cluster seat broker, routed at /api so the landing page claims same-origin. Needs a Secret
+# (default workshop-seats) holding seats.json, created post-provision by gen-seats.sh.
+broker:
+  enabled: true
+  # Built + pushed by bootstrap-cluster.sh. Set per-deploy (e.g. -f values.local.yaml), not in git.
+  image: ""
+  seatsSecret: workshop-seats
+  # Admin dashboard at /api/admin?token=<adminToken>. Empty => admin endpoints disabled.
+  # Set per-deploy and keep it out of git (values.local.yaml is gitignored).
+  adminToken: ""
+
+# RBAC granted to each attendee ServiceAccount. Mirrors the repo's proven mirrord-ci Role plus
+# the cluster-scoped bits mirrord needs. VALIDATE against the pinned Operator version in the dry run.
+rbac:
+  enabled: true

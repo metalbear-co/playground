@@ -1,0 +1,28 @@
+{{- if .Values.rbac.enabled }}
+{{/* Attendees use the mirrord Operator's OWN user ClusterRoles (created by the mirrord-operator
+     chart — install it first). This is more correct/robust than hand-rolling the rule set.
+
+       mirrord-operator-user-basic : cluster-scoped essentials (read operator, create the per-user
+                                     credential/cert). Bound CLUSTER-WIDE — it only lets a user
+                                     authenticate to the operator; it grants no steal rights.
+       mirrord-operator-user       : target proxy = the actual steal. Bound PER-NAMESPACE
+                                     (each attendee's own ns in 30-attendee.yaml, + finale in
+                                     50-finale.yaml) so a seat can only steal in its own namespace. */}}
+{{- range $i := until (int .Values.attendeeCount) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: workshop-{{ include "ws.seat" (dict "i" $i "root" $) }}-operator-basic
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mirrord-operator-user-basic
+subjects:
+  - kind: ServiceAccount
+    name: attendee
+    namespace: {{ include "ws.ns" (dict "i" $i "root" $) }}
+{{- end }}
+{{- end }}

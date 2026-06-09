@@ -1,0 +1,72 @@
+{{/* Single external Gateway + one host. All HTTPRoutes (per-seat + finale) attach here.
+       TLS: GKE managed certs can't wildcard, but we only need one host for path-based routing.
+
+     Modes (gateway.tls.mode):
+       secret        - reference a kubernetes.io/tls Secret (set selfSigned=true to have the chart
+                       generate one — fine for testing; browser shows an untrusted warning).
+       preSharedCert - reference a GKE-provisioned managed cert by name (real public TLS). Two-step:
+                       provision the ManagedCertificate, then set gateway.tls.preSharedCertName. */}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: workshop-gateway
+  namespace: {{ .Values.namespaces.system }}
+  {{- if .Values.gateway.certMap }}
+  annotations:
+    networking.gke.io/certmap: {{ .Values.gateway.certMap | quote }}
+  {{- end }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ .Values.host | quote }}
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        {{- if eq .Values.gateway.tls.mode "preSharedCert" }}
+        {{- if not .Values.gateway.tls.preSharedCertName }}
+        {{- fail "gateway.tls.mode=preSharedCert needs gateway.tls.preSharedCertName (provision the ManagedCertificate first), or use gateway.tls.mode=secret with selfSigned=true for testing" }}
+        {{- end }}
+        options:
+          # Name of the compute SSL cert GKE provisions from the ManagedCertificate below.
+          networking.gke.io/pre-shared-certs: {{ .Values.gateway.tls.preSharedCertName | quote }}
+        {{- else }}
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.tls.secretName }}
+        {{- end }}
+{{- if and (eq .Values.gateway.tls.mode "secret") .Values.gateway.tls.selfSigned }}
+---
+{{/* Self-signed cert for testing — regenerated on each upgrade. Don't use for the real event. */}}
+{{- $cert := genSelfSignedCert .Values.host nil (list .Values.host) 3650 }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.gateway.tls.secretName }}
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+{{- end }}
+{{- if and .Values.gateway.managedCertificate.enabled (eq .Values.gateway.tls.mode "preSharedCert") }}
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: workshop-cert
+  namespace: {{ .Values.namespaces.system }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  domains:
+    - {{ .Values.host }}
+{{- end }}

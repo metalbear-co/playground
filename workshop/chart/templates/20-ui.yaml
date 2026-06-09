@@ -1,0 +1,144 @@
+{{/* One shared static UI (nginx). Path-agnostic page; served under every /aNN/ and /finale/. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ui-content
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+data:
+  index.html: |
+{{ .Files.Get "files/index.html" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ui-nginx
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location = /healthz { return 200 'ok'; add_header Content-Type text/plain; }
+      # Serve the single page for any path (the page reads its seat from location.pathname).
+      location / { root /usr/share/nginx/html; try_files $uri /index.html; }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metalmart-ui
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: metalmart-ui }
+  template:
+    metadata:
+      labels:
+        app: metalmart-ui
+        {{- include "ws.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: nginx
+          image: {{ .Values.images.ui }}
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: content
+              mountPath: /usr/share/nginx/html
+            - name: conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          readinessProbe:
+            httpGet: { path: /healthz, port: 80 }
+          resources:
+            {{- toYaml .Values.resources.ui | nindent 12 }}
+      volumes:
+        - name: content
+          configMap: { name: ui-content }
+        - name: conf
+          configMap: { name: ui-nginx }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metalmart-ui
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: { app: metalmart-ui }
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: metalmart-ui-hc
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /healthz
+        port: 80
+  targetRef:
+    group: ""
+    kind: Service
+    name: metalmart-ui
+---
+{{/* Cross-namespace backendRef: attendee/finale HTTPRoutes -> this shared UI Service.
+       Gateway API requires a ReferenceGrant per source namespace. */}}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-routes-to-ui
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  from:
+    {{- range $i := until (int .Values.attendeeCount) }}
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ include "ws.ns" (dict "i" $i "root" $) }}
+    {{- end }}
+    {{- if .Values.finale.enabled }}
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ .Values.namespaces.finale }}
+    {{- end }}
+  to:
+    - group: ""
+      kind: Service
+      name: metalmart-ui
+---
+{{/* Root of the DNS -> the UI's landing view (index.html branches on path: / = landing,
+     /aNN/ & /finale/ = store). Lowest-specificity prefix, so per-seat routes still win. */}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: root-route
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: workshop-gateway
+      namespace: {{ .Values.namespaces.system }}
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: metalmart-ui
+          port: 80

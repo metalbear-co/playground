@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MetalMart — mirrord workshop</title>
+  <!--
+    One page, two views (branch on path):
+      /              -> landing (instructions + live claim widget)  [Fast path + Manual path]
+      /aNN/ /finale/ -> store (product grid; banner flips to the laptop while stealing)
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono&display=swap" rel="stylesheet" />
+  <style>
+    :root { --purple:#6a4ff5; --orange:#f59e0b; --ink:#1a1730; --muted:#6b6880; --bg:#f6f5fb; --card:#fff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:"DM Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    header { background:var(--purple); color:#fff; padding:14px 24px; display:flex; align-items:center; gap:12px; }
+    header img.logo { height:26px; filter:brightness(0) invert(1); }   /* black wordmark -> white on purple */
+    header .seat { margin-left:auto; font-size:13px; opacity:.85; }
+    h1 { font-size:26px; margin:0 0 6px; } h1 u { text-decoration:none; box-shadow:inset 0 -6px 0 color-mix(in srgb,var(--orange) 45%,transparent); }
+    button { font-family:inherit; font-weight:600; border:0; border-radius:10px; padding:9px 16px; background:var(--purple); color:#fff; cursor:pointer; }
+    button:hover { filter:brightness(1.07); }
+    code, pre { font-family:"DM Mono",ui-monospace,monospace; }
+    /* landing */
+    .wrap { max-width:980px; margin:0 auto; padding:24px; }
+    .lede { color:var(--muted); margin:0 0 14px; font-size:16px; }
+    .intro { background:var(--card); border-radius:14px; padding:14px 20px; margin:0 0 22px; box-shadow:0 1px 3px rgba(26,23,48,.08); }
+    .intro p { margin:9px 0; font-size:14.5px; line-height:1.5; }
+    .cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    @media (max-width:780px){ .cards{ grid-template-columns:1fr; } }
+    .card { background:var(--card); border-radius:16px; padding:20px 22px; box-shadow:0 1px 3px rgba(26,23,48,.08); min-width:0; }
+    .card h2 { margin:0 0 4px; font-size:19px; }
+    .tag { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; margin-bottom:10px; }
+    .tag.fast { background:#ece9fb; color:#41358f; } .tag.manual { background:#fff3dc; color:#9a6400; }
+    ol { margin:0; padding-left:18px; } li { margin:10px 0; }
+    pre { background:#1a1730; color:#eee; padding:10px 48px 10px 12px; border-radius:8px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12.5px; margin:6px 0; position:relative; }
+    pre .copy { position:absolute; top:6px; right:6px; font-size:11px; padding:3px 7px; background:#3a3563; }
+    input,select { font-family:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid #ccc; }
+    .pill { display:inline-block; background:#ece9fb; color:#41358f; border-radius:8px; padding:6px 10px; font-weight:600; margin:4px 8px 4px 0; }
+    .dl a { display:inline-block; margin:3px 10px 3px 0; color:var(--purple); font-weight:600; }
+    .err { color:#b00; font-size:13px; }
+    .muted { color:var(--muted); font-size:13px; }
+    /* store */
+    .served { margin:0; padding:12px 24px; font-size:14px; font-weight:500; display:flex; align-items:center; gap:8px; }
+    .served.cluster { background:#ece9fb; color:#41358f; } .served.local { background:#fff3dc; color:#9a6400; }
+    .served .dot { width:9px; height:9px; border-radius:50%; background:currentColor; box-shadow:0 0 0 4px color-mix(in srgb,currentColor 22%,transparent); }
+    .bar { display:flex; align-items:center; gap:12px; padding:18px 24px 4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:18px; padding:18px 24px 48px; }
+    .tile { background:var(--card); border-radius:16px; padding:18px; box-shadow:0 1px 3px rgba(26,23,48,.08); position:relative; }
+    .thumb { height:120px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:52px; background:linear-gradient(135deg,color-mix(in srgb,var(--purple) 14%,#fff),color-mix(in srgb,var(--orange) 16%,#fff)); }
+    .name { font-weight:700; margin:12px 0 4px; } .desc { color:var(--muted); font-size:13px; min-height:34px; }
+    .row { display:flex; align-items:baseline; justify-content:space-between; margin-top:10px; }
+    .price { font-weight:700; font-size:18px; } .stock { font-size:12px; color:var(--muted); }
+    .new { position:absolute; top:12px; right:12px; background:var(--orange); color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; }
+    .empty { padding:48px 24px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <img class="logo" src="https://storage.googleapis.com/mirrord-workshop-dist/mirrord-logo.svg" alt="mirrord" />
+    <div class="seat" id="seat"></div>
+  </header>
+
+  <!-- ───────── LANDING ───────── -->
+  <div id="landing" hidden>
+    <div class="wrap">
+      <h1>Steal a cloud service to <u>your laptop</u></h1>
+      <p class="lede">A hands-on intro to <b>mirrord</b>.</p>
+      <div class="intro">
+        <p><b>What is this?</b> mirrord lets you run one service from a live Kubernetes cluster on your
+          own machine. It "steals" that service's traffic, environment variables, and network so your
+          local process behaves exactly as if it were running in the cluster — no deploy, no Docker, no
+          rebuilds.</p>
+        <p><b>What you'll do:</b> claim a seat, take over the <code>inventory-service</code> behind our
+          MetalMart storefront, and run it on <i>your</i> laptop. Change a line, refresh the live store,
+          and watch your laptop serving real cluster traffic in seconds.</p>
+        <p><b>Why it matters:</b> this is how you develop and debug against real cluster dependencies
+          instantly, instead of waiting on a build-and-deploy pipeline. Pick a path below to start —
+          and if your laptop is locked down, just follow along on the screen.</p>
+      </div>
+      <div class="cards">
+        <div class="card">
+          <span class="tag fast">FAST PATH</span>
+          <h2>Use the companion</h2>
+          <ol>
+            <li>Install it (curl, so macOS won't block it):
+              <pre><button class="copy">copy</button>curl -fsSL https://storage.googleapis.com/mirrord-workshop-dist/install.sh | bash</pre></li>
+            <li>Claim a seat + install mirrord:
+              <pre><button class="copy">copy</button>WORKSHOP_BROKER=https://mirrord-workshop.com/api workshop start --install</pre></li>
+            <li>Steal — it opens your file + URL:
+              <pre><button class="copy">copy</button>workshop run</pre></li>
+            <li>Edit the <code>PREFIX</code> line it opens, save, refresh your store. ✨</li>
+          </ol>
+        </div>
+        <div class="card">
+          <span class="tag manual">MANUAL PATH — no binary</span>
+          <h2>Do it by hand</h2>
+          <ol>
+            <li>Install mirrord:
+              <pre><button class="copy">copy</button>curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | VERSION=3.210.0 bash</pre></li>
+            <li>Claim your seat:<br>
+              <input id="name" placeholder="your name" /> <button id="claimBtn">Claim</button>
+              <div id="claimOut" style="margin-top:8px"></div></li>
+            <li>Pick your language:
+              <select id="lang">
+                <option value="python">Python</option><option value="ruby">Ruby</option>
+                <option value="go">Go</option><option value="node">Node</option>
+                <option value="java">Java</option><option value="php">PHP</option>
+                <option value="dotnet">.NET</option>
+              </select></li>
+            <li>Download these into one folder:<div class="dl" id="dls"></div></li>
+            <li>From that folder, run:<pre><button class="copy">copy</button><span id="runcmd"></span></pre>
+              <div class="muted" id="prenote"></div></li>
+            <li>Open your store (link appears after you claim), edit <code>PREFIX</code> in the file, save, refresh.</li>
+          </ol>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:18px">Can't install anything on a locked-down laptop? No worries —
+        just watch the screen; we'll drive it live.</p>
+    </div>
+  </div>
+
+  <!-- ───────── STORE ───────── -->
+  <div id="store" hidden>
+    <p class="served cluster" id="served"><span class="dot"></span><span id="served-text">Loading…</span></p>
+    <div class="bar"><h1 style="font-size:24px">Our <u>Products</u></h1>
+      <button id="refresh" style="margin-left:auto">↻ Refresh</button></div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <script>
+    // copy buttons
+    document.addEventListener("click", (e) => {
+      if (!e.target.classList.contains("copy")) return;
+      const t = e.target.parentNode.textContent.replace(/^copy/, "").trim();
+      navigator.clipboard?.writeText(t); e.target.textContent = "copied"; setTimeout(() => e.target.textContent = "copy", 1200);
+    });
+
+    const isStore = /\/(a\d+|finale)(\/|$)/.test(location.pathname);
+    document.getElementById(isStore ? "store" : "landing").hidden = false;
+    isStore ? runStore() : runLanding();
+
+    // ───────── store view ─────────
+    function runStore() {
+      const base = location.pathname.replace(/\/?$/, "/");
+      const finale = base.match(/\/finale\/([^/]+)\//);
+      const sessionKey = finale ? finale[1] : null;
+      const productsUrl = sessionKey ? "/finale/products" : (base + "products");
+      const emoji = ["🐻","🧥","👕","☕","🧢","🐾","🧸","📌","🎽"];
+      document.getElementById("seat").textContent = sessionKey ? `finale · key ${sessionKey}` : `seat ${base.replace(/\//g,"") || "—"}`;
+      const setServed = (by) => {
+        const el = document.getElementById("served"), txt = document.getElementById("served-text");
+        if (by) { el.className = "served local"; txt.innerHTML = `⚡ Served by <code>${by}</code> — that's your laptop. You're stealing!`; }
+        else { el.className = "served cluster"; txt.innerHTML = `Served by <b>the cluster</b>. Start <code>mirrord</code> to take over.`; }
+      };
+      async function load() {
+        const grid = document.getElementById("grid");
+        try {
+          const headers = sessionKey ? { baggage: `mirrord-session=${sessionKey}` } : {};
+          const res = await fetch(productsUrl, { headers, cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setServed(res.headers.get("x-served-by"));
+          const products = await res.json();
+          if (!Array.isArray(products) || !products.length) { grid.innerHTML = `<div class="empty">No products yet.</div>`; return; }
+          grid.innerHTML = products.map((p) => `
+            <div class="tile">${p.is_new ? `<div class="new">NEW</div>` : ``}
+              <div class="thumb">${emoji[p.id % emoji.length] || "🐻"}</div>
+              <div class="name">${p.name ?? ""}</div><div class="desc">${p.description ?? ""}</div>
+              <div class="row"><div class="price">$${((p.price_cents ?? 0)/100).toFixed(2)}</div>
+                <div class="stock">${p.stock ?? 0} in stock</div></div></div>`).join("");
+        } catch (err) {
+          grid.innerHTML = `<div class="empty">Couldn't reach the backend (${err.message}).<br>
+            If a mirrord session just dropped, press <b>Ctrl-C</b> in your terminal, then ↻ Refresh.</div>`;
+        }
+      }
+      document.getElementById("refresh").addEventListener("click", load);
+      load();
+    }
+
+    // ───────── landing view ─────────
+    function runLanding() {
+      const BUCKET = "https://storage.googleapis.com/mirrord-workshop-dist";
+      const LANGS = {
+        python: { files: ["server.py"], run: "python3 server.py", watch: "server.py" },
+        ruby:   { files: ["server.rb"], run: "ruby server.rb", watch: "server.rb" },
+        go:     { files: ["main.go", "go.mod"], run: "go run main.go", watch: "main.go" },
+        node:   { files: ["server.js", "package.json"], run: "node server.js", watch: "server.js", pre: "npm install" },
+        java:   { files: ["Server.java"], run: "java Server.java", watch: "Server.java" },
+        php:    { files: ["router.php"], run: "php -S 0.0.0.0:8080 router.php", watch: "router.php" },
+        dotnet: { files: ["Program.cs", "workshop-inventory.csproj"], run: "dotnet run", watch: "Program.cs" },
+      };
+      let kubeReady = false;
+      const sel = document.getElementById("lang");
+      const render = () => {
+        const l = LANGS[sel.value];
+        const links = [
+          `<a href="${BUCKET}/backends/mirrord-core.json" download>mirrord-core.json</a>`,
+          `<a href="${BUCKET}/backends/reload.sh" download>reload.sh</a>`,
+          ...l.files.map((f) => `<a href="${BUCKET}/backends/${sel.value}/${f}" download>${f}</a>`),
+        ];
+        document.getElementById("dls").innerHTML =
+          (kubeReady ? `<a id="kcLink" download="kubeconfig">kubeconfig ✓</a>` : `<span class="muted">kubeconfig — claim a seat first</span>`)
+          + links.join("");
+        if (kubeReady && window._kc) document.getElementById("kcLink").href = window._kc;
+        document.getElementById("runcmd").textContent =
+          `KUBECONFIG=./kubeconfig mirrord exec -f mirrord-core.json -- sh reload.sh ${l.watch} ${l.run}`;
+        document.getElementById("prenote").textContent = l.pre ? `First, in that folder: ${l.pre}` : "";
+      };
+      sel.addEventListener("change", render);
+      render();
+
+      document.getElementById("claimBtn").addEventListener("click", async () => {
+        const name = document.getElementById("name").value.trim();
+        const out = document.getElementById("claimOut");
+        if (!name) { out.innerHTML = `<span class="err">Enter a name.</span>`; return; }
+        out.textContent = "Claiming…";
+        try {
+          const res = await fetch("/api/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+          if (!res.ok) { out.innerHTML = `<span class="err">${await res.text()}</span>`; return; }
+          const seat = await res.json();
+          window._kc = URL.createObjectURL(new Blob([seat.kubeconfig], { type: "text/yaml" }));
+          kubeReady = true; render();
+          out.innerHTML = `<span class="pill">seat ${seat.id}</span> your store: <a href="${seat.url}" target="_blank">${seat.url}</a>`;
+        } catch (e) { out.innerHTML = `<span class="err">${e.message}</span>`; }
+      });
+    }
+  </script>
+</body>
+</html>

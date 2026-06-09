@@ -1,0 +1,26 @@
+{{/* Shared namespaces */}}
+{{- range $key, $ns := .Values.namespaces }}
+{{- if or (ne $key "finale") $.Values.finale.enabled }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+    workshop.metalbear.co/role: {{ $key }}
+{{- end }}
+{{- end }}
+
+{{/* Per-attendee namespaces */}}
+{{- range $i := until (int .Values.attendeeCount) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "ws.ns" (dict "i" $i "root" $) }}
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+    workshop.metalbear.co/role: attendee
+    workshop.metalbear.co/seat: {{ include "ws.seat" (dict "i" $i "root" $) }}
+{{- end }}

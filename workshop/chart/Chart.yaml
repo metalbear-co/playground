@@ -1,0 +1,10 @@
+apiVersion: v2
+name: mirrord-workshop
+description: >-
+  Self-contained stack for a hands-on mirrord workshop. Provisions N isolated attendee
+  namespaces (each with an inventory-service steal target), a shared seeded Postgres, a
+  shared static UI, a finale namespace for concurrent filtered steal, and the GKE Gateway
+  + path-based routing. References only published images; touches no existing playground code.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

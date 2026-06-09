@@ -1,0 +1,14 @@
+[
+  {
+    "id": "a01",
+    "namespace": "ws-a01",
+    "url": "https://workshop.metalbear.dev/a01/",
+    "kubeconfig": "apiVersion: v1\nkind: Config\nclusters:\n- name: workshop\n  cluster:\n    server: https://CLUSTER_ENDPOINT\n    certificate-authority-data: <ca>\ncontexts:\n- name: ws-a01\n  context:\n    cluster: workshop\n    namespace: ws-a01\n    user: a01\ncurrent-context: ws-a01\nusers:\n- name: a01\n  user:\n    token: <sa-token-for-ws-a01>\n"
+  },
+  {
+    "id": "a02",
+    "namespace": "ws-a02",
+    "url": "https://workshop.metalbear.dev/a02/",
+    "kubeconfig": "apiVersion: v1\nkind: Config\n# ... same shape, ws-a02 token + namespace ...\n"
+  }
+]

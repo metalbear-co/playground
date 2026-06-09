@@ -1,0 +1,18 @@
+{
+  "key": "{{ get_env(name='WORKSHOP_KEY', default='changeme') }}",
+  "target": { "path": "deployment/inventory-service", "namespace": "workshop-finale" },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": { "header_filter": "^baggage: .*mirrord-session={{key}}.*$" },
+        "port_mapping": [[8080, 80]]
+      },
+      "outgoing": true,
+      "dns": true
+    },
+    "env": true,
+    "fs": "local",
+    "hostname": false
+  }
+}

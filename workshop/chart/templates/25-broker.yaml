@@ -1,0 +1,141 @@
+{{- if .Values.broker.enabled }}
+{{- if not .Values.broker.image }}{{ fail "broker.image is required — bootstrap-cluster.sh builds+pushes it, or set it via -f values.local.yaml" }}{{- end }}
+{{/* In-cluster seat broker, routed at /api (same origin as the landing page → no CORS).
+     seats.json comes from a Secret created post-provision by gen-seats.sh. */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: broker
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+---
+{{/* The admin dashboard reads + resets Operator sessions. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: workshop-broker
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["mirrord.metalbear.co"]
+    resources: ["mirrordclustersessions"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: workshop-broker
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: workshop-broker
+subjects:
+  - kind: ServiceAccount
+    name: broker
+    namespace: {{ .Values.namespaces.shared }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broker
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  replicas: 1   # single instance so all claims share one in-memory state
+  selector:
+    matchLabels: { app: broker }
+  template:
+    metadata:
+      labels:
+        app: broker
+        {{- include "ws.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: broker
+      containers:
+        - name: broker
+          image: {{ .Values.broker.image }}
+          env:
+            - name: PORT
+              value: "8088"
+            - name: SEATS_FILE
+              value: /seats/seats.json
+            - name: CLAIMS_FILE
+              value: /tmp/claims.json
+            - name: ADMIN_TOKEN
+              value: {{ .Values.broker.adminToken | quote }}
+          ports:
+            - containerPort: 8088
+          volumeMounts:
+            - name: seats
+              mountPath: /seats
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /status, port: 8088 }
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits:   { cpu: 100m, memory: 64Mi }
+      volumes:
+        - name: seats
+          secret:
+            secretName: {{ .Values.broker.seatsSecret }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: { app: broker }
+  ports:
+    - port: 80
+      targetPort: 8088
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: broker-hc
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /status
+        port: 8088
+  targetRef:
+    group: ""
+    kind: Service
+    name: broker
+---
+{{/* /api/* -> broker (rewritten to /, so /api/claim hits /claim). */}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: {{ .Values.namespaces.shared }}
+  labels:
+    {{- include "ws.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: workshop-gateway
+      namespace: {{ .Values.namespaces.system }}
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
+      backendRefs:
+        - name: broker
+          port: 80
+{{- end }}

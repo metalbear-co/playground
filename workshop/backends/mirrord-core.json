@@ -1,0 +1,17 @@
+{
+  "target": { "path": "deployment/inventory-service" },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": { "path_filter": "^/products" },
+        "port_mapping": [[8080, 80]]
+      },
+      "outgoing": true,
+      "dns": true
+    },
+    "env": true,
+    "fs": "local",
+    "hostname": false
+  }
+}

@@ -1,0 +1,12 @@
+# build artifacts
+companion/workshop
+companion/dist/
+broker/broker
+# generated: build.sh copies ../backends here for embedding
+companion/assets/backends/
+# runtime
+broker/seats.json
+broker/claims.json
+**/node_modules/
+# local, secret-bearing deploy override (real broker.image + adminToken) — never commit
+chart/values.local.yaml

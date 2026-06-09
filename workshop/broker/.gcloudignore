@@ -1,0 +1,4 @@
+# Upload source for Cloud Run build. Unlike .gitignore, we DO need seats.json in the image.
+broker
+claims.json
+*.log
