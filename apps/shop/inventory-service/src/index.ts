@@ -37,7 +37,7 @@ function normalizeImageUrls(value: unknown): string[] {
 function normalizeProductImages(row: ProductRow): ProductRow & { image_url: string | null; image_urls: string[] } {
   const canonicalUrls = CANONICAL_PRODUCT_IMAGE_URLS[row.id];
   const imageUrls = canonicalUrls ?? normalizeImageUrls(row.image_urls);
-  const imageUrl = normalizeImageUrl(row.image_url) ?? imageUrls[0] ?? null;
+  const imageUrl = imageUrls[0] ?? normalizeImageUrl(row.image_url);
 
   return {
     ...row,
