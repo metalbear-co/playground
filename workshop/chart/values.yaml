@@ -14,7 +14,6 @@ namespaces:
   infra: workshop-infra
   shared: workshop-shared
   system: workshop-system
-  finale: workshop-finale
 
 images:
   # Pinned to a digest for reproducibility (resolved from the running cluster 2026-06).
@@ -53,9 +52,6 @@ gateway:
     selfSigned: false          # secret mode only: chart generates a self-signed cert (testing)
   managedCertificate:
     enabled: true              # creates a ManagedCertificate for .host (provisions the mcrt-...)
-
-finale:
-  enabled: true
 
 # In-cluster seat broker, routed at /api so the landing page claims same-origin. Needs a Secret
 # (default workshop-seats) holding seats.json, created post-provision by gen-seats.sh.

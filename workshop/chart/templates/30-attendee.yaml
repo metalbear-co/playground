@@ -151,42 +151,12 @@ spec:
       namespace: {{ $.Values.namespaces.system }}
   rules:
     - matches:
-        - path: { type: PathPrefix, value: /{{ $seat }}/products }
-      filters:
-        - type: URLRewrite
-          urlRewrite:
-            path: { type: ReplacePrefixMatch, replacePrefixMatch: /products }
-      backendRefs:
-        - name: inventory-service
-          port: 80
-    - matches:
         - path: { type: PathPrefix, value: /{{ $seat }} }
       filters:
         - type: URLRewrite
           urlRewrite:
             path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
       backendRefs:
-        - name: metalmart-ui
-          namespace: {{ $.Values.namespaces.shared }}
+        - name: frontend
           port: 80
----
-{{/* Tell the GKE LB to health-check /health (the app 404s on /, which would mark it unhealthy → 503). */}}
-apiVersion: networking.gke.io/v1
-kind: HealthCheckPolicy
-metadata:
-  name: inventory-service-hc
-  namespace: {{ $ns }}
-  labels:
-    {{- include "ws.labels" $ | nindent 4 }}
-spec:
-  default:
-    config:
-      type: HTTP
-      httpHealthCheck:
-        requestPath: /health
-        port: 80
-  targetRef:
-    group: ""
-    kind: Service
-    name: inventory-service
 {{- end }}

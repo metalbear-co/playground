@@ -145,21 +145,18 @@
     // ───────── store view ─────────
     function runStore() {
       const base = location.pathname.replace(/\/?$/, "/");
-      const finale = base.match(/\/finale\/([^/]+)\//);
-      const sessionKey = finale ? finale[1] : null;
-      const productsUrl = sessionKey ? "/finale/products" : (base + "products");
+      const productsUrl = base + "products";
       const emoji = ["🐻","🧥","👕","☕","🧢","🐾","🧸","📌","🎽"];
-      document.getElementById("seat").textContent = sessionKey ? `finale · key ${sessionKey}` : `seat ${base.replace(/\//g,"") || "—"}`;
+      document.getElementById("seat").textContent = `seat ${base.replace(/\//g,"") || "—"}`;
       const setServed = (by) => {
         const el = document.getElementById("served"), txt = document.getElementById("served-text");
-        if (by) { el.className = "served local"; txt.innerHTML = `⚡ Served by <code>${by}</code> — that's your laptop. You're stealing!`; }
-        else { el.className = "served cluster"; txt.innerHTML = `Served by <b>the cluster</b>. Start <code>mirrord</code> to take over.`; }
+        if (by) { el.className = "served local"; txt.innerHTML = `⚡ Served by <code>${by}</code> — that's your laptop. You're stealing the backend!`; }
+        else { el.className = "served cluster"; txt.innerHTML = `This <b>frontend</b> is showing products from the <b>backend</b> pod in the cluster. Run mirrord to take the backend over on your laptop — then refresh.`; }
       };
       async function load() {
         const grid = document.getElementById("grid");
         try {
-          const headers = sessionKey ? { baggage: `mirrord-session=${sessionKey}` } : {};
-          const res = await fetch(productsUrl, { headers, cache: "no-store" });
+          const res = await fetch(productsUrl, { cache: "no-store" });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           setServed(res.headers.get("x-served-by"));
           const products = await res.json();
@@ -210,7 +207,7 @@
       const render = () => {
         const l = LANGS[sel.value];
         const links = [
-          `<a href="${BUCKET}/backends/mirrord-core.json" download>mirrord-core.json</a>`,
+          `<a href="${BUCKET}/backends/mirrord.json" download>mirrord.json</a>`,
           `<a href="${BUCKET}/backends/reload.sh" download>reload.sh</a>`,
           ...l.files.map((f) => `<a href="${BUCKET}/backends/${sel.value}/${f}" download>${f}</a>`),
         ];
@@ -219,8 +216,12 @@
           + links.join("");
         if (kubeReady && window._kc) document.getElementById("kcLink").href = window._kc;
         document.getElementById("runcmd").textContent =
-          `KUBECONFIG=./kubeconfig mirrord exec -f mirrord-core.json -- sh reload.sh ${l.watch} ${l.run}`;
-        document.getElementById("prenote").textContent = l.pre ? `First, in that folder: ${l.pre}` : "";
+          `export KUBECONFIG=./kubeconfig\n`
+          + `kubectl get pods            # see your frontend + backend pods\n`
+          + `cat mirrord.json            # what mirrord will take over\n`
+          + (l.pre ? l.pre + "\n" : "")
+          + `mirrord exec -f mirrord.json -- sh reload.sh ${l.watch} ${l.run}`;
+        document.getElementById("prenote").textContent = "";
       };
       sel.addEventListener("change", render);
       render();

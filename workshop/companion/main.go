@@ -1,11 +1,11 @@
 // workshop — the mirrord workshop companion.
 //
-// Gets an attendee from zero to a working steal: preflight + install mirrord, claim a seat from
-// the broker, write a namespace-scoped kubeconfig, then run a local backend under mirrord with
-// hot-reload. Stdlib only → single static binary per OS.
+// Does the boring setup (preflight, install mirrord, claim a seat, write your backend + mirrord.json
+// + kubeconfig into ~/mirrord-workshop) and then GETS OUT OF THE WAY: it prints the kubectl and
+// `mirrord exec` commands for you to run yourself, so you actually see how mirrord works.
+// Stdlib only → single static binary per OS.
 //
-//	workshop start  --broker https://broker.example  [--name dan] [--install]
-//	workshop run    [--lang python] [--finale] [--dry-run]
+//	workshop start  --broker https://broker.example  [--name dan] [--lang python] [--install]
 //	workshop doctor
 //	workshop reset
 package main
@@ -27,14 +27,10 @@ func main() {
 	switch os.Args[1] {
 	case "start":
 		cmdStart(os.Args[2:])
-	case "run":
-		cmdRun(os.Args[2:])
 	case "doctor":
 		cmdDoctor()
 	case "reset":
 		cmdReset()
-	case "claim":
-		cmdClaim(os.Args[2:])
 	default:
 		usage()
 		os.Exit(1)
@@ -44,8 +40,7 @@ func main() {
 func usage() {
 	fmt.Println(`workshop — mirrord workshop companion
 
-  start    preflight, claim a seat, write kubeconfig
-  run      run a local backend under mirrord (--lang, --finale, --dry-run)
+  start    set up ~/mirrord-workshop and print the commands to run yourself
   doctor   show environment + seat status
   reset    clear local workshop state
 
@@ -56,14 +51,29 @@ func cmdStart(args []string) {
 	fs := flag.NewFlagSet("start", flag.ExitOnError)
 	broker := fs.String("broker", os.Getenv("WORKSHOP_BROKER"), "broker URL")
 	name := fs.String("name", defaultName(), "your name (idempotent claim key)")
+	langName := fs.String("lang", "", "backend language (default: first one you have installed)")
 	install := fs.Bool("install", false, "install mirrord if missing")
 	fs.Parse(args)
 
 	banner()
-	preflight(*install)
+	langs := preflight(*install)
 
 	if *broker == "" {
 		die("No broker URL. Pass --broker or set WORKSHOP_BROKER (the facilitator will give you this).")
+	}
+
+	// Pick the language: explicit --lang, else the first one they have installed.
+	var lang Lang
+	if *langName != "" {
+		l, found := langByName(*langName)
+		if !found {
+			die("unknown --lang " + *langName)
+		}
+		lang = l
+	} else if len(langs) > 0 {
+		lang = langs[0]
+	} else {
+		die("no supported runtime found — install node/python3/go/java/ruby/dotnet/php")
 	}
 
 	step("Claiming your seat")
@@ -74,38 +84,59 @@ func cmdStart(args []string) {
 	saveSeat(seat)
 	ok(fmt.Sprintf("Seat %s  (namespace %s)", seat.ID, seat.Namespace))
 
-	step("Writing kubeconfig")
+	step("Setting up ~/mirrord-workshop")
 	if err := os.WriteFile(kubeconfigPath(), []byte(seat.Kubeconfig), 0o600); err != nil {
 		die("writing kubeconfig: " + err.Error())
 	}
-	ok(kubeconfigPath())
-
-	fmt.Printf(`
-%s You're provisioned.
-
-  Storefront:  %s
-  Next:        workshop run          (steal your inventory-service)
-               workshop run --finale (the shared-target finale)
-
-  For kubectl in this shell:  export KUBECONFIG=%s
-`, green("✓"), seat.URL, kubeconfigPath())
-}
-
-func cmdClaim(args []string) {
-	fs := flag.NewFlagSet("claim", flag.ExitOnError)
-	broker := fs.String("broker", os.Getenv("WORKSHOP_BROKER"), "broker URL")
-	name := fs.String("name", defaultName(), "your name")
-	fs.Parse(args)
-	if *broker == "" {
-		die("set --broker or WORKSHOP_BROKER")
-	}
-	seat, err := claimSeat(*broker, *name)
+	backends, err := cacheBackends()
 	if err != nil {
 		die(err.Error())
 	}
-	saveSeat(seat)
-	_ = os.WriteFile(kubeconfigPath(), []byte(seat.Kubeconfig), 0o600)
-	ok(fmt.Sprintf("Seat %s — %s", seat.ID, seat.URL))
+	if err := setupLang(backends, lang); err != nil {
+		die("setting up backend: " + err.Error())
+	}
+	ok(fmt.Sprintf("%s, mirrord.json, reload.sh, kubeconfig", lang.Watch))
+	openEditor(filepath.Join(workDir(), lang.Watch))
+
+	printGuide(seat, lang)
+}
+
+// printGuide explains the architecture and prints the exact commands the attendee runs themselves.
+func printGuide(seat *Seat, lang Lang) {
+	pre := ""
+	if lang.Pre != "" {
+		pre = fmt.Sprintf("\n  (first, one-off)          %s", bold(lang.Pre))
+	}
+	fmt.Printf(`
+%s
+
+  In the cluster, a %s pod calls a %s pod (the backend) to get products. You'll run
+  that backend on YOUR laptop — mirrord steals the backend's traffic, so the cluster's frontend
+  ends up talking to your machine. Nothing is deployed; your local process just takes over.
+
+%s
+
+  cd %s
+  export KUBECONFIG=%s%s
+
+  1. see the two pods          %s
+  2. read the steal config     %s
+  3. take over the backend     %s
+  4. open your store           %s
+  5. edit %s (the PREFIX line) and save — it hot-reloads; refresh the store.
+
+  (Ctrl-C in step 3 to stop; your products come from your laptop while it runs.)
+`,
+		bold("How it works"),
+		green("frontend"), green("inventory-service"),
+		bold("Now open a terminal and run these yourself"),
+		workDir(), kubeconfigPath(), pre,
+		bold("kubectl get pods"),
+		bold("cat mirrord.json"),
+		bold(lang.mirrordCmd()),
+		seat.URL,
+		lang.Watch,
+	)
 }
 
 func cmdDoctor() {
@@ -125,11 +156,10 @@ func cmdDoctor() {
 }
 
 func cmdReset() {
-	dir := configDir()
-	if err := os.RemoveAll(dir); err != nil {
-		die(err.Error())
+	for _, dir := range []string{configDir(), workDir()} {
+		_ = os.RemoveAll(dir)
 	}
-	ok("cleared " + dir)
+	ok("cleared local workshop state (~/mirrord-workshop + cache)")
 }
 
 // ── state ───────────────────────────────────────────────────────────────────
@@ -144,7 +174,7 @@ func configDir() string {
 	return d
 }
 
-func kubeconfigPath() string { return filepath.Join(configDir(), "kubeconfig") }
+func kubeconfigPath() string { return filepath.Join(workDir(), "kubeconfig") } // visible folder
 func seatPath() string       { return filepath.Join(configDir(), "seat.json") }
 
 // workDir is a VISIBLE folder (not ~/Library/...) where attendees edit their backend.

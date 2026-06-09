@@ -97,32 +97,6 @@ spec:
     kind: Service
     name: metalmart-ui
 ---
-{{/* Cross-namespace backendRef: attendee/finale HTTPRoutes -> this shared UI Service.
-       Gateway API requires a ReferenceGrant per source namespace. */}}
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-routes-to-ui
-  namespace: {{ .Values.namespaces.shared }}
-  labels:
-    {{- include "ws.labels" . | nindent 4 }}
-spec:
-  from:
-    {{- range $i := until (int .Values.attendeeCount) }}
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      namespace: {{ include "ws.ns" (dict "i" $i "root" $) }}
-    {{- end }}
-    {{- if .Values.finale.enabled }}
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      namespace: {{ .Values.namespaces.finale }}
-    {{- end }}
-  to:
-    - group: ""
-      kind: Service
-      name: metalmart-ui
----
 {{/* Root of the DNS -> the UI's landing view (index.html branches on path: / = landing,
      /aNN/ & /finale/ = store). Lowest-specificity prefix, so per-seat routes still win. */}}
 apiVersion: gateway.networking.k8s.io/v1

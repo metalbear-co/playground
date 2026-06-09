@@ -1,0 +1,103 @@
+{{/* Per-attendee FRONTEND: a tiny nginx that serves the store page AND proxies /products to the
+     inventory-service backend in the same namespace (server-side, in-cluster). So `kubectl get pods`
+     shows two pods (frontend + backend), and stealing the backend reroutes the frontend's call to
+     the attendee's laptop. */}}
+{{- range $i := until (int .Values.attendeeCount) }}
+{{- $ns := include "ws.ns" (dict "i" $i "root" $) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location = /healthz { return 200 'ok'; add_header Content-Type text/plain; }
+      # The frontend asks the backend for products — this in-cluster call is what mirrord steals.
+      location = /products {
+        proxy_pass http://inventory-service:80/products;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+      }
+      location / { root /usr/share/nginx/html; try_files $uri /index.html; }
+    }
+  index.html: |
+{{ $.Files.Get "files/index.html" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels:
+        app: frontend
+        {{- include "ws.labels" $ | nindent 8 }}
+    spec:
+      containers:
+        - name: nginx
+          image: {{ $.Values.images.ui }}
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: content
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+            - name: conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          readinessProbe:
+            httpGet: { path: /healthz, port: 80 }
+          resources:
+            {{- toYaml $.Values.resources.ui | nindent 12 }}
+      volumes:
+        - name: content
+          configMap: { name: frontend }
+        - name: conf
+          configMap: { name: frontend }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: { app: frontend }
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: frontend-hc
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ws.labels" $ | nindent 4 }}
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /healthz
+        port: 80
+  targetRef:
+    group: ""
+    kind: Service
+    name: frontend
+{{- end }}

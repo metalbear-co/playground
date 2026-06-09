@@ -1,6 +1,5 @@
 {{/* Shared namespaces */}}
 {{- range $key, $ns := .Values.namespaces }}
-{{- if or (ne $key "finale") $.Values.finale.enabled }}
 ---
 apiVersion: v1
 kind: Namespace
@@ -9,7 +8,6 @@ metadata:
   labels:
     {{- include "ws.labels" $ | nindent 4 }}
     workshop.metalbear.co/role: {{ $key }}
-{{- end }}
 {{- end }}
 
 {{/* Per-attendee namespaces */}}
