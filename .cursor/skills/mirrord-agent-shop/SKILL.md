@@ -86,6 +86,11 @@ Start each touched backend service with its checked-in `mirrord.json`. Keep
 `mirrord exec` as the command that starts the app process; do not widen
 `http_filter` settings.
 
+For backend or inventory validation, do **not** run `metal-mart-frontend` under
+mirrord. Leave the deployed staging frontend/gateway in the request path and
+access `https://playground.metalbear.dev/shop...` with the baggage header so the
+test shows how the local backend behaves behind the real staging frontend.
+
 ### Reliable tmux pattern in this container
 
 In the Cursor Cloud base used here, `/exec-daemon/tmux.portal.conf` may be
@@ -141,8 +146,10 @@ For inventory/product-catalog changes, follow
 
 ### Frontend changes
 
-Run `metal-mart-frontend` locally and point it at local or mirrord-backed service
-URLs. Prefer:
+Only run `metal-mart-frontend` locally when the frontend itself is changed or the
+test must exercise unreleased frontend code. Do not use a local or mirrord-backed
+frontend to prove inventory/backend behavior. For frontend changes, point API env
+vars at local or mirrord-backed service URLs. Prefer:
 
 ```bash
 NEXT_BASE_PATH=/shop \

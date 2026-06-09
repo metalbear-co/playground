@@ -61,6 +61,12 @@ USER="$MIRRORD_SESSION" \
 
 Do not widen `http_filter` in `mirrord.json` to make a test pass.
 
+For inventory or other backend validation, do **not** run
+`metal-mart-frontend` under mirrord. Keep the deployed staging frontend/gateway
+in the request path and access `https://playground.metalbear.dev/shop...` with
+the baggage header. That proves how the local backend behaves behind the real
+staging frontend.
+
 ## Reliable tmux Pattern
 
 Use tmux for long-running mirrord services. In this Cursor Cloud base container,
@@ -206,9 +212,11 @@ const fs = require("fs");
 
 ### Frontend-local baseline
 
-For frontend-only validation, run the frontend locally and validate
-`http://127.0.0.1:3000/shop`. Point API env vars at local or mirrord-backed
-service URLs:
+For frontend-only validation, or when the frontend itself has unreleased code,
+run the frontend locally and validate `http://127.0.0.1:3000/shop`. Point API env
+vars at local or mirrord-backed service URLs. Do not use this path as proof of
+inventory/backend behavior; backend validation should use the deployed staging
+frontend and public shop URL.
 
 ```bash
 NEXT_BASE_PATH=/shop \
