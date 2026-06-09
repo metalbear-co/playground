@@ -57,7 +57,7 @@ objects.
   the same commit as the UI change.
 - Commit and push the implementation before validation starts.
 - Open or update the PR before validation starts; update it again after any
-  validation-driven fixes.
+  validation-driven fixes, including Playwright screenshots (see Phase 6).
 
 Capture:
 
@@ -187,6 +187,28 @@ Run the script and save JSON results under `/tmp/screenshots/iter<n>-results.jso
 Review every screenshot with the available image-viewing tool. A visual mismatch
 counts as failed verification even if Playwright exits 0.
 
+### Stage screenshots for the PR
+
+After the final passing Playwright run, stage screenshots for PR upload:
+
+```bash
+.cursor/scripts/stage-playwright-screenshots.sh /tmp/screenshots/iter<n>-*.png
+```
+
+Update the PR body with a **Playwright verification** section that embeds the
+staged images using the printed `<img>` tags. Paths must be under
+`/opt/cursor/artifacts/screenshots/` so the PR tool uploads them:
+
+```html
+## Playwright verification
+
+<img alt="iter1 home" src="/opt/cursor/artifacts/screenshots/iter1-home.png" />
+<img alt="iter1 products" src="/opt/cursor/artifacts/screenshots/iter1-products.png" />
+```
+
+Include one `<img>` per visual check from the test plan. Do not hand off without
+uploading screenshots when Playwright was used.
+
 ## Phase 7: Internal Iteration
 
 If a functional check fails, screenshot review fails, or a local service fails to
@@ -197,7 +219,7 @@ start:
 3. Fix the code or fix the test.
 4. Commit and push the iteration fix.
 5. Restart the local mirrord service and rerun validation.
-6. Update the PR.
+6. Update the PR (re-stage and embed screenshots after the final passing run).
 
 Internal cap: 3 attempts. If still failing, report that directly and ask for
 developer input.
