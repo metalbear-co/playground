@@ -13,6 +13,20 @@
         }
       },
       "outgoing": true
-    }
+    },
+    "db_branches": [
+      {
+        "id": "{{key}}01-branch-db",
+        "type": "pg",
+        "ttl_secs": 30,
+        "version": "16.0",
+        "connection": {
+          "url": "DATABASE_URL"
+        },
+        "copy": {
+          "mode": "schema"
+        }
+      }
+    ]
   }
 }
