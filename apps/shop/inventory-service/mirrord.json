@@ -24,7 +24,7 @@
           "url": "DATABASE_URL"
         },
         "copy": {
-          "mode": "schema"
+          "mode": "all"
         }
       }
     ]
