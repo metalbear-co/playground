@@ -5,6 +5,68 @@ import { Pool } from "pg";
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
+type ProductRow = {
+  id: number;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  stock: number;
+  image_url: string | null;
+  image_urls: unknown;
+  is_new: boolean;
+};
+
+type ProductResponse = Omit<ProductRow, "image_urls"> & {
+  image_urls: string[];
+};
+
+const PRODUCT_IMAGE_REPAIRS: Record<number, { imageUrls: string[]; staleValues: Set<string> }> = {
+  2: {
+    imageUrls: [
+      "team_Work_makes_the_Dream_Work_-_front_w5qdnb",
+      "team_work_makes_the_dream_work_-_back_onanux",
+    ],
+    staleValues: new Set(["Metal Mart/samples/mirrord-hoodie-front"]),
+  },
+};
+
+function asNonEmptyStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function cleanLegacyImageUrl(value: string | null): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeProductImages(row: ProductRow): ProductResponse {
+  const imageUrls = asNonEmptyStrings(row.image_urls);
+  const legacyImageUrl = cleanLegacyImageUrl(row.image_url);
+  const repair = PRODUCT_IMAGE_REPAIRS[row.id];
+
+  if (
+    repair &&
+    (imageUrls.length === 0 || imageUrls.some((imageUrl) => repair.staleValues.has(imageUrl)))
+  ) {
+    return {
+      ...row,
+      image_url: repair.imageUrls[0],
+      image_urls: repair.imageUrls,
+    };
+  }
+
+  return {
+    ...row,
+    image_url: legacyImageUrl,
+    image_urls: imageUrls.length > 0 ? imageUrls : legacyImageUrl ? [legacyImageUrl] : [],
+  };
+}
+
 let dbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory";
 // mirrord branch DB URLs may omit the database name — ensure we connect to "inventory"
 if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
@@ -73,7 +135,7 @@ app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    res.json(rows.map((row: ProductRow) => normalizeProductImages(row)));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,7 +155,7 @@ app.get("/products/:id", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(normalizeProductImages(rows[0] as ProductRow));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
