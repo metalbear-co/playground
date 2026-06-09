@@ -5,6 +5,47 @@ import { Pool } from "pg";
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
+const CANONICAL_PRODUCT_IMAGE_URLS: Record<number, string[]> = {
+  2: [
+    "team_Work_makes_the_Dream_Work_-_front_w5qdnb",
+    "team_work_makes_the_dream_work_-_back_onanux",
+  ],
+};
+
+type ProductRow = {
+  id: number;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  stock: number;
+  image_url: string | null;
+  image_urls: unknown;
+  is_new: boolean;
+};
+
+function normalizeImageUrl(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeImageUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((url) => normalizeImageUrl(url))
+    .filter((url): url is string => url !== null);
+}
+
+function normalizeProductImages(row: ProductRow): ProductRow & { image_url: string | null; image_urls: string[] } {
+  const canonicalUrls = CANONICAL_PRODUCT_IMAGE_URLS[row.id];
+  const imageUrls = canonicalUrls ?? normalizeImageUrls(row.image_urls);
+  const imageUrl = normalizeImageUrl(row.image_url) ?? imageUrls[0] ?? null;
+
+  return {
+    ...row,
+    image_url: imageUrl,
+    image_urls: imageUrls.length > 0 ? imageUrls : imageUrl ? [imageUrl] : [],
+  };
+}
+
 let dbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory";
 // mirrord branch DB URLs may omit the database name — ensure we connect to "inventory"
 if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
@@ -73,7 +114,7 @@ app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    res.json((rows as ProductRow[]).map(normalizeProductImages));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,7 +134,7 @@ app.get("/products/:id", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(normalizeProductImages(rows[0] as ProductRow));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
