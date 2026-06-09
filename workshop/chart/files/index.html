@@ -27,18 +27,20 @@
     .lede { color:var(--muted); margin:0 0 14px; font-size:16px; }
     .intro { background:var(--card); border-radius:14px; padding:14px 20px; margin:0 0 22px; box-shadow:0 1px 3px rgba(26,23,48,.08); }
     .intro p { margin:9px 0; font-size:14.5px; line-height:1.5; }
-    .cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    .cards { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
     @media (max-width:780px){ .cards{ grid-template-columns:1fr; } }
-    .card { background:var(--card); border-radius:16px; padding:20px 22px; box-shadow:0 1px 3px rgba(26,23,48,.08); min-width:0; }
-    .card h2 { margin:0 0 4px; font-size:19px; }
+    .card { background:var(--card); border-radius:16px; padding:22px 24px 26px; box-shadow:0 1px 3px rgba(26,23,48,.08); min-width:0; }
+    .card h2 { margin:0 0 6px; font-size:19px; }
     .tag { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; margin-bottom:10px; }
     .tag.fast { background:#ece9fb; color:#41358f; } .tag.manual { background:#fff3dc; color:#9a6400; }
-    ol { margin:0; padding-left:18px; } li { margin:10px 0; }
-    pre { background:#1a1730; color:#eee; padding:10px 48px 10px 12px; border-radius:8px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12.5px; margin:6px 0; position:relative; }
-    pre .copy { position:absolute; top:6px; right:6px; font-size:11px; padding:3px 7px; background:#3a3563; }
-    input,select { font-family:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid #ccc; }
+    ol { margin:0; padding-left:20px; } li { margin:18px 0; line-height:1.55; }
+    pre { background:#1a1730; color:#eee; padding:12px 50px 12px 14px; border-radius:8px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12.5px; line-height:1.5; margin:8px 0 0; position:relative; }
+    pre .copy { position:absolute; top:8px; right:8px; font-size:11px; padding:3px 7px; background:#3a3563; }
+    input,select { font-family:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid #ccc; margin-top:6px; }
     .pill { display:inline-block; background:#ece9fb; color:#41358f; border-radius:8px; padding:6px 10px; font-weight:600; margin:4px 8px 4px 0; }
-    .dl a { display:inline-block; margin:3px 10px 3px 0; color:var(--purple); font-weight:600; }
+    .dl { margin-top:8px; line-height:2.1; }
+    .dl a { display:inline-block; margin:0 14px 0 0; color:var(--purple); font-weight:600; }
+    .dl .kc { display:block; margin-bottom:4px; }
     .err { color:#b00; font-size:13px; }
     .muted { color:var(--muted); font-size:13px; }
     /* store */
@@ -84,14 +86,14 @@
         <div class="card">
           <span class="tag fast">FAST PATH</span>
           <h2>Use the companion</h2>
+          <p class="muted">A helper that does the setup, then prints the commands for you to run.</p>
           <ol>
             <li>Install it (curl, so macOS won't block it):
               <pre><button class="copy">copy</button>curl -fsSL https://storage.googleapis.com/mirrord-workshop-dist/install.sh | bash</pre></li>
-            <li>Claim a seat + install mirrord:
+            <li>Set up your seat + install mirrord:
               <pre><button class="copy">copy</button>WORKSHOP_BROKER=https://mirrord-workshop.com/api workshop start --install</pre></li>
-            <li>Steal — it opens your file + URL:
-              <pre><button class="copy">copy</button>workshop run</pre></li>
-            <li>Edit the <code>PREFIX</code> line it opens, save, refresh your store. ✨</li>
+            <li>It writes <code>~/mirrord-workshop</code> and <b>prints the <code>kubectl</code> + <code>mirrord exec</code> commands</b> — open a terminal and run them yourself.</li>
+            <li>Edit the <code>PREFIX</code> line in your backend, save, refresh your store. ✨</li>
           </ol>
         </div>
         <div class="card">
@@ -212,7 +214,9 @@
           ...l.files.map((f) => `<a href="${BUCKET}/backends/${sel.value}/${f}" download>${f}</a>`),
         ];
         document.getElementById("dls").innerHTML =
-          (kubeReady ? `<a id="kcLink" download="kubeconfig">kubeconfig ✓</a>` : `<span class="muted">kubeconfig — claim a seat first</span>`)
+          (kubeReady
+            ? `<a class="kc" id="kcLink" download="kubeconfig">⬇ kubeconfig</a>`
+            : `<span class="kc muted">kubeconfig — claim a seat first ↑</span>`)
           + links.join("");
         if (kubeReady && window._kc) document.getElementById("kcLink").href = window._kc;
         document.getElementById("runcmd").textContent =
