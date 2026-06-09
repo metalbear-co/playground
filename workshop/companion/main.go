@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -52,6 +53,7 @@ func cmdStart(args []string) {
 	broker := fs.String("broker", os.Getenv("WORKSHOP_BROKER"), "broker URL")
 	name := fs.String("name", defaultName(), "your name (idempotent claim key)")
 	langName := fs.String("lang", "", "backend language (default: first one you have installed)")
+	dirFlag := fs.String("dir", "", "folder for your workshop files (default: prompt, ~/mirrord-workshop)")
 	install := fs.Bool("install", false, "install mirrord if missing")
 	fs.Parse(args)
 
@@ -84,7 +86,8 @@ func cmdStart(args []string) {
 	saveSeat(seat)
 	ok(fmt.Sprintf("Seat %s  (namespace %s)", seat.ID, seat.Namespace))
 
-	step("Setting up ~/mirrord-workshop")
+	resolveWorkDir(*dirFlag)
+	step("Setting up " + workDir())
 	if err := os.WriteFile(kubeconfigPath(), []byte(seat.Kubeconfig), 0o600); err != nil {
 		die("writing kubeconfig: " + err.Error())
 	}
@@ -105,37 +108,34 @@ func cmdStart(args []string) {
 func printGuide(seat *Seat, lang Lang) {
 	pre := ""
 	if lang.Pre != "" {
-		pre = fmt.Sprintf("\n  (first, one-off)          %s", bold(lang.Pre))
+		pre = fmt.Sprintf("  %s   # one-off: install dependencies\n", bold(lang.Pre))
 	}
 	fmt.Printf(`
 %s
 
-  In the cluster, a %s pod calls a %s pod (the backend) to get products. You'll run
-  that backend on YOUR laptop — mirrord steals the backend's traffic, so the cluster's frontend
-  ends up talking to your machine. Nothing is deployed; your local process just takes over.
+  In the cluster, a %s pod calls a %s pod (the backend) for products. You'll run that backend
+  on YOUR laptop — mirrord steals the backend's traffic, so the cluster's frontend ends up talking
+  to your machine. Nothing is deployed; your local process just takes over.
 
 %s
 
   cd %s
-  export KUBECONFIG=%s%s
+  export KUBECONFIG=%s
+%s  %s   # 1. see your frontend + backend pods
+  %s   # 2. the config mirrord uses to take over the backend
+  %s   # 3. take over the backend  (Ctrl-C to stop)
 
-  1. see the two pods          %s
-  2. read the steal config     %s
-  3. take over the backend     %s
-  4. open your store           %s
-  5. edit %s (the PREFIX line) and save — it hot-reloads; refresh the store.
-
-  (Ctrl-C in step 3 to stop; your products come from your laptop while it runs.)
+  Then open %s — edit the PREFIX line in %s, save (it hot-reloads), and refresh.
 `,
 		bold("How it works"),
 		green("frontend"), green("inventory-service"),
 		bold("Now open a terminal and run these yourself"),
-		workDir(), kubeconfigPath(), pre,
+		workDir(), kubeconfigPath(),
+		pre,
 		bold("kubectl get pods"),
 		bold("cat mirrord.json"),
 		bold(lang.mirrordCmd()),
-		seat.URL,
-		lang.Watch,
+		seat.URL, lang.Watch,
 	)
 }
 
@@ -178,11 +178,42 @@ func kubeconfigPath() string { return filepath.Join(workDir(), "kubeconfig") } /
 func seatPath() string       { return filepath.Join(configDir(), "seat.json") }
 
 // workDir is a VISIBLE folder (not ~/Library/...) where attendees edit their backend.
-func workDir() string {
+var chosenDir string
+
+func defaultWorkDir() string {
 	home, _ := os.UserHomeDir()
-	d := filepath.Join(home, "mirrord-workshop")
+	return filepath.Join(home, "mirrord-workshop")
+}
+
+func workDir() string {
+	d := chosenDir
+	if d == "" {
+		d = defaultWorkDir()
+	}
 	_ = os.MkdirAll(d, 0o755)
 	return d
+}
+
+// resolveWorkDir picks the folder for the attendee's files — the --dir flag, else an interactive
+// prompt with a sensible default.
+func resolveWorkDir(flagVal string) {
+	dir := strings.TrimSpace(flagVal)
+	if dir == "" {
+		fmt.Printf("\n  Where should your workshop files go? [%s]: ", defaultWorkDir())
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		dir = strings.TrimSpace(line)
+	}
+	if dir == "" {
+		dir = defaultWorkDir()
+	}
+	if dir == "~" || strings.HasPrefix(dir, "~/") {
+		home, _ := os.UserHomeDir()
+		dir = filepath.Join(home, dir[1:])
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	chosenDir = dir
 }
 
 func saveSeat(s *Seat) {

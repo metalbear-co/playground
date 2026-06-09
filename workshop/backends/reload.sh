@@ -5,18 +5,19 @@
 #   e.g.  mirrord exec -f mirrord.json -- sh reload.sh server.py python3 server.py
 set -m
 watch="$1"; shift
-mtime() { stat -f %m "$watch" 2>/dev/null || stat -c %Y "$watch" 2>/dev/null; }
+# Content checksum, not mtime — mtime reads back unreliably under mirrord's fs hooks.
+sig() { cksum "$watch" 2>/dev/null; }
 start() { "$@" & app=$!; }
 stop()  { kill -- -"$app" 2>/dev/null; wait "$app" 2>/dev/null; }
 trap 'stop; exit 0' TERM INT
 start "$@"
-prev=$(mtime)
+prev=$(sig)
 while true; do
   sleep 1
-  cur=$(mtime)
+  cur=$(sig)
   [ "$cur" = "$prev" ] && continue
   prev=$cur
-  echo "↻ reloading backend…"
+  echo "↻ change detected — reloading backend"
   stop
   start "$@"
 done

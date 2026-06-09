@@ -27,6 +27,7 @@
     .lede { color:var(--muted); margin:0 0 14px; font-size:16px; }
     .intro { background:var(--card); border-radius:14px; padding:14px 20px; margin:0 0 22px; box-shadow:0 1px 3px rgba(26,23,48,.08); }
     .intro p { margin:9px 0; font-size:14.5px; line-height:1.5; }
+    .diagram { display:block; width:100%; max-width:760px; margin:0 auto 24px; }
     .cards { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
     @media (max-width:780px){ .cards{ grid-template-columns:1fr; } }
     .card { background:var(--card); border-radius:16px; padding:22px 24px 26px; box-shadow:0 1px 3px rgba(26,23,48,.08); min-width:0; }
@@ -68,7 +69,7 @@
   <!-- ───────── LANDING ───────── -->
   <div id="landing" hidden>
     <div class="wrap">
-      <h1>Steal a cloud service to <u>your laptop</u></h1>
+      <h1>Test in your remote staging environment <u>without deploying to it</u></h1>
       <p class="lede">A hands-on intro to <b>mirrord</b>.</p>
       <div class="intro">
         <p><b>What is this?</b> mirrord lets you run one service from a live Kubernetes cluster on your
@@ -82,6 +83,41 @@
           instantly, instead of waiting on a build-and-deploy pipeline. Pick a path below to start —
           and if your laptop is locked down, just follow along on the screen.</p>
       </div>
+
+      <svg class="diagram" viewBox="0 0 760 230" role="img" aria-label="Architecture diagram">
+        <style>
+          .dgrm-cluster { fill:#f3f1fc; stroke:#d9d2fb; }
+          .dgrm-laptop { fill:#fff6e9; stroke:#f3dca8; }
+          .dgrm-pod { fill:#fff; stroke:#cfc6f5; }
+          .dgrm-lab { font:600 13px "DM Sans",sans-serif; fill:#1a1730; }
+          .dgrm-sub { font:11px "DM Sans",sans-serif; fill:#6b6880; }
+          .dgrm-hdr { font:700 12px "DM Sans",sans-serif; }
+          .dgrm-arr { stroke:#6a4ff5; stroke-width:2; fill:none; marker-end:url(#ah); }
+          .dgrm-steal { stroke:#f59e0b; stroke-width:2.5; stroke-dasharray:6 5; fill:none; marker-end:url(#ahg); }
+          .dgrm-stxt { font:700 11px "DM Sans",sans-serif; fill:#9a6400; }
+        </style>
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#6a4ff5"/></marker>
+          <marker id="ahg" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#f59e0b"/></marker>
+        </defs>
+        <rect class="dgrm-cluster" x="20" y="20" width="430" height="190" rx="14"/>
+        <text class="dgrm-hdr" x="36" y="42" fill="#41358f">☸ Kubernetes — your staging cluster</text>
+        <rect class="dgrm-pod" x="48" y="70" width="150" height="92" rx="10"/>
+        <text class="dgrm-lab" x="123" y="112" text-anchor="middle">frontend</text>
+        <text class="dgrm-sub" x="123" y="131" text-anchor="middle">pod · the store UI</text>
+        <rect class="dgrm-pod" x="270" y="70" width="150" height="92" rx="10"/>
+        <text class="dgrm-lab" x="345" y="106" text-anchor="middle">inventory</text>
+        <text class="dgrm-lab" x="345" y="122" text-anchor="middle">-service</text>
+        <text class="dgrm-sub" x="345" y="141" text-anchor="middle">pod · the backend</text>
+        <path class="dgrm-arr" d="M200,116 L264,116"/>
+        <text class="dgrm-sub" x="232" y="106" text-anchor="middle">/products</text>
+        <rect class="dgrm-laptop" x="560" y="70" width="178" height="92" rx="12"/>
+        <text class="dgrm-lab" x="649" y="106" text-anchor="middle">💻 your laptop</text>
+        <text class="dgrm-sub" x="649" y="127" text-anchor="middle">the backend, running locally</text>
+        <path class="dgrm-steal" d="M420,128 C500,170 510,170 558,140"/>
+        <text class="dgrm-stxt" x="490" y="200" text-anchor="middle">mirrord steals the backend's traffic → it's served from your laptop</text>
+      </svg>
+
       <div class="cards">
         <div class="card">
           <span class="tag fast">FAST PATH</span>
