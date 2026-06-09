@@ -7,9 +7,8 @@ description: Use when running one MetalMart shop service locally under mirrord a
 
 Use this for the local inner loop against `https://playground.metalbear.dev/shop`.
 
-`curl` alone is not enough to mark shop or inventory work verified. Playwright
-catches UI failures (broken product images, empty `image_urls[0]`, layout
-regressions) that API JSON checks miss.
+`curl` alone is not enough to mark shop or inventory work verified. Use
+Playwright for UI-facing checks.
 
 For full agent-owned implementation and validation, use `mirrord-agent-shop`.
 That skill also uses local mirrord; it must not use the preview workflow.
@@ -233,8 +232,7 @@ cat /tmp/screenshots/mirrord-run-results.json
 ```
 
 Review every PNG under `/tmp/screenshots/mirrord-run-*.png`. A visual failure
-(broken image icon, wrong product photo, empty tile) counts as a failed
-verification even if a narrow assertion passed.
+counts as a failed verification even if a narrow assertion passed.
 
 ## Completion Criteria
 
