@@ -6,13 +6,13 @@
 
 - [ ] Cluster up (`scripts/bootstrap-cluster.sh`), Operator healthy: `kubectl get pods -n mirrord`.
 - [ ] DNS A-record for the host resolves; **ManagedCertificate Active** (check hours ahead).
-- [ ] All seats ready: `kubectl get deploy -A | grep inventory | wc -l` ≈ attendees + 1 (finale).
+- [ ] All seats ready: each attendee namespace has a `frontend` + `inventory-service` pod (`kubectl get pods -n ws-a01`).
 - [ ] In-cluster broker healthy (`kubectl get pod -n workshop-shared -l app=broker`); landing page
       loads at `https://<host>/` and `/api/claim` works.
-- [ ] Smoke test one seat end-to-end on a clean machine (both paths): companion `workshop start`/`run`,
+- [ ] Smoke test one seat end-to-end on a clean machine (both paths): companion `workshop start`,
       AND the manual path (claim on the page → download files → `mirrord exec … sh reload.sh …`).
 - [ ] **Load check:** run ~50 scripted steals; watch Operator + node pressure (`kubectl top nodes`).
-      Especially the finale 50-on-1.
+
 - [ ] **The only thing to hand out is the URL: `https://<host>/`.** Project it. Three ways in:
       (A) companion one-liner, (B) manual no-binary path on the page, (C) can't install anything →
       watch you drive it on screen.
@@ -22,18 +22,17 @@
 | Time | Step | What attendees do | Watch for |
 |----:|------|-------------------|-----------|
 | 0:00 | **Intro** (slides) | open `https://<host>/` — pick a path (companion / manual / watch) | no pre-email; the page IS the instructions |
-| 0:05 | **Provision** | companion: `workshop start --install`; manual: claim on page → download → run | install storm; locked-down folks just watch your screen |
-| 0:10 | **First steal** | `workshop run` → file pops open + URL → **banner flips to their laptop** (data unchanged — that's the point) | the "whoa" is the banner, not the data. Celebrate it |
-| 0:17 | **The edit loop** | set `PREFIX = "🔥 "` on the `👇 EDIT ME` line → save → refresh → every product changes in the cloud | wrapper hot-reloads in ~seconds (`↻ reloading` in terminal); no restart needed |
-| 0:27 | **It just works** | point out env/DNS/outgoing: Node read the cluster DB with zero local setup; your laptop runs Python while the pod runs Node | reinforce language-agnostic |
-| 0:35 | **mirror vs steal + filter** | look at `mirrord-core.json`: steal + `^/products` path filter keeps probes on the pod | concept that powers the finale |
-| 0:42 | **Finale** | everyone `workshop run --finale` at once → all steal ONE shared pod, each filtered by their `baggage` key | the team sell. Project the board |
-| 0:54 | **IDE + wrap** | (demo) one-click from VS Code + breakpoint hit by cluster traffic; where to go next | leave them wanting the Operator |
+| 0:05 | **Set up** | `workshop start` (or the manual web path) → writes ~/mirrord-workshop + prints the commands | install storm; locked-down folks just watch your screen |
+| 0:12 | **See the architecture** | `kubectl get pods` → a **frontend** + **backend** pod; `cat mirrord.json` | this is the moment they "get" it |
+| 0:20 | **First steal** | run `mirrord exec -f mirrord.json -- …` themselves → open URL → **banner flips to their laptop** | they run mirrord; watch the agent spin up. Celebrate the banner |
+| 0:30 | **The edit loop** | set `PREFIX = "🔥 "` on the `👇 EDIT ME` line → save → refresh → products change in the cloud | hot-reloads in ~seconds (`↻ reloading` in their terminal) |
+| 0:40 | **It just works** | env/DNS/outgoing: Node read the cluster DB with zero local setup; laptop runs Python while the pod runs Node | reinforce language-agnostic |
+| 0:50 | **IDE + wrap** | (demo) one-click from VS Code + breakpoint hit by cluster traffic; where to go next | leave them wanting the Operator |
 
 ## Failure playbook
 
 - **Page won't load / 5xx after steal:** their local backend died or the session dropped.
-  → Ctrl-C in the terminal, `workshop run` again, refresh. The UI already says this.
+  → Ctrl-C in the terminal, re-run the `mirrord exec` command, refresh.
 - **Banner never flips to laptop:** local backend isn't setting `X-Served-By`, or steal didn't
   attach. Check the terminal for mirrord errors; confirm `workshop doctor` shows mirrord + seat.
 - **`no seats left`:** broker pool exhausted — bump `attendeeCount` and `helm upgrade`, re-run

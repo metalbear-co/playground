@@ -2,7 +2,7 @@
 # Keep-alive hot reload for the manual path: run the backend, watch the source file, and on change
 # restart ONLY the app — the mirrord session and its steal persist (no session-lock conflict).
 # Usage:  sh reload.sh <watchFile> <appCmd...>
-#   e.g.  mirrord exec -f mirrord-core.json -- sh reload.sh server.py python3 server.py
+#   e.g.  mirrord exec -f mirrord.json -- sh reload.sh server.py python3 server.py
 set -m
 watch="$1"; shift
 mtime() { stat -f %m "$watch" 2>/dev/null || stat -c %Y "$watch" 2>/dev/null; }
