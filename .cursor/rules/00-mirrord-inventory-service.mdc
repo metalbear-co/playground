@@ -138,4 +138,5 @@ target, filter, and request path before changing product code.
 - An unfiltered request to the same public endpoint does not reach the local service.
 - The changed inventory behavior is verified through the public shop path and the local mirrord process.
 - Run the Playwright checks in `.cursor/skills/mirrord-run-shop/SKILL.md` (API `image_urls` sanity + product images load on `/shop/products` and affected detail pages). Review screenshots; do not mark verified on `curl` alone.
+- When opening or updating a PR, stage Playwright screenshots with `.cursor/scripts/stage-playwright-screenshots.sh` and embed them in the PR body via `<img src="/opt/cursor/artifacts/screenshots/...">` tags (see the skill's "Upload Screenshots to the PR" section).
 - Never mutate the shared playground database with ad-hoc SQL; validate only via mirrord + public shop traffic.

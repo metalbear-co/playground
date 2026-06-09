@@ -85,6 +85,7 @@ If the response shows the **old** behavior, the request didn't get stolen. Most 
 2. Write and run `e2e.js` with `extraHTTPHeaders: { baggage: 'mirrord-session=' + $USER }`.
 3. Assert API rows have no empty `image_urls[0]`, and that `/shop/products` and affected detail pages show loaded images (`naturalWidth > 0`, no `No image` tiles).
 4. Review screenshots in `/tmp/screenshots/mirrord-run-*.png`.
+5. If opening or updating a PR, run `.cursor/scripts/stage-playwright-screenshots.sh` and embed the printed `<img>` tags in the PR body under a **Playwright verification** section.
 
 **Never** run ad-hoc `kubectl exec` SQL against the shared playground database to fix or test data. Validate only through mirrord + public shop URLs.
 

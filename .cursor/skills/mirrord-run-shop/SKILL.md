@@ -234,6 +234,30 @@ cat /tmp/screenshots/mirrord-run-results.json
 Review every PNG under `/tmp/screenshots/mirrord-run-*.png`. A visual failure
 counts as a failed verification even if a narrow assertion passed.
 
+## Upload Screenshots to the PR
+
+When opening or updating a PR after Playwright verification, stage screenshots so
+the PR management tool can upload them:
+
+```bash
+.cursor/scripts/stage-playwright-screenshots.sh
+```
+
+This copies PNGs from `/tmp/screenshots/` into
+`/opt/cursor/artifacts/screenshots/` and prints `<img>` tags for the PR body.
+
+When creating or updating the PR, include a **Playwright verification** section
+with those tags. Example:
+
+```html
+## Playwright verification
+
+<img alt="mirrord run products" src="/opt/cursor/artifacts/screenshots/mirrord-run-products.png" />
+```
+
+Do not mark verification complete or leave the PR without screenshots when
+Playwright was part of the validation.
+
 ## Completion Criteria
 
 Do not mark shop or inventory work verified until all of the following hold:
@@ -242,6 +266,7 @@ Do not mark shop or inventory work verified until all of the following hold:
 - Filtered public requests reach the local mirrord process; unfiltered requests do not
 - Playwright exits 0 with checks adapted to the change scope
 - Screenshots reviewed; product images visibly load on `/shop/products` and affected detail pages
+- Playwright screenshots staged and embedded in the PR body when a PR is opened or updated
 - No unauthorized writes to shared cluster databases
 
 ## Inventory-Specific

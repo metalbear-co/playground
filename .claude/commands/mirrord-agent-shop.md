@@ -249,6 +249,14 @@ cat /tmp/screenshots/iter<n>-results.json
 
 **4d. Self-review visually:** for every `iter<n>-*.png`, use the `Read` tool to view the image and compare against the visual criteria written in the Phase 2 plan. If the screenshot doesn't match — heading missing, layout broken, element not visible, unexpected empty state — record that as a failed check **even if the Playwright assertions passed**. Add the visual failure to the results summary.
 
+**4e. Stage screenshots for the PR** (after the final passing run):
+
+```bash
+.cursor/scripts/stage-playwright-screenshots.sh /tmp/screenshots/iter<n>-*.png
+```
+
+Update the PR body with a **Playwright verification** section using the printed `<img>` tags (paths under `/opt/cursor/artifacts/screenshots/`). Re-run staging and update the PR again after any validation-driven fix.
+
 ### Phase 5 — Agent-internal iteration (no developer involvement)
 
 If any functional check failed, any visual self-review flagged a problem, or the preview build failed:
