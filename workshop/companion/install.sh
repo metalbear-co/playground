@@ -22,4 +22,4 @@ chmod +x "$tmp"
 dest=/usr/local/bin/workshop
 if mv "$tmp" "$dest" 2>/dev/null; then :; else sudo mv "$tmp" "$dest"; fi
 echo "Installed: $(command -v workshop)"
-echo "Next:  workshop doctor"
+echo "Next:  WORKSHOP_BROKER=https://mirrord-workshop.com/api workshop start"
