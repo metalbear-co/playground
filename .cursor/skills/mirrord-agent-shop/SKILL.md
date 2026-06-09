@@ -82,14 +82,23 @@ kubectl -n shop get deploy <deployment>
 test "$(kubectl config current-context)" = "gke_playground-383912_us-central1-c_playground-cluster-1"
 ```
 
-Start each touched backend service with its checked-in `mirrord.json`. Keep
+Start each touched service with its checked-in `mirrord.json`. Keep
 `mirrord exec` as the command that starts the app process; do not widen
 `http_filter` settings.
 
-For backend or inventory validation, do **not** run `metal-mart-frontend` under
-mirrord. Leave the deployed staging frontend/gateway in the request path and
-access `https://playground.metalbear.dev/shop...` with the baggage header so the
-test shows how the local backend behaves behind the real staging frontend.
+Use the same `MIRRORD_SESSION` for every touched service in the run. Start
+backends first, then `metal-mart-frontend` when the frontend itself is in scope.
+
+For backend-only or inventory validation, do **not** run `metal-mart-frontend`
+under mirrord. Leave the deployed staging frontend/gateway in the request path
+and access `https://playground.metalbear.dev/shop...` with the baggage header so
+the test shows how the local backend behaves behind the real staging frontend.
+
+For frontend changes, run `metal-mart-frontend` under mirrord as well. Do not
+start it with plain `npm run dev` or validate against `localhost`. Let mirrord
+inject cluster env and DNS so API routes reach in-cluster backends (or other
+local mirrord-backed services started with the same session). Access the shop
+only through `https://playground.metalbear.dev/shop...` with the baggage header.
 
 ### Reliable tmux pattern in this container
 
@@ -146,22 +155,25 @@ For inventory/product-catalog changes, follow
 
 ### Frontend changes
 
-Only run `metal-mart-frontend` locally when the frontend itself is changed or the
-test must exercise unreleased frontend code. Do not use a local or mirrord-backed
-frontend to prove inventory/backend behavior. For frontend changes, point API env
-vars at local or mirrord-backed service URLs. Prefer:
+When the frontend itself is changed or the test must exercise unreleased frontend
+code, start `metal-mart-frontend` under mirrord with the same tmux pattern as
+backends. Do not use `localhost`, `127.0.0.1`, or hand-wired
+`INVENTORY_SERVICE_URL` overrides for validation.
+
+If a backend is also in scope, keep that backend running under mirrord with the
+same `MIRRORD_SESSION` so filtered public traffic exercises the full user path:
+gateway → local frontend → local or in-cluster backend.
+
+Send filtered traffic through the public shop URL:
 
 ```bash
-NEXT_BASE_PATH=/shop \
-NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxas4fpir \
-INVENTORY_SERVICE_URL=http://127.0.0.1:80 \
-npm --prefix /workspace/playground/apps/shop/metal-mart-frontend run dev
+curl -sS \
+  -H "baggage: mirrord-session=${MIRRORD_SESSION}" \
+  https://playground.metalbear.dev/shop/api/products
 ```
 
-Then validate with Playwright against `http://127.0.0.1:3000/shop`. If the test
-must prove gateway/header propagation for a backend, use the public shop URL with
-`extraHTTPHeaders: { baggage: "mirrord-session=<session>" }` while the target
-backend is running under mirrord.
+Confirm filtered page loads reach the local frontend process and one unfiltered
+request to the same public URL does not.
 
 ## Phase 6: Playwright Verification
 
@@ -176,9 +188,11 @@ rm -f /tmp/mirrord-agent-shop/e2e.js /tmp/screenshots/iter*-results.json
 
 Write `/tmp/mirrord-agent-shop/e2e.js` from the Phase 2 plan. Use:
 
-- `BASE_URL`, usually `http://127.0.0.1:3000/shop` for frontend validation or
-  `https://playground.metalbear.dev/shop` for backend filtered-path validation
-- `MIRRORD_SESSION` only when sending filtered public traffic
+- `BASE_URL=https://playground.metalbear.dev/shop` for all mirrord validation
+  (frontend and backend). Never use `localhost` or `127.0.0.1` as the Playwright
+  base URL in this skill.
+- `MIRRORD_SESSION` and `extraHTTPHeaders: { baggage: "mirrord-session=..." }`
+  on the browser context (and on `page.request` calls) whenever mirrord is running
 - one `check()` per functional assertion
 - one screenshot per visual assertion
 - stable `[data-testid="..."]` selectors for changed UI when available
@@ -229,7 +243,7 @@ developer input.
 Return one concise report containing:
 
 - One-line change summary
-- Local validation URL or public filtered URL used
+- Public filtered shop URL used (`https://playground.metalbear.dev/shop...`)
 - Baggage header, if used
 - PR URL
 - Test pass count for the final iteration
@@ -253,3 +267,5 @@ End with the developer choice set:
 - Treat visual failures as real failures.
 - Never write shared-DB assertions that can pass on stale data.
 - Never use unfiltered staging responses as proof that local code works.
+- Never validate frontend changes against `localhost` or `127.0.0.1`; run
+  `metal-mart-frontend` under mirrord and use the public shop URL with baggage.
