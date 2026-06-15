@@ -51,6 +51,18 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
+    // Product 2 was seeded with a blank first image_urls entry and a stale sample ID.
+    await client.query(`
+      UPDATE products
+      SET image_urls = '["team_Work_makes_the_Dream_Work_-_front_w5qdnb","team_work_makes_the_dream_work_-_back_onanux"]'::jsonb,
+          image_url = NULL
+      WHERE id = 2
+        AND (
+          image_urls::text LIKE '%""%'
+          OR image_url = 'Metal Mart/samples/mirrord-hoodie-front'
+          OR image_urls::text LIKE '%mirrord-hoodie-front%'
+        )
+    `);
   } finally {
     client.release();
   }
