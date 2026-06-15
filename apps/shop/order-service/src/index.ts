@@ -121,7 +121,7 @@ class OrderError extends Error {
 /** Create order via direct path: inventory → payment → DB → Kafka. */
 async function createOrderDirect(
   input: OrderInput
-): Promise<{ orderId: number; status: string }> {
+): Promise<{ orderId: number; status: string; message: string }> {
   const { items, total_cents: totalCents, customer_email, baggage } = input;
 
   for (const item of items) {
@@ -225,7 +225,7 @@ async function createOrderDirect(
     baggage,
   });
 
-  return { orderId, status: "confirmed mykolas" };
+  return { orderId, status: "confirmed", message: "mykolas" };
 }
 
 app.post("/orders", async (req, res) => {
