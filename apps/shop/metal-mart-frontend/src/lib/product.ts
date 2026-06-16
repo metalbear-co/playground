@@ -10,17 +10,23 @@ export type Product = {
   is_new?: boolean;
 };
 
+function nonEmptyImageUrls(urls: string[] | null | undefined): string[] {
+  if (!urls) return [];
+  return urls.filter((url) => typeof url === "string" && url.trim() !== "");
+}
+
 /** Primary image for thumbnails (first in array, or legacy image_url). */
 export function getPrimaryImageUrl(product: Product): string | null {
-  const urls = product.image_urls;
-  if (urls && urls.length > 0) return urls[0];
-  return product.image_url ?? null;
+  const urls = nonEmptyImageUrls(product.image_urls);
+  if (urls.length > 0) return urls[0];
+  const single = product.image_url?.trim();
+  return single ? single : null;
 }
 
 /** All image URLs for product (front, back, etc.). */
 export function getImageUrls(product: Product): string[] {
-  const urls = product.image_urls;
-  if (urls && urls.length > 0) return urls;
-  const single = product.image_url;
+  const urls = nonEmptyImageUrls(product.image_urls);
+  if (urls.length > 0) return urls;
+  const single = product.image_url?.trim();
   return single ? [single] : [];
 }
