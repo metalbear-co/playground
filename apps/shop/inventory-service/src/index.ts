@@ -24,6 +24,19 @@ type ProductRow = {
   is_new: boolean;
 };
 
+const STALE_PRODUCT_IMAGE_REPAIRS = new Map<number, { staleUrls: Set<string>; imageUrls: string[] }>([
+  [
+    2,
+    {
+      staleUrls: new Set(["Metal Mart/samples/mirrord-hoodie-front"]),
+      imageUrls: [
+        "team_Work_makes_the_Dream_Work_-_front_w5qdnb",
+        "team_work_makes_the_dream_work_-_back_onanux",
+      ],
+    },
+  ],
+]);
+
 function normalizeImageUrls(imageUrls: unknown, legacyImageUrl: string | null): string[] {
   const candidates = Array.isArray(imageUrls)
     ? imageUrls.filter((url): url is string => typeof url === "string")
@@ -45,9 +58,17 @@ function normalizeImageUrls(imageUrls: unknown, legacyImageUrl: string | null): 
 }
 
 function normalizeProduct(row: ProductRow) {
+  let imageUrls = normalizeImageUrls(row.image_urls, row.image_url);
+  const repair = STALE_PRODUCT_IMAGE_REPAIRS.get(row.id);
+
+  if (repair && imageUrls.some((url) => repair.staleUrls.has(url))) {
+    imageUrls = repair.imageUrls;
+  }
+
   return {
     ...row,
-    image_urls: normalizeImageUrls(row.image_urls, row.image_url),
+    image_url: imageUrls[0] ?? row.image_url,
+    image_urls: imageUrls,
   };
 }
 
