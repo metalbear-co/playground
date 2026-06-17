@@ -44,7 +44,7 @@ const MIRRORD_PLANE_BORDER = groupPalette.mirrord.border;
 const MIRRORD_NODE_SHADOW = "0px 30px 60px rgba(79, 70, 229, 0.3)";
 /** Static mascot for the mirrord Operator node (`public/mirrord/mirrord-operator-mascot.png`). */
 const MIRRORD_OPERATOR_MASCOT_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/mirrord/mirrord-operator-mascot.png`;
-const MIRRORD_CI_LABEL = "Mirrord CI";
+const MIRRORD_CI_LABEL = "mirrord CI";
 const MIRRORD_CI_K8S_USERNAMES = new Set([
   "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
 ]);
@@ -1024,7 +1024,7 @@ const legendEntries: LegendEntry[] = [
   { kind: "node", label: "Infrastructure", color: groupPalette.infra.border },
   { kind: "node", label: "Core services", color: groupPalette.service.border },
   { kind: "node", label: "mirrord control plane", color: groupPalette.mirrord.border },
-  { kind: "line", label: "Mirrord session" },
+  { kind: "line", label: "mirrord session" },
 ];
 
 const SHOW_SNAPSHOT_PANEL = false;
@@ -2357,7 +2357,7 @@ export default function VisualizationPage() {
                 {isCiRunnerLocal ? "CI Runner" : "Local process"}
               </span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {isCiRunnerLocal ? "Mirrord session" : "Developer machine"}
+                {isCiRunnerLocal ? "mirrord session" : "Developer machine"}
               </span>
               <p className="text-xs leading-snug text-slate-600">
                 {formatMirrordOwnerLabel({ username: ownerName, k8sUsername, hostname })}

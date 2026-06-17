@@ -83,7 +83,7 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "ingress",
     label: "Ingress + Service",
     stack: "GKE",
-    description: "Public entrypoint routing traffic to the Metal Mart frontend.",
+    description: "Public entrypoint routing traffic to the MetalMart frontend.",
     group: "infra",
     zone: "cluster",
   },
