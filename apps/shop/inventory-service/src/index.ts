@@ -13,6 +13,31 @@ if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
 
 const pool = new Pool({ connectionString: dbUrl });
 
+type ProductRow = {
+  id: number;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  stock: number;
+  image_url: string | null;
+  image_urls: string[] | null;
+  is_new: boolean;
+};
+
+/** Drop blank entries; prefer image_urls, fall back to legacy image_url. */
+function normalizeProductImages(row: ProductRow): ProductRow {
+  const fromArray = Array.isArray(row.image_urls)
+    ? row.image_urls.filter((url): url is string => typeof url === "string" && url.trim() !== "")
+    : [];
+  const image_urls =
+    fromArray.length > 0
+      ? fromArray
+      : row.image_url && row.image_url.trim() !== ""
+        ? [row.image_url]
+        : [];
+  return { ...row, image_urls };
+}
+
 async function initDb() {
   const client = await pool.connect();
   try {
@@ -51,6 +76,21 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
+    // Repair product 2 when image_urls were corrupted (empty front + invalid placeholder path)
+    await client.query(`
+      UPDATE products
+      SET
+        image_url = 'team_Work_makes_the_Dream_Work_-_front_w5qdnb',
+        image_urls = '["team_Work_makes_the_Dream_Work_-_front_w5qdnb","team_work_makes_the_dream_work_-_back_onanux"]'::jsonb
+      WHERE id = 2
+        AND (
+          image_urls IS NULL
+          OR image_urls = '[]'::jsonb
+          OR image_urls->>0 = ''
+          OR image_urls @> '["Metal Mart/samples/mirrord-hoodie-front"]'::jsonb
+          OR image_url = 'Metal Mart/samples/mirrord-hoodie-front'
+        )
+    `);
   } finally {
     client.release();
   }
@@ -72,8 +112,10 @@ app.get("/health", (_req, res) => {
 app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
-    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    const { rows } = await pool.query<ProductRow>(
+      "SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id"
+    );
+    res.json(rows.map(normalizeProductImages));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -86,14 +128,14 @@ app.get("/products/:id", async (req, res) => {
     return res.status(400).json({ error: "Invalid product ID" });
   }
   try {
-    const { rows } = await pool.query(
+    const { rows } = await pool.query<ProductRow>(
       "SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products WHERE id = $1",
       [id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(normalizeProductImages(rows[0]));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
