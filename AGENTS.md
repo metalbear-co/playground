@@ -21,6 +21,7 @@ Use this file and `docs/` for project context when working in this repo.
 The shared cluster at `https://playground.metalbear.dev` is staging. When verifying or fixing shop work:
 
 - **Do not use `kubectl port-forward`** (or similar) into `shop` or `infra` workloads as a substitute for mirrord or local-only testing. Use `mirrord exec` with the service `mirrord.json` and session-filtered traffic through the public shop URL, or run services locally (see `.cursor/skills/mirrord-run-shop/SKILL.md`).
+- **Stop mirrord when finishing work** — kill tmux sessions or `mirrord exec` processes after verification; do not leave them running on handoff (see **Stop mirrord** in `.cursor/skills/mirrord-run-shop/SKILL.md`).
 - **Do not alter the playground/staging database** without explicit human permission. No ad-hoc `kubectl exec` into Postgres, no manual `UPDATE`/`INSERT`/`DELETE` against shared `inventory`, `orders`, or other demo DBs to “fix” or “test” data. Validate through mirrord + public APIs and Playwright; put repairs in service code on your branch if data must be normalized at runtime.
 
 ## Build and deploy

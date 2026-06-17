@@ -89,12 +89,12 @@ If the response shows the **old** behavior, the request didn't get stolen. Most 
 
 **Never** run ad-hoc `kubectl exec` SQL against the shared playground database to fix or test data. Validate only through mirrord + public shop URLs.
 
-## Phase 6 — Hand off to the developer
+## Phase 6 — Stop mirrord and hand off
 
-Print exactly this block, with values filled in:
+Stop mirrord first (see **Stop / cleanup** below), then print exactly this block with values filled in:
 
 ```
-✓ <service> is running locally under mirrord against staging.
+✓ <service> verified locally under mirrord against staging; mirrord stopped.
 
 Local log:   /tmp/mirrord-run/<service>.log
 Routing:     baggage: mirrord-session=<USER>
@@ -104,17 +104,23 @@ Playwright:  /tmp/screenshots/mirrord-run-results.json (see mirrord-run-shop ski
 To see it in the browser, install the mirrord Browser Extension and set
 the same baggage header — only your requests will hit the local process.
 
-Tell me when to stop it, or just give feedback and I'll iterate.
+If you need another validation pass, restart mirrord for that pass and stop it again when done.
 ```
 
 ## Stop / cleanup
 
-When the developer says they're done, or asks you to stop:
+Stop mirrord when verification is finished or when the developer asks you to stop. Do **not** leave
+mirrord running after handoff — it keeps stealing filtered traffic on the shared playground cluster.
 
-1. `TaskStop` the background Bash task.
-2. Optional: `rm /tmp/mirrord-run/<service>.log`.
+When finishing work:
 
-Do **not** auto-stop on your own — leave it running across follow-up edits unless the developer signals done. `tsx watch` and `next dev` will pick up source edits automatically without restarting mirrord.
+1. `TaskStop` the background Bash task, or send `Ctrl+C` to the foreground `mirrord exec` process.
+2. If you used tmux, kill the session: `tmux kill-session -t <service>-mirrord` (use the same `-f` config as start).
+3. Confirm cleanup: `pgrep -af "mirrord exec.*apps/shop/<service>" || echo "stopped"`.
+4. Optional: `rm /tmp/mirrord-run/<service>.log`.
+
+During an active iteration loop, `tsx watch` and `next dev` pick up source edits without restarting
+mirrord — but stop mirrord before marking the task complete or handing off.
 
 ## Guardrails
 

@@ -140,3 +140,17 @@ target, filter, and request path before changing product code.
 - Run the Playwright checks in `.cursor/skills/mirrord-run-shop/SKILL.md` (API `image_urls` sanity + product images load on `/shop/products` and affected detail pages). Review screenshots; do not mark verified on `curl` alone.
 - When opening or updating a PR, stage Playwright screenshots with `.cursor/scripts/stage-playwright-screenshots.sh` and embed them in the PR body via `<img src="/opt/cursor/artifacts/screenshots/...">` tags (see the skill's "Upload Screenshots to the PR" section).
 - Never mutate the shared playground database with ad-hoc SQL; validate only via mirrord + public shop traffic.
+- Stop inventory-service mirrord after verification (see **Stop mirrord** in `.cursor/skills/mirrord-run-shop/SKILL.md`). Do not mark the task complete or hand off while mirrord is still running.
+
+## Stop mirrord
+
+After Playwright and curl checks pass, kill the local mirrord session before reporting done:
+
+```bash
+TMUX_CONFIG="/exec-daemon/tmux.portal.conf"
+if [ ! -f "$TMUX_CONFIG" ]; then TMUX_CONFIG="/dev/null"; fi
+tmux -f "$TMUX_CONFIG" kill-session -t "inventory-service-mirrord" 2>/dev/null || true
+pgrep -af "mirrord exec.*inventory-service" || echo "no inventory mirrord exec processes"
+```
+
+If mirrord was started in a foreground shell instead of tmux, send `Ctrl+C` to that process.

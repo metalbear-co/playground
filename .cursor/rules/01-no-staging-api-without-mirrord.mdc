@@ -68,3 +68,8 @@ If mirrord is not running, stop — use local-only testing or start mirrord firs
 ## Completion
 
 Do not mark shop backend work verified, and do not say responses were validated on staging, unless mirrord was running and filtered traffic showed the local behavior. See also `.cursor/skills/mirrord-run-shop/SKILL.md`.
+
+After verification, stop every mirrord session you started. Do not leave local mirrord running on
+handoff — filtered traffic would keep routing to your process on the shared playground cluster.
+Follow the **Stop mirrord** section in `.cursor/skills/mirrord-run-shop/SKILL.md` (or Phase 8 in
+`.cursor/skills/mirrord-agent-shop/SKILL.md` for agent-owned work).
