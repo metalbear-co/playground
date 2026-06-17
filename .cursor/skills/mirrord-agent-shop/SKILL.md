@@ -238,7 +238,35 @@ start:
 Internal cap: 3 attempts. If still failing, report that directly and ask for
 developer input.
 
-## Phase 8: Report Back
+## Phase 8: Stop mirrord
+
+After the final passing Playwright run (or when abandoning after the internal cap), stop every
+mirrord session you started. Do not hand off or mark work complete while mirrord is still running.
+
+### tmux sessions
+
+```bash
+TMUX_CONFIG="/exec-daemon/tmux.portal.conf"
+if [ ! -f "$TMUX_CONFIG" ]; then TMUX_CONFIG="/dev/null"; fi
+tmux -f "$TMUX_CONFIG" kill-session -t "<service>-mirrord" 2>/dev/null || true
+```
+
+Kill each `<service>-mirrord` session for every touched service.
+
+### Foreground or background shell
+
+Send `Ctrl+C` to each `mirrord exec` process, or stop the background task that launched it.
+
+### Confirm cleanup
+
+```bash
+pgrep -af "mirrord exec.*apps/shop" || echo "no shop mirrord exec processes"
+```
+
+During Phase 7 internal iteration, restart mirrord only as needed for the next validation run, and
+stop it again before the final report.
+
+## Phase 9: Report Back
 
 Return one concise report containing:
 
@@ -250,6 +278,7 @@ Return one concise report containing:
 - Failed checks, if any
 - Screenshot paths with one-line observations
 - Brief iteration notes if more than one attempt was needed
+- Confirmation that all mirrord sessions were stopped
 
 End with the developer choice set:
 
@@ -269,3 +298,4 @@ End with the developer choice set:
 - Never use unfiltered staging responses as proof that local code works.
 - Never validate frontend changes against `localhost` or `127.0.0.1`; run
   `metal-mart-frontend` under mirrord and use the public shop URL with baggage.
+- Never leave mirrord running after verification or handoff; stop every session before Phase 9.

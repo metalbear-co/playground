@@ -268,6 +268,37 @@ Do not mark shop or inventory work verified until all of the following hold:
 - Screenshots reviewed; product images visibly load on `/shop/products` and affected detail pages
 - Playwright screenshots staged and embedded in the PR body when a PR is opened or updated
 - No unauthorized writes to shared cluster databases
+- Every mirrord session started for this work has been stopped (see **Stop mirrord** below)
+
+## Stop mirrord
+
+Stop mirrord as soon as verification is done. Do not leave local mirrord processes running after
+handoff — they keep stealing filtered traffic on the shared playground cluster.
+
+### tmux sessions
+
+Kill each service session you started:
+
+```bash
+TMUX_CONFIG="/exec-daemon/tmux.portal.conf"
+if [ ! -f "$TMUX_CONFIG" ]; then TMUX_CONFIG="/dev/null"; fi
+tmux -f "$TMUX_CONFIG" kill-session -t "<service>-mirrord" 2>/dev/null || true
+```
+
+Repeat for every `<service>-mirrord` session (inventory, order, frontend, etc.).
+
+### Foreground or background shell
+
+Send `Ctrl+C` to the `mirrord exec` process, or stop the background Bash task that launched it.
+
+### Confirm cleanup
+
+```bash
+pgrep -af "mirrord exec.*apps/shop" || echo "no shop mirrord exec processes"
+```
+
+Do not mark the task complete, open the PR as ready, or report handoff while mirrord is still
+running.
 
 ## Inventory-Specific
 
@@ -276,9 +307,11 @@ and `.cursor/rules/01-no-staging-api-without-mirrord.mdc`.
 
 ## Handoff Block
 
+Only after stopping mirrord:
+
 ```text
-✓ <service> running under mirrord (session: ${MIRRORD_SESSION})
-  Header: baggage: mirrord-session=${MIRRORD_SESSION}
+✓ <service> verified under mirrord (session: ${MIRRORD_SESSION}); mirrord stopped
+  Header used: baggage: mirrord-session=${MIRRORD_SESSION}
   Playwright: /tmp/screenshots/mirrord-run-results.json
   Screenshots: /tmp/screenshots/mirrord-run-products.png
 ```
