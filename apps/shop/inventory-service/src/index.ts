@@ -1,6 +1,7 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { Pool } from "pg";
+import { normalizeProductImages } from "./product-images.js";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -51,6 +52,19 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
+    // Repair product 2 when branch/seed data left an empty image_urls[0] and invalid placeholder
+    await client.query(`
+      UPDATE products
+      SET
+        image_urls = '["team_Work_makes_the_Dream_Work_-_front_w5qdnb","team_work_makes_the_dream_work_-_back_onanux"]'::jsonb,
+        image_url = NULL
+      WHERE id = 2
+        AND (
+          image_urls @> '[""]'::jsonb
+          OR image_url = 'Metal Mart/samples/mirrord-hoodie-front'
+          OR image_urls::text LIKE '%mirrord-hoodie%'
+        )
+    `);
   } finally {
     client.release();
   }
@@ -73,7 +87,7 @@ app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    res.json(rows.map(normalizeProductImages));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,7 +107,7 @@ app.get("/products/:id", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json(rows[0]);
+    res.json(normalizeProductImages(rows[0]));
   } catch (err) {
     console.error("Error fetching product:", err);
     res.status(500).json({ error: "Internal server error" });
