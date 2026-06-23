@@ -35,7 +35,7 @@
       }
     ],
     "preview": {
-      "image": "ghcr.io/metalbear-co/playground/inventory-service:latest",
+      "image": "ghcr.io/metalbear-co/playground-inventory-service:latest",
       "ttl_mins": 60,
       "creation_timeout_secs": 60
     }
