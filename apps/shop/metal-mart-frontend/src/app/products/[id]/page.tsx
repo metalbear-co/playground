@@ -37,7 +37,7 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex-1 p-8">
           <LoadingSpinner />
@@ -47,10 +47,10 @@ export default function ProductDetailPage() {
   }
   if (error || !product) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex-1 p-8">
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
             {error || "Product not found"}
           </p>
           <Link
@@ -68,13 +68,13 @@ export default function ProductDetailPage() {
   const labels = imageUrls.length === 2 ? ["Front", "Back"] : undefined;
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-10 md:grid-cols-2">
             <div className="space-y-3">
-              <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg">
+              <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-800 dark:bg-slate-900">
                 {product.is_new && <NewBadge size="lg" />}
                 {imageUrls.length > 0 ? (
                   <ProductImage
@@ -100,7 +100,7 @@ export default function ProductDetailPage() {
                       className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
                         selectedIndex === i
                           ? "border-[#6a4ff5] ring-2 ring-[#6a4ff5]/30"
-                          : "border-slate-200 hover:border-slate-300"
+                          : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
                       }`}
                       aria-label={labels ? labels[i] : `Image ${i + 1}`}
                     >
@@ -117,14 +117,14 @@ export default function ProductDetailPage() {
               )}
             </div>
             <div className="flex flex-col">
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900">{product.name}</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{product.name}</h1>
               <p className="mt-3 text-2xl font-semibold text-[#6a4ff5]">
                 ${(product.price_cents / 100).toFixed(2)}
               </p>
               {product.description && (
-                <p className="mt-6 text-slate-600 leading-relaxed">{product.description}</p>
+                <p className="mt-6 text-slate-600 leading-relaxed dark:text-slate-400">{product.description}</p>
               )}
-              <p className="mt-4 text-sm text-slate-500">In stock: {product.stock}</p>
+              <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">In stock: {product.stock}</p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link
                   href={`/cart?add=${product.id}`}

@@ -25,7 +25,7 @@ export default function ProductsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex-1 p-8">
           <LoadingSpinner />
@@ -35,10 +35,10 @@ export default function ProductsPage() {
   }
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex-1 p-8">
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
             Error: {error}
           </p>
         </main>
@@ -47,11 +47,11 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-6xl">
-          <h1 className="hand-drawn-underline mb-10 inline-block text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="hand-drawn-underline mb-10 inline-block text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Products
           </h1>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -59,11 +59,11 @@ export default function ProductsPage() {
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
-                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal dark:border-slate-700 dark:bg-slate-900"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
                 {p.is_new && <NewBadge size="default" />}
-                <div className="relative aspect-square overflow-hidden bg-slate-100">
+                <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
                   {getPrimaryImageUrl(p) ? (
                     <ProductImage
                       src={getPrimaryImageUrl(p)!}
@@ -79,11 +79,11 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className="flex flex-1 flex-col p-5">
-                  <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
+                  <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors dark:text-slate-100">
                     {p.name}
                   </h2>
                   <p className="mt-2 text-lg font-semibold text-[#6a4ff5]">${(p.price_cents / 100).toFixed(2)}</p>
-                  <p className="mt-auto pt-3 text-xs text-slate-500">In stock: {p.stock}</p>
+                  <p className="mt-auto pt-3 text-xs text-slate-500 dark:text-slate-400">In stock: {p.stock}</p>
                 </div>
               </Link>
             ))}

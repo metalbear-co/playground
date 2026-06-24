@@ -14,13 +14,27 @@ export const metadata: Metadata = {
   description: "Official MetalBear merchandise",
 };
 
+// Applies the saved theme (or system preference) before paint to avoid a flash of the wrong theme.
+const themeInitScript = `
+(function () {
+  try {
+    var stored = localStorage.getItem("metal-mart-theme");
+    var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (dark) document.documentElement.classList.add("dark");
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={dmSans.variable}>
+    <html lang="en" className={dmSans.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-screen antialiased font-sans">
         <div className="relative min-h-screen flex flex-col">
           <MascotPositioned />

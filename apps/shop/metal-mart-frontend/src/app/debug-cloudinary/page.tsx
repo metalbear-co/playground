@@ -18,10 +18,10 @@ export default function DebugCloudinaryPage() {
 
   if (!cloudName) {
     return (
-      <div className="min-h-screen bg-slate-50 p-8">
+      <div className="min-h-screen bg-slate-50 p-8 dark:bg-slate-950">
         <div className="mx-auto max-w-2xl space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Cloudinary Debug</h1>
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Cloudinary Debug</h1>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
             <strong>NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</strong> is not set. Add it to .env.local and restart the dev server.
           </p>
           <Link href={basePath || "/"} className="text-[#6a4ff5] hover:underline">
@@ -33,27 +33,27 @@ export default function DebugCloudinaryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
+    <div className="min-h-screen bg-slate-50 p-8 dark:bg-slate-950">
       <div className="mx-auto max-w-2xl space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cloudinary Debug</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Cloudinary Debug</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Use this page to verify URLs. Click a link to test in a new tab — if it 404s, the public_id or folder is wrong.
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
-          <h2 className="font-semibold text-slate-900">Config</h2>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-2 dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="font-semibold text-slate-900 dark:text-slate-100">Config</h2>
           <dl className="text-sm">
             <dt className="text-slate-500">Cloud name</dt>
-            <dd className="font-mono text-slate-900">{cloudName}</dd>
+            <dd className="font-mono text-slate-900 dark:text-slate-100">{cloudName}</dd>
             <dt className="mt-2 text-slate-500">Folder prefix</dt>
-            <dd className="font-mono text-slate-900">{folderPrefix || "(none)"}</dd>
+            <dd className="font-mono text-slate-900 dark:text-slate-100">{folderPrefix || "(none)"}</dd>
           </dl>
         </div>
 
         <div className="space-y-6">
-          <h2 className="font-semibold text-slate-900">Test URLs</h2>
+          <h2 className="font-semibold text-slate-900 dark:text-slate-100">Test URLs</h2>
           {TEST_IDS.map((rawId) => {
             const resolvedId = resolveCloudinaryId(rawId);
             const url = getCldImageUrl(
@@ -63,10 +63,10 @@ export default function DebugCloudinaryPage() {
             return (
               <div
                 key={rawId}
-                className="rounded-xl border border-slate-200 bg-white p-5 space-y-2"
+                className="rounded-xl border border-slate-200 bg-white p-5 space-y-2 dark:border-slate-800 dark:bg-slate-900"
               >
-                <p className="text-sm font-medium text-slate-700">Raw ID: {rawId}</p>
-                <p className="text-sm font-medium text-slate-700">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Raw ID: {rawId}</p>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   Resolved ID: {resolvedId}
                   {resolvedId !== rawId && (
                     <span className="ml-2 text-slate-500">(prefix applied)</span>
@@ -87,7 +87,7 @@ export default function DebugCloudinaryPage() {
                   <img
                     src={url}
                     alt=""
-                    className="h-24 w-24 object-contain border border-slate-200 rounded"
+                    className="h-24 w-24 object-contain border border-slate-200 rounded dark:border-slate-700"
                     onError={(e) => {
                       (e.target as HTMLImageElement).alt = "Failed to load";
                       (e.target as HTMLImageElement).src = "";
@@ -100,8 +100,8 @@ export default function DebugCloudinaryPage() {
           })}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-100 p-5 text-sm text-slate-700">
-          <h3 className="font-semibold text-slate-900 mb-2">If images 404</h3>
+        <div className="rounded-xl border border-slate-200 bg-slate-100 p-5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">If images 404</h3>
           <ul className="list-disc list-inside space-y-1">
             <li>In Cloudinary Media Library, click an asset and copy the <strong>Public ID</strong> exactly.</li>
             <li>If the Public ID includes the folder (e.g. <code>Metal Mart/team_work_...</code>), set <code>NEXT_PUBLIC_CLOUDINARY_FOLDER_PREFIX</code> to empty and store the full ID in the DB.</li>

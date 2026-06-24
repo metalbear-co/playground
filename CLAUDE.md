@@ -30,6 +30,7 @@
 | `LoadingSpinner.tsx` | Centered loading spinner. |
 | `Mascot.tsx` / `MascotPositioned.tsx` | MetalBear mascot decoration. |
 | `DecorativeIcons.tsx` | Decorative icons. |
+| `ThemeToggle.tsx` | Light/dark theme toggle in the header. Persists choice in `localStorage` (`metal-mart-theme`); toggles the `dark` class on `<html>`. |
 
 ### Data model (`src/lib/product.ts`)
 
@@ -65,6 +66,7 @@ Helper functions: `getPrimaryImageUrl(product)` returns first image, `getImageUr
 - `.hand-drawn-underline` class for MetalBear-style orange underline on headings
 - Base path support via `NEXT_BASE_PATH` env var and `NEXT_PUBLIC_BASE_PATH` for client-side fetches
 - Cloudinary for product images via `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` env var
+- Dark mode: class-based (`dark` on `<html>`) via the `@custom-variant dark` in `globals.css`. Dark palette overrides the CSS variables under `.dark`; components use `dark:` utility variants. An inline script in `layout.tsx` applies the saved/system theme before paint to avoid a flash. Toggled by `ThemeToggle`.
 
 ### Backend services
 

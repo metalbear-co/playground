@@ -65,7 +65,7 @@ export default function OrderPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex-1 p-8">
           <LoadingSpinner />
@@ -75,16 +75,16 @@ export default function OrderPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-2xl">
-          <h1 className="mb-8 text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="mb-8 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Order #{order?.id ?? id ?? "—"}
           </h1>
           {error && (
             <p
-              className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600"
+              className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400"
               role="alert"
             >
               {error}
@@ -92,25 +92,25 @@ export default function OrderPage() {
           )}
           {order ? (
             <div className="space-y-8">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 p-5 space-y-2">
                 <p>
                   Status: <span className="font-medium text-[#6a4ff5]">{order.status}</span>
                 </p>
-                <p className="text-slate-600">
+                <p className="text-slate-600 dark:text-slate-400">
                   Placed: {new Date(order.created_at).toLocaleString()}
                 </p>
                 {delivery && (
-                  <p className="text-slate-600">Delivery: {delivery.status}</p>
+                  <p className="text-slate-600 dark:text-slate-400">Delivery: {delivery.status}</p>
                 )}
               </div>
               {lineItems.length > 0 && (
                 <div>
-                  <h2 className="mb-3 text-lg font-semibold text-slate-900">Items</h2>
-                  <ul className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                  <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Items</h2>
+                  <ul className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 p-5">
                     {lineItems.map(({ product, quantity }) => (
                       <li
                         key={product.id}
-                        className="flex justify-between text-slate-700"
+                        className="flex justify-between text-slate-700 dark:text-slate-300"
                       >
                         <span>{product.name} × {quantity}</span>
                         <span className="font-semibold text-[#6a4ff5]">
@@ -119,15 +119,15 @@ export default function OrderPage() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-3 text-lg font-semibold text-slate-900">
+                  <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
                     Total: ${(order.total_cents / 100).toFixed(2)}
                   </p>
                 </div>
               )}
             </div>
           ) : !error ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-8 py-16 text-center">
-              <p className="text-slate-600">Order not found</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 px-8 py-16 text-center">
+              <p className="text-slate-600 dark:text-slate-400">Order not found</p>
               <Link
                 href="/products"
                 className="mt-6 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"

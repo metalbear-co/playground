@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: toggled via the `dark` class on <html> (see ThemeToggle). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* MetalBear-inspired palette */
 :root {
   --background: #ffffff;
@@ -12,16 +15,35 @@
   --orange-hover: #fbbf24;
 }
 
+/* Dark mode palette */
+.dark {
+  --background: #0a0a14;
+  --foreground: #e8e8f0;
+  --muted: #94a3b8;
+  /* Brighter purple reads better on dark surfaces */
+  --purple: #8b75f7;
+  --purple-hover: #9d8bf9;
+  --purple-light: #2a2350;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-feature-settings: "rlig" 1, "calt" 1;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* Smooth transitions for interactive elements */

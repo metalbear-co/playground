@@ -63,7 +63,7 @@ export default function CheckoutPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex-1 p-8">
           <LoadingSpinner />
@@ -74,12 +74,12 @@ export default function CheckoutPage() {
 
   if (orderId) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-16">
-          <div className="rounded-full bg-green-100 p-4">
+          <div className="rounded-full bg-green-100 p-4 dark:bg-green-950/40">
             <svg
-              className="h-12 w-12 text-green-600"
+              className="h-12 w-12 text-green-600 dark:text-green-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -88,8 +88,8 @@ export default function CheckoutPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-green-600">Order placed!</h1>
-          <p className="text-slate-600">Order ID: {orderId}</p>
+          <h1 className="text-2xl font-bold text-green-600 dark:text-green-400">Order placed!</h1>
+          <p className="text-slate-600 dark:text-slate-400">Order ID: {orderId}</p>
           <Link
             href={`/orders/${orderId}`}
             className="btn-primary rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
@@ -103,11 +103,11 @@ export default function CheckoutPage() {
 
   if (cart.length === 0) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header />
         <main className="flex flex-1 items-center justify-center px-6 py-16">
-          <div className="rounded-xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
-            <p className="text-lg text-slate-600">Cart is empty. Add items first.</p>
+          <div className="rounded-xl border border-slate-300 bg-slate-50 px-8 py-16 text-center dark:border-slate-700 dark:bg-slate-900">
+            <p className="text-lg text-slate-600 dark:text-slate-400">Cart is empty. Add items first.</p>
             <Link
               href="/products"
               className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
@@ -121,17 +121,17 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
       <Header />
       <main className="flex-1 px-6 py-8">
         <div className="mx-auto max-w-2xl">
-          <h1 className="hand-drawn-underline mb-8 inline-block text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="hand-drawn-underline mb-8 inline-block text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Checkout
           </h1>
-          <ul className="mb-6 space-y-3 rounded-xl border border-slate-300 bg-slate-50 p-5">
+          <ul className="mb-6 space-y-3 rounded-xl border border-slate-300 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900">
             {cart.map((i) => (
               <li key={i.productId} className="flex items-center justify-between">
-                <span className="text-slate-700">
+                <span className="text-slate-700 dark:text-slate-300">
                   {i.product?.name ?? `Product ${i.productId}`} × {i.quantity}
                 </span>
                 <span className="font-semibold text-[#6a4ff5]">
@@ -140,11 +140,11 @@ export default function CheckoutPage() {
               </li>
             ))}
           </ul>
-          <p className="mb-6 text-xl font-semibold text-slate-900">
+          <p className="mb-6 text-xl font-semibold text-slate-900 dark:text-slate-100">
             Total: ${(totalCents / 100).toFixed(2)}
           </p>
           <div className="mb-6">
-            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
               Email <span className="text-slate-400">(optional)</span>
             </label>
             <input
@@ -153,12 +153,12 @@ export default function CheckoutPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:border-[#6a4ff5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/20"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:border-[#6a4ff5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
             />
           </div>
           {error && (
             <p
-              className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600"
+              className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400"
               role="alert"
             >
               {error}

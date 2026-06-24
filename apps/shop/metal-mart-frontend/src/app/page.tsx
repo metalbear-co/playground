@@ -31,7 +31,7 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
+        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal dark:border-slate-700 dark:bg-slate-800 ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
@@ -45,7 +45,7 @@ function ProductTile({
               sizes="(max-width: 768px) 100vw, 50vw"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-slate-200 text-slate-400">
+            <div className="flex h-full w-full items-center justify-center bg-slate-200 text-slate-400 dark:bg-slate-800">
               No image
             </div>
           )}
@@ -68,11 +68,11 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
+        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
-        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
+        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-800 sm:aspect-[4/3] sm:w-64">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
               src={getPrimaryImageUrl(product)!}
@@ -88,12 +88,12 @@ function ProductTile({
           )}
         </div>
         <div className="flex flex-1 flex-col justify-center p-6">
-          <h2 className="text-xl font-bold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
+          <h2 className="text-xl font-bold text-slate-900 group-hover:text-[#6a4ff5] transition-colors dark:text-slate-100">
             {product.name}
           </h2>
           <p className="mt-1 text-lg font-semibold text-[#6a4ff5]">{price}</p>
           {product.description && (
-            <p className="mt-2 line-clamp-2 text-sm text-slate-600">
+            <p className="mt-2 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
               {product.description}
             </p>
           )}
@@ -106,11 +106,11 @@ function ProductTile({
   return (
     <Link
       href={href}
-      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
-      <div className="relative aspect-square overflow-hidden bg-slate-100">
+      <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
         {getPrimaryImageUrl(product) ? (
           <ProductImage
             src={getPrimaryImageUrl(product)!}
@@ -126,7 +126,7 @@ function ProductTile({
         )}
       </div>
       <div className="flex flex-1 flex-col p-4">
-        <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
+        <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors dark:text-slate-100">
           {product.name}
         </h2>
         <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
@@ -150,7 +150,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -161,10 +161,10 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">
             Error: {error}
           </p>
         </main>
@@ -177,14 +177,14 @@ export default function Home() {
   const hasMultipleProducts = products.length > 1;
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
         <section className="flex-1 px-6 py-12">
           <div className="mx-auto max-w-6xl">
             {hasProducts && (
-              <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
+              <h1 className="hand-drawn-underline mb-10 inline-block text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl md:text-5xl">
                 Featured products
               </h1>
             )}
@@ -255,8 +255,8 @@ export default function Home() {
                 </div>
               </>
             ) : (
-              <div className="rounded-2xl border border-slate-300 bg-slate-50 px-8 py-16 text-center">
-                <p className="text-slate-600">No products yet.</p>
+              <div className="rounded-2xl border border-slate-300 bg-slate-50 px-8 py-16 text-center dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-slate-600 dark:text-slate-400">No products yet.</p>
                 <Link
                   href="/products"
                   className="btn-primary mt-4 inline-block rounded-xl px-6 py-2.5 text-sm font-medium"
