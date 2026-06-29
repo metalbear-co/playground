@@ -1,0 +1,27 @@
+# Kafka queue splitting for delivery-service (mirrord operator >= 3.170.0).
+# Queue id must match feature.split_queues in apps/shop/delivery-service/mirrord.json ("orders").
+# Replaces MirrordKafkaTopicsConsumer (delivery-service-topics).
+apiVersion: queues.mirrord.metalbear.co/v1
+kind: MirrordSplitConfig
+metadata:
+  name: delivery-service-split
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: delivery-service
+  restart:
+    timeout: 180
+  queues:
+    - id: orders
+      kind: kafka
+      clientConfig: shop-kafka-connection
+      appConfig:
+        topic:
+          - env: KAFKA_TOPIC
+            containers:
+              - main
+        groupId:
+          - env: KAFKA_CONSUMER_GROUP
+            containers:
+              - main
