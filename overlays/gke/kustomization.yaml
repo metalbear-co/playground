@@ -7,7 +7,6 @@ resources:
   - ip-visit-application.yaml
   - ip-visit
   - shop-application.yaml
-  - shop-mirrord-application.yaml
   - shop
   - visualization-application.yaml
   - visualization

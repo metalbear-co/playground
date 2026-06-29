@@ -111,9 +111,9 @@
      Kafka → `KAFKA_ADDRESS`: `kafka.infra.svc.cluster.local:9092`
    - In `manifests/shop/base/app/payment-service/deployment.yaml`: if it uses Postgres, update similarly.
 
-9. **shop-mirrord**  
-   In `manifests/shop-mirrord/kafka-client-config.yaml`, set the broker to:
-   `kafka.infra.svc.cluster.local:9092` (replace `kafka.shop.svc.cluster.local:9092`).
+9. **delivery-service mirrord Kafka**  
+   In `manifests/shop/base/app/delivery-service/mirrord-property-list.yaml`, set the broker to:
+   `kafka.infra.svc.cluster.local:9092` (replaces legacy `manifests/shop-mirrord/kafka-client-config.yaml`).
 
 ---
 
@@ -161,7 +161,7 @@ If you need to preserve data, you would plan a one-off migration (e.g. dump/rest
 | shared-infra destination | `overlays/gke/shared-infra-application.yaml` → `namespace: infra` |
 | ip-visit | Remove base/infra refs; counter + consumer-kafka use `*.infra.svc.cluster.local` |
 | shop | Remove base/infra refs; all DB/Kafka URLs use `*.infra.svc.cluster.local` |
-| shop-mirrord | Kafka broker → `kafka.infra.svc.cluster.local:9092` |
+| delivery-service mirrord | Kafka broker in `mirrord-property-list.yaml` → `kafka.infra.svc.cluster.local:9092` |
 | Cleanup (optional) | Remove `manifests/ip-visit/base/infra/`, `manifests/shop/base/infra/` |
 
 After this, all shared infrastructure lives in the **infra** namespace and is reused by ip-visit and shop.

@@ -3,4 +3,5 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - svc.yaml
-  - mirrord-kafka-topics-consumer.yaml
+  - mirrord-property-list.yaml
+  - mirrord-split-config.yaml

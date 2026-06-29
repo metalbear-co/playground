@@ -1,8 +1,9 @@
-apiVersion: queues.mirrord.metalbear.co/v1alpha
-kind: MirrordKafkaClientConfig
+# Kafka broker connection for mirrord queue splitting on delivery-service.
+# Replaces MirrordKafkaClientConfig (shop-kafka-config in mirrord namespace).
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
 metadata:
-  name: shop-kafka-config
-  namespace: mirrord
+  name: shop-kafka-connection
 spec:
   properties:
     - name: bootstrap.servers
