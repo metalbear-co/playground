@@ -390,35 +390,163 @@ const fetchOperatorSessions = async (
 };
 
 /**
- * Query MirrordKafkaEphemeralTopic custom resources from the operator CRD.
- * Returns topic names linked to sessions via the session-id label.
+ * Legacy Kafka split topics (MirrordKafkaTopicsConsumer flow).
+ */
+const fetchLegacyKafkaEphemeralTopics = async (
+  kubeConfig: KubeConfig,
+): Promise<KafkaEphemeralTopic[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  try {
+    const result = await customApi.listClusterCustomObject({
+      group: "queues.mirrord.metalbear.co",
+      version: "v1alpha",
+      plural: "mirrordkafkaephemeraltopics",
+    });
+    const body = result as { items?: Array<Record<string, unknown>> };
+    const items = body.items ?? [];
+
+    return items.map((item) => {
+      const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+      const spec = (item.spec ?? {}) as Record<string, unknown>;
+      const labels = (metadata.labels ?? {}) as Record<string, string>;
+
+      const topicName = (spec.name as string) ?? "unknown";
+      return {
+        topicName,
+        sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
+        clientConfig: (spec.clientConfig as string) ?? "unknown",
+        topicType: topicName.includes("-fallback-") ? "Fallback" as const : "Filtered" as const,
+      };
+    });
+  } catch (err) {
+    console.warn(
+      "Failed to list MirrordKafkaEphemeralTopics:",
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
+};
+
+const kafkaTopicTypeFromName = (topicName: string): KafkaEphemeralTopic["topicType"] =>
+  topicName.includes("-fallback-") ? "Fallback" : "Filtered";
+
+/**
+ * Kafka split topics from MirrordSplitConfig sessions (operator >= 3.170).
+ * Reads MirrordClusterSplitSession; filtered topics from status.tmpResources,
+ * fallback topics from the target pod's patched KAFKA_TOPIC env.
+ */
+const fetchKafkaFromClusterSplitSessions = async (
+  kubeConfig: KubeConfig,
+): Promise<KafkaEphemeralTopic[]> => {
+  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+  const topics: KafkaEphemeralTopic[] = [];
+
+  let items: Array<Record<string, unknown>> = [];
+  try {
+    const result = await customApi.listClusterCustomObject({
+      group: "queues.mirrord.metalbear.co",
+      version: "v1",
+      plural: "mirrordclustersplitsessions",
+    });
+    const body = result as { items?: Array<Record<string, unknown>> };
+    items = body.items ?? [];
+  } catch (err) {
+    console.warn(
+      "Failed to list MirrordClusterSplitSessions:",
+      err instanceof Error ? err.message : err,
+    );
+    return topics;
+  }
+
+  for (const item of items) {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    const spec = (item.spec ?? {}) as Record<string, unknown>;
+    const status = (item.status ?? {}) as Record<string, unknown>;
+    const labels = (metadata.labels ?? {}) as Record<string, string>;
+    const sessionId = labels["operator.metalbear.co/session-id"] ?? "unknown";
+
+    const queues = (spec.queues ?? []) as Array<Record<string, unknown>>;
+    const hasKafkaQueue = queues.some((q) => q.kind === "kafka");
+    if (!hasKafkaQueue) continue;
+
+    const target = (spec.target ?? {}) as Record<string, unknown>;
+    const targetName = (target.name as string) ?? "unknown";
+    const targetNs = (spec.namespace as string) ?? defaultNamespace;
+
+    const ready = (status.ready ?? {}) as Record<string, unknown>;
+    const tmpResources = (ready.tmpResources ?? []) as Array<Record<string, unknown>>;
+    const filteredTopicNames = new Set<string>();
+
+    for (const resource of tmpResources) {
+      const topicMap = (resource.topic ?? {}) as Record<string, string>;
+      for (const topicName of Object.values(topicMap)) {
+        if (!topicName) continue;
+        filteredTopicNames.add(topicName);
+        topics.push({
+          topicName,
+          sessionId,
+          clientConfig: "shop-kafka-connection",
+          topicType: kafkaTopicTypeFromName(topicName),
+        });
+      }
+    }
+
+    try {
+      const podsResult = await coreApi.listNamespacedPod({
+        namespace: targetNs,
+        labelSelector: `app=${targetName}`,
+      });
+      const seenFallback = new Set<string>();
+      for (const pod of podsResult.items ?? []) {
+        const containers = pod.spec?.containers ?? [];
+        const main = containers.find((c) => c.name === "main") ?? containers[0];
+        const env = main?.env ?? [];
+        const kafkaTopic = env.find((e) => e.name === "KAFKA_TOPIC");
+        const topicName = (typeof kafkaTopic?.value === "string" ? kafkaTopic.value : "").trim();
+        if (!topicName.startsWith("mirrord-")) continue;
+        if (filteredTopicNames.has(topicName)) continue;
+        if (seenFallback.has(topicName)) continue;
+        seenFallback.add(topicName);
+        topics.push({
+          topicName,
+          sessionId,
+          clientConfig: "shop-kafka-connection",
+          topicType: "Fallback",
+        });
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to list pods for Kafka consumer ${targetName} in ${targetNs}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return topics;
+};
+
+/**
+ * Kafka ephemeral topics from active queue-splitting sessions.
+ * Merges legacy MirrordKafkaEphemeralTopic CRs with MirrordClusterSplitSession (MirrordSplitConfig).
  */
 const fetchKafkaEphemeralTopics = async (
   kubeConfig: KubeConfig,
 ): Promise<KafkaEphemeralTopic[]> => {
-  const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-  const result = await customApi.listClusterCustomObject({
-    group: "queues.mirrord.metalbear.co",
-    version: "v1alpha",
-    plural: "mirrordkafkaephemeraltopics",
-  });
+  const [legacyTopics, splitSessionTopics] = await Promise.all([
+    fetchLegacyKafkaEphemeralTopics(kubeConfig),
+    fetchKafkaFromClusterSplitSessions(kubeConfig),
+  ]);
 
-  const body = result as { items?: Array<Record<string, unknown>> };
-  const items = body.items ?? [];
-
-  return items.map((item) => {
-    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
-    const spec = (item.spec ?? {}) as Record<string, unknown>;
-    const labels = (metadata.labels ?? {}) as Record<string, string>;
-
-    const topicName = (spec.name as string) ?? "unknown";
-    return {
-      topicName,
-      sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
-      clientConfig: (spec.clientConfig as string) ?? "unknown",
-      topicType: topicName.includes("-fallback-") ? "Fallback" as const : "Filtered" as const,
-    };
-  });
+  const seen = new Set<string>();
+  const merged: KafkaEphemeralTopic[] = [];
+  for (const topic of [...legacyTopics, ...splitSessionTopics]) {
+    const key = `${topic.sessionId}:${topic.topicName}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(topic);
+  }
+  return merged;
 };
 
 /**
@@ -1127,13 +1255,13 @@ const mockOperatorStatus: OperatorStatusResponse = {
     {
       topicName: "mirrord-tmp-kmhkbbzgki-orders",
       sessionId: "504d016ef5980f1a",
-      clientConfig: "shop-kafka-config",
+      clientConfig: "shop-kafka-connection",
       topicType: "Filtered",
     },
     {
       topicName: "mirrord-tmp-kmhkbbzgki-fallback-orders",
       sessionId: "504d016ef5980f1a",
-      clientConfig: "shop-kafka-config",
+      clientConfig: "shop-kafka-connection",
       topicType: "Fallback",
     },
   ],
