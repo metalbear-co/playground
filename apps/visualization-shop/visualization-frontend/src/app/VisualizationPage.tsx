@@ -278,7 +278,7 @@ type OperatorSession = {
 };
 
 /**
- * Kafka ephemeral topic from the MirrordKafkaEphemeralTopic CRD.
+ * Kafka ephemeral topic from MirrordKafkaEphemeralTopic or MirrordClusterSplitSession.
  */
 type KafkaEphemeralTopic = {
   topicName: string;

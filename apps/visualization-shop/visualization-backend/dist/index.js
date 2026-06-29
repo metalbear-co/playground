@@ -100,7 +100,8 @@ app.get(snapshotPaths, async (req, res) => {
     }
     if (req.query.queueSplittingMock === "true" ||
         req.query.multipleSessionMock === "true" ||
-        req.query.dbBranchMock === "true") {
+        req.query.dbBranchMock === "true" ||
+        req.query.ciRunnerMock === "true") {
         res.json(mockSnapshot);
         return;
     }
@@ -222,30 +223,142 @@ const fetchOperatorSessions = async (kubeConfig) => {
     return sessions;
 };
 /**
- * Query MirrordKafkaEphemeralTopic custom resources from the operator CRD.
- * Returns topic names linked to sessions via the session-id label.
+ * Legacy Kafka split topics (MirrordKafkaTopicsConsumer flow).
  */
-const fetchKafkaEphemeralTopics = async (kubeConfig) => {
+const fetchLegacyKafkaEphemeralTopics = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-    const result = await customApi.listClusterCustomObject({
-        group: "queues.mirrord.metalbear.co",
-        version: "v1alpha",
-        plural: "mirrordkafkaephemeraltopics",
-    });
-    const body = result;
-    const items = body.items ?? [];
-    return items.map((item) => {
+    try {
+        const result = await customApi.listClusterCustomObject({
+            group: "queues.mirrord.metalbear.co",
+            version: "v1alpha",
+            plural: "mirrordkafkaephemeraltopics",
+        });
+        const body = result;
+        const items = body.items ?? [];
+        return items.map((item) => {
+            const metadata = (item.metadata ?? {});
+            const spec = (item.spec ?? {});
+            const labels = (metadata.labels ?? {});
+            const topicName = spec.name ?? "unknown";
+            return {
+                topicName,
+                sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
+                clientConfig: spec.clientConfig ?? "unknown",
+                topicType: topicName.includes("-fallback-") ? "Fallback" : "Filtered",
+            };
+        });
+    }
+    catch (err) {
+        console.warn("Failed to list MirrordKafkaEphemeralTopics:", err instanceof Error ? err.message : err);
+        return [];
+    }
+};
+const kafkaTopicTypeFromName = (topicName) => topicName.includes("-fallback-") ? "Fallback" : "Filtered";
+/**
+ * Kafka split topics from MirrordSplitConfig sessions (operator >= 3.170).
+ * Reads MirrordClusterSplitSession; filtered topics from status.tmpResources,
+ * fallback topics from the target pod's patched KAFKA_TOPIC env.
+ */
+const fetchKafkaFromClusterSplitSessions = async (kubeConfig) => {
+    const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+    const topics = [];
+    let items = [];
+    try {
+        const result = await customApi.listClusterCustomObject({
+            group: "queues.mirrord.metalbear.co",
+            version: "v1",
+            plural: "mirrordclustersplitsessions",
+        });
+        const body = result;
+        items = body.items ?? [];
+    }
+    catch (err) {
+        console.warn("Failed to list MirrordClusterSplitSessions:", err instanceof Error ? err.message : err);
+        return topics;
+    }
+    for (const item of items) {
         const metadata = (item.metadata ?? {});
         const spec = (item.spec ?? {});
+        const status = (item.status ?? {});
         const labels = (metadata.labels ?? {});
-        const topicName = spec.name ?? "unknown";
-        return {
-            topicName,
-            sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
-            clientConfig: spec.clientConfig ?? "unknown",
-            topicType: topicName.includes("-fallback-") ? "Fallback" : "Filtered",
-        };
-    });
+        const sessionId = labels["operator.metalbear.co/session-id"] ?? "unknown";
+        const queues = (spec.queues ?? []);
+        const hasKafkaQueue = queues.some((q) => q.kind === "kafka");
+        if (!hasKafkaQueue)
+            continue;
+        const target = (spec.target ?? {});
+        const targetName = target.name ?? "unknown";
+        const targetNs = spec.namespace ?? defaultNamespace;
+        const ready = (status.ready ?? {});
+        const tmpResources = (ready.tmpResources ?? []);
+        const filteredTopicNames = new Set();
+        for (const resource of tmpResources) {
+            const topicMap = (resource.topic ?? {});
+            for (const topicName of Object.values(topicMap)) {
+                if (!topicName)
+                    continue;
+                filteredTopicNames.add(topicName);
+                topics.push({
+                    topicName,
+                    sessionId,
+                    clientConfig: "shop-kafka-connection",
+                    topicType: kafkaTopicTypeFromName(topicName),
+                });
+            }
+        }
+        try {
+            const podsResult = await coreApi.listNamespacedPod({
+                namespace: targetNs,
+                labelSelector: `app=${targetName}`,
+            });
+            const seenFallback = new Set();
+            for (const pod of podsResult.items ?? []) {
+                const containers = pod.spec?.containers ?? [];
+                const main = containers.find((c) => c.name === "main") ?? containers[0];
+                const env = main?.env ?? [];
+                const kafkaTopic = env.find((e) => e.name === "KAFKA_TOPIC");
+                const topicName = (typeof kafkaTopic?.value === "string" ? kafkaTopic.value : "").trim();
+                if (!topicName.startsWith("mirrord-"))
+                    continue;
+                if (filteredTopicNames.has(topicName))
+                    continue;
+                if (seenFallback.has(topicName))
+                    continue;
+                seenFallback.add(topicName);
+                topics.push({
+                    topicName,
+                    sessionId,
+                    clientConfig: "shop-kafka-connection",
+                    topicType: "Fallback",
+                });
+            }
+        }
+        catch (err) {
+            console.warn(`Failed to list pods for Kafka consumer ${targetName} in ${targetNs}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    return topics;
+};
+/**
+ * Kafka ephemeral topics from active queue-splitting sessions.
+ * Merges legacy MirrordKafkaEphemeralTopic CRs with MirrordClusterSplitSession (MirrordSplitConfig).
+ */
+const fetchKafkaEphemeralTopics = async (kubeConfig) => {
+    const [legacyTopics, splitSessionTopics] = await Promise.all([
+        fetchLegacyKafkaEphemeralTopics(kubeConfig),
+        fetchKafkaFromClusterSplitSessions(kubeConfig),
+    ]);
+    const seen = new Set();
+    const merged = [];
+    for (const topic of [...legacyTopics, ...splitSessionTopics]) {
+        const key = `${topic.sessionId}:${topic.topicName}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        merged.push(topic);
+    }
+    return merged;
 };
 /**
  * Query MirrordSqsSession custom resources from the operator CRD.
@@ -522,7 +635,16 @@ app.get(operatorStatusPaths, async (req, res) => {
     const requestUseMock = req.query.queueSplittingMock === "true";
     const requestUseDbBranchMock = req.query.dbBranchMock === "true";
     const requestUseMultipleSessionMock = req.query.multipleSessionMock === "true";
+    const requestUseCiRunnerMock = req.query.ciRunnerMock === "true";
     const requestUseSharableVisualizationMock = req.query.sharableVisualizationMock === "true";
+    if (requestUseCiRunnerMock) {
+        const response = {
+            ...mockCiRunnerOperatorStatus,
+            fetchedAt: new Date().toISOString(),
+        };
+        res.json(response);
+        return;
+    }
     if (requestUseMultipleSessionMock) {
         const response = {
             ...mockMultipleSessionsOperatorStatus,
@@ -884,13 +1006,13 @@ const mockOperatorStatus = {
         {
             topicName: "mirrord-tmp-kmhkbbzgki-orders",
             sessionId: "504d016ef5980f1a",
-            clientConfig: "shop-kafka-config",
+            clientConfig: "shop-kafka-connection",
             topicType: "Filtered",
         },
         {
             topicName: "mirrord-tmp-kmhkbbzgki-fallback-orders",
             sessionId: "504d016ef5980f1a",
-            clientConfig: "shop-kafka-config",
+            clientConfig: "shop-kafka-connection",
             topicType: "Fallback",
         },
     ],
@@ -1041,6 +1163,55 @@ const mockMultipleSessionsOperatorStatus = {
         },
     ],
     fetchedAt: new Date().toISOString(),
+};
+const mockCiRunnerOperatorStatus = {
+    sessions: [
+        {
+            sessionId: "53d05e61363b6bdb",
+            target: {
+                kind: "Deployment",
+                name: "order-service",
+                container: "main",
+                apiVersion: "apps/v1",
+            },
+            namespace: "shop",
+            owner: {
+                username: "unknown",
+                k8sUsername: "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
+                hostname: "runnervmeorf1",
+            },
+            branchName: "testing-ci",
+            createdAt: "2026-05-13T04:28:36Z",
+            connectedAt: "2026-05-13T04:28:45.010350Z",
+            durationSeconds: 12,
+        },
+        {
+            sessionId: "cc8ec0440518d57a",
+            target: {
+                kind: "Deployment",
+                name: "order-service",
+                container: "main",
+                apiVersion: "apps/v1",
+            },
+            namespace: "shop",
+            owner: {
+                username: "Ari Sprung",
+                k8sUsername: "aris@metalbear.com",
+                hostname: "Aris-MacBook-Pro.local",
+            },
+            branchName: "visual-ci-runner",
+            createdAt: "2026-05-13T04:27:16Z",
+            connectedAt: "2026-05-13T04:27:25.006619Z",
+            durationSeconds: 92,
+        },
+    ],
+    sessionCount: 2,
+    kafkaTopics: [],
+    sqsQueues: [],
+    rmqQueues: [],
+    pgBranches: [],
+    previewSessions: [],
+    fetchedAt: "2026-05-13T04:28:48.139Z",
 };
 const mockDbBranchSession = {
     sessionId: "786f862af51aa05f",
