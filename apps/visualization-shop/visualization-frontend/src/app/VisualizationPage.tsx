@@ -1377,6 +1377,9 @@ export default function VisualizationPage() {
           label: (
             <div className="flex flex-col gap-1 text-left">
               <span className="text-sm font-semibold text-slate-900">{topic.topicName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                ephemeral · filtered
+              </span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 session: {topic.sessionId}
               </span>
@@ -1414,6 +1417,9 @@ export default function VisualizationPage() {
           label: (
             <div className="flex flex-col gap-1 text-left">
               <span className="text-sm font-semibold text-slate-900">{topic.topicName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                ephemeral · fallback
+              </span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 session: {topic.sessionId}
               </span>
