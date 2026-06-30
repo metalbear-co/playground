@@ -1,0 +1,20 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "shop-agents",
+    "path": {
+      "deployment": "order-agent"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
+        }
+      },
+      "outgoing": true
+    }
+  }
+}

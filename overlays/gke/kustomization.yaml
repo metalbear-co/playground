@@ -12,6 +12,8 @@ resources:
   - visualization
   - visualization-shop-application.yaml
   - visualization-shop
+  - shop-agents-application.yaml
+  - shop-agents
   - gateway.yaml
   - namespace.yaml
   - certificate.yaml

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop-agents-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shop-agents-frontend
+  template:
+    metadata:
+      labels:
+        app: shop-agents-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/metalbear-co/playground-shop-agents-frontend:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NEXT_BASE_PATH
+              value: "/shop-agents"
+            - name: ROUTER_AGENT_URL
+              value: "http://router-agent.shop-agents.svc.cluster.local"
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /shop-agents/support
+              port: 3000
+          livenessProbe:
+            httpGet:
+              path: /shop-agents/support
+              port: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

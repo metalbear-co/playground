@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-agent
+  template:
+    metadata:
+      labels:
+        app: order-agent
+    spec:
+      containers:
+        - name: order-agent
+          image: ghcr.io/metalbear-co/playground-shop-agents-order:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: ORDER_SERVICE_URL
+              value: "http://order-service.shop.svc.cluster.local"
+            - name: DELIVERY_SERVICE_URL
+              value: "http://delivery-service.shop.svc.cluster.local"
+            - name: PUBLIC_URL
+              value: "http://order-agent.shop-agents.svc.cluster.local"
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
