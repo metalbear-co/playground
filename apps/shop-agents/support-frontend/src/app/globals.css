@@ -1,0 +1,39 @@
+:root {
+  --purple: #6a4ff5;
+  --purple-dark: #5538d4;
+  --orange: #f59e0b;
+  --bg: #f8f7fc;
+  --surface: #ffffff;
+  --text: #1a1a2e;
+  --muted: #64748b;
+  --border: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: var(--purple);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}

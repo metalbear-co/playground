@@ -1,0 +1,18 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shop-agents-httproute
+  namespace: shop-agents
+spec:
+  parentRefs:
+    - name: playground-gateway
+      namespace: argocd
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /shop-agents
+      backendRefs:
+        - name: shop-agents-frontend
+          namespace: shop-agents
+          port: 80

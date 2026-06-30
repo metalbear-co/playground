@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: router-agent
+  template:
+    metadata:
+      labels:
+        app: router-agent
+    spec:
+      containers:
+        - name: router-agent
+          image: ghcr.io/metalbear-co/playground-shop-agents-router:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: ORDER_AGENT_URL
+              value: "http://order-agent.shop-agents.svc.cluster.local"
+            - name: PUBLIC_URL
+              value: "http://router-agent.shop-agents.svc.cluster.local"
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
