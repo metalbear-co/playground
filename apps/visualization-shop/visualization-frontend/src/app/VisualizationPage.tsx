@@ -573,10 +573,14 @@ const isMirrordCiOwner = (owner: { username?: string; k8sUsername?: string; host
   owner.username === "runner" ||
   (owner.hostname !== undefined && MIRRORD_CI_HOSTNAMES.has(owner.hostname));
 
+/** Display override: the AI agent's mirrord sessions run as the "Root" user; surface them as "AI Agent". */
+const displayUsername = (username?: string) =>
+  username?.toLowerCase() === "root" ? "AI Agent" : (username ?? "unknown");
+
 const formatMirrordOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
     ? MIRRORD_CI_LABEL
-    : `${owner.username ?? "unknown"} (${owner.hostname ?? "unknown"})`;
+    : `${displayUsername(owner.username)} (${owner.hostname ?? "unknown"})`;
 
 const formatMirrordAgentOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
@@ -2514,7 +2518,7 @@ export default function VisualizationPage() {
           y: minY - padding,
         },
         data: {
-          label: isCiRunnerLocal ? "CI Runner" : `Local Machine – ${ownerName}`,
+          label: isCiRunnerLocal ? "CI Runner" : `Local Machine – ${displayUsername(ownerName)}`,
           description: isCiRunnerLocal
             ? "GitHub Actions runner executing the binary with mirrord CI attached."
             : "Developer laptop running the binary with mirrord-layer inserted.",
@@ -3101,7 +3105,7 @@ export default function VisualizationPage() {
         ...(singleShopSession && {
           data: {
             ...localZoneNode.data,
-            label: `Local Machine – ${singleShopSession.owner.username}`,
+            label: `Local Machine – ${displayUsername(singleShopSession.owner.username)}`,
           },
         }),
       };
