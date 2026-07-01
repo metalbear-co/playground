@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
 import ProductImage from "@/components/ProductImage";
+import ProductSuggestions from "@/components/ProductSuggestions";
 import { getImageUrls, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -141,6 +142,8 @@ export default function ProductDetailPage() {
               </div>
             </div>
           </div>
+
+          <ProductSuggestions currentProductId={product.id} />
         </div>
       </main>
     </div>
