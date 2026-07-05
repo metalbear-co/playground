@@ -1,0 +1,17 @@
+
+> shop-agents-support-frontend@0.1.0 dev
+> next dev -H 0.0.0.0
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.0 (Turbopack)
+   - Local:        http://localhost:3010
+   - Network:      http://0.0.0.0:3010
+
+ ✓ Starting...
+ ✓ Ready in 587ms
+ GET /support 200 in 610ms (compile: 542ms, render: 68ms)
+ ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ GET /support 200 in 32ms (compile: 5ms, render: 27ms)
+ POST /api/query 502 in 172ms (compile: 89ms, render: 83ms)
+ GET /support 200 in 90ms (compile: 11ms, render: 79ms)
