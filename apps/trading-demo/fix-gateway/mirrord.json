@@ -1,0 +1,21 @@
+{
+  "target": {
+    "namespace": "trading-demo",
+    "path": {
+      "deployment": "fix-gateway"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "mirror",
+        "ports": [9876]
+      },
+      "outgoing": {
+        "tcp": true,
+        "udp": true
+      },
+      "dns": true
+    }
+  }
+}
