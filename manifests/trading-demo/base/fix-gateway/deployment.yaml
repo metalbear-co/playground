@@ -21,9 +21,13 @@ spec:
             - name: FIX_PORT
               value: "9876"
             - name: TRADE_FEED_HOST
-              value: "trade-feed.trading-demo.svc.cluster.local"
+              value: "trade-feed"
             - name: TRADE_FEED_PORT
               value: "9999"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           ports:
             - containerPort: 8080
               name: http

@@ -18,6 +18,10 @@ spec:
           env:
             - name: UDP_PORT
               value: "9999"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           ports:
             - containerPort: 9999
               protocol: UDP

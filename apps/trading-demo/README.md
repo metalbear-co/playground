@@ -44,11 +44,20 @@ FIX symbol `METAL-1` maps to productId `1` and POSTs to existing order API.
 
 ## Kubernetes
 
+Single namespace (legacy):
+
 ```bash
 kubectl apply -k manifests/trading-demo
 ```
 
-Namespace: `trading-demo` only — shop manifests unchanged.
+Two namespaces (prospect mirror demo — see [DEMO-TWO-NAMESPACES.md](./DEMO-TWO-NAMESPACES.md)):
+
+```bash
+kubectl apply -k manifests/trading-demo/overlays/trading-a
+kubectl apply -k manifests/trading-demo/overlays/trading-b
+```
+
+Namespace: `trading-demo` / `trading-a` / `trading-b` only — shop manifests unchanged.
 
 ## Thursday talk track
 

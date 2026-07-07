@@ -1,0 +1,19 @@
+{
+  "target": {
+    "namespace": "trading-a",
+    "path": {
+      "deployment": "fix-gateway"
+    }
+  },
+  "agent": {
+    "ephemeral": true
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "mirror",
+        "ports": [9876]
+      }
+    }
+  }
+}

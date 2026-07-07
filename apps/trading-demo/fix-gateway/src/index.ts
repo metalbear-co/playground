@@ -4,6 +4,8 @@ import express from "express";
 
 const fixPort = parseInt(process.env.FIX_PORT || "9876", 10);
 const httpPort = parseInt(process.env.PORT || "8080", 10);
+const stackId =
+  process.env.POD_NAMESPACE || process.env.STACK_ID || "local";
 const tradeFeedHost = process.env.TRADE_FEED_HOST || "localhost";
 const tradeFeedPort = parseInt(process.env.TRADE_FEED_PORT || "9999", 10);
 const orderServiceUrl = process.env.ORDER_SERVICE_URL?.trim() || "";
@@ -71,7 +73,8 @@ async function handleFixMessage(raw: string, peer: string): Promise<void> {
   const clOrdId = fields["11"] || "unknown";
   const msgType = fields["35"] || "?";
   console.log(
-    "[FixGateway] FIX from %s type=%s clOrdId=%s symbol=%s raw=%s",
+    "[FixGateway ns=%s] FIX from %s type=%s clOrdId=%s symbol=%s raw=%s",
+    stackId,
     peer,
     msgType,
     clOrdId,
@@ -126,7 +129,7 @@ function startFixServer(): void {
     });
   });
   server.listen(fixPort, "0.0.0.0", () => {
-    console.log("[FixGateway] FIX TCP listening on %s", fixPort);
+    console.log("[FixGateway ns=%s] FIX TCP listening on %s", stackId, fixPort);
   });
 }
 
@@ -135,6 +138,7 @@ function startHttp(): void {
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
+      namespace: stackId,
       fixPort,
       tradeFeed: `${tradeFeedHost}:${tradeFeedPort}`,
       orderServiceUrl: orderServiceUrl || null,
