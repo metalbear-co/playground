@@ -197,7 +197,7 @@ func handleRecord(cfg Config, cl *kgo.Client, db *pgxpool.Pool, rec *kgo.Record)
 
 func forwardMessage(cfg Config, terminal bool) string {
 	if terminal {
-		return "processed — end of chain This is coming from a pod in cluster"
+		return "processed — end of chain"
 	}
 	return "processed, forwarded to " + cfg.NextTopic
 }
