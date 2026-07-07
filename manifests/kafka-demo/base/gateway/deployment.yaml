@@ -33,14 +33,6 @@ spec:
               value: "kafka-demo.trace"
             - name: TRACE_GROUP_ID
               value: "kafka-demo-gateway"
-            # Persist the button click counter so it survives gateway restarts
-            # (reuses the cluster Postgres). The connection string lives in a
-            # Secret (created out-of-band; see scripts/deploy.sh), never in git.
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-demo-db
-                  key: url
             # Serve the UI + API under this sub-path so a non-rewriting GCE ingress
             # can expose it at http://<lb-ip>/kafka-demo/. Health stays at root.
             - name: BASE_PATH

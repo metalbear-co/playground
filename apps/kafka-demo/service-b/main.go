@@ -7,6 +7,12 @@
 // handled by the OpenTelemetry propagator via Extract/Inject — driven by
 // OTEL_PROPAGATORS, not hand-copied.
 //
+// The terminal service (service-c) additionally persists a running counter in
+// Postgres — it writes (+1) and reads back the total number of messages that
+// completed the chain, so the count survives restarts. Only the service given
+// DATABASE_URL opens a DB connection; the others skip it. This is also what makes
+// mirrord DB branching meaningful on that service.
+//
 // Uses github.com/twmb/franz-go (kgo). franz-go's consumer-group implementation
 // correctly assigns partitions when group members subscribe to different topics —
 // which is exactly what mirrord Kafka queue splitting does (the operator's
@@ -18,20 +24,21 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel"
 )
 
 type ChainMessage struct {
-	TraceID  string `json:"traceId"`
-	Sequence int64  `json:"sequence"` // incrementing click number set by the gateway
-	Payload  string `json:"payload"`
-	Session  string `json:"session"`
+	TraceID string `json:"traceId"`
+	Payload string `json:"payload"`
+	Session string `json:"session"`
 }
 
 type TraceEvent struct {
@@ -54,6 +61,9 @@ type Config struct {
 	Stage         string
 	ServiceName   string
 	WorkMillis    int
+	// DatabaseURL, when set (only the terminal service), persists the processed
+	// counter in Postgres. Empty = no counter.
+	DatabaseURL string
 }
 
 func loadConfig() Config {
@@ -67,6 +77,7 @@ func loadConfig() Config {
 	viper.SetDefault("STAGE", "b")
 	viper.SetDefault("SERVICE_NAME", "service-b")
 	viper.SetDefault("WORK_MILLIS", 700)
+	viper.SetDefault("DATABASE_URL", "")
 
 	return Config{
 		Port:          viper.GetString("PORT"),
@@ -78,12 +89,22 @@ func loadConfig() Config {
 		Stage:         viper.GetString("STAGE"),
 		ServiceName:   viper.GetString("SERVICE_NAME"),
 		WorkMillis:    viper.GetInt("WORK_MILLIS"),
+		DatabaseURL:   viper.GetString("DATABASE_URL"),
 	}
 }
 
 func main() {
 	cfg := loadConfig()
 	initPropagator()
+
+	// Only the terminal service is given DATABASE_URL, so only it opens a pool.
+	dbPool, err := setupCounterDB(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("%s: counter DB setup failed (continuing without it): %v", cfg.ServiceName, err)
+	} else if dbPool != nil {
+		defer dbPool.Close()
+		log.Printf("%s: processed counter persisted in Postgres", cfg.ServiceName)
+	}
 
 	cl, err := kgo.NewClient(
 		kgo.SeedBrokers(cfg.KafkaAddress),
@@ -120,11 +141,11 @@ func main() {
 			time.Sleep(time.Second)
 			continue
 		}
-		fetches.EachRecord(func(rec *kgo.Record) { handleRecord(cfg, cl, rec) })
+		fetches.EachRecord(func(rec *kgo.Record) { handleRecord(cfg, cl, dbPool, rec) })
 	}
 }
 
-func handleRecord(cfg Config, cl *kgo.Client, rec *kgo.Record) {
+func handleRecord(cfg Config, cl *kgo.Client, db *pgxpool.Pool, rec *kgo.Record) {
 	// Log every consumed message up front, naming the consuming service.
 	log.Printf("[%s] CONSUMED kafka message: topic=%s partition=%d offset=%d", cfg.ServiceName, rec.Topic, rec.Partition, rec.Offset)
 
@@ -137,16 +158,29 @@ func handleRecord(cfg Config, cl *kgo.Client, rec *kgo.Record) {
 		log.Printf("bad message: %v", err)
 		return
 	}
-	log.Printf("[%s] message: seq=%d traceId=%s session=%q payload=%q", cfg.ServiceName, msg.Sequence, msg.TraceID, msg.Session, msg.Payload)
+	log.Printf("[%s] message: traceId=%s session=%q payload=%q", cfg.ServiceName, msg.TraceID, msg.Session, msg.Payload)
 
 	// Simulate doing some work.
 	time.Sleep(time.Duration(cfg.WorkMillis) * time.Millisecond)
 
 	terminal := cfg.NextTopic == ""
+	msgText := forwardMessage(cfg, terminal)
+
+	// Terminal service persists the counter: write (+1) and read back the total.
+	// This is the end of the chain, so the increment shows up last in the logs.
+	if terminal && db != nil {
+		if n, err := incrementCounter(context.Background(), db); err != nil {
+			log.Printf("[%s] counter DB error: %v", cfg.ServiceName, err)
+		} else {
+			msgText = fmt.Sprintf("%s (message #%d)", msgText, n)
+			log.Printf("[%s] DB counter incremented -> %d messages have completed the chain", cfg.ServiceName, n)
+		}
+	}
+
 	emitTrace(cl, cfg.TraceTopic, msgCtx, TraceEvent{
 		TraceID: msg.TraceID, Stage: cfg.Stage, Service: cfg.ServiceName,
 		Session: msg.Session, Done: terminal, TS: time.Now().UnixMilli(),
-		Message: forwardMessage(cfg, terminal),
+		Message: msgText,
 	})
 
 	if !terminal {
@@ -166,6 +200,37 @@ func forwardMessage(cfg Config, terminal bool) string {
 		return "processed — end of chain"
 	}
 	return "processed, forwarded to " + cfg.NextTopic
+}
+
+// setupCounterDB connects to Postgres and ensures the counter table exists.
+// Returns (nil, nil) when url is empty — the service then runs without a counter.
+func setupCounterDB(ctx context.Context, url string) (*pgxpool.Pool, error) {
+	if url == "" {
+		return nil, nil
+	}
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS kafka_demo_click_counter (
+		id int PRIMARY KEY,
+		count bigint NOT NULL
+	)`); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
+}
+
+// incrementCounter writes (+1) and reads back the running total of messages that
+// completed the chain. Atomic upsert; RETURNING gives the new value.
+func incrementCounter(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	var n int64
+	err := pool.QueryRow(ctx, `
+		INSERT INTO kafka_demo_click_counter (id, count) VALUES (1, 1)
+		ON CONFLICT (id) DO UPDATE SET count = kafka_demo_click_counter.count + 1
+		RETURNING count`).Scan(&n)
+	return n, err
 }
 
 func emitTrace(cl *kgo.Client, topic string, ctx context.Context, ev TraceEvent) {

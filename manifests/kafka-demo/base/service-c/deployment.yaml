@@ -39,6 +39,14 @@ spec:
               value: "c"
             - name: SERVICE_NAME
               value: "service-c"
+            # service-c is the terminal service: it persists the processed-message
+            # counter in Postgres. Connection string comes from a Secret (created
+            # out-of-band; see scripts/deploy.sh), never committed to git.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-demo-db
+                  key: url
           ports:
             - containerPort: 80
               protocol: TCP

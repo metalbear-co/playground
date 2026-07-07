@@ -1,0 +1,43 @@
+{
+  "key": "changed-responce",
+  "target": {
+    "namespace": "kafka-demo",
+    "path": {
+      "deployment": "service-c"
+    }
+  },
+  "feature": {
+    "preview": {
+      "ttl_mins": 120,
+      "creation_timeout_secs": 600
+    },
+    "network": {
+      "outgoing": true
+    },
+    "split_queues": {
+      "relay": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "baggage": ".*mirrord-session={{key}}.*"
+        }
+      }
+    },
+    "db_branches": [
+      {
+        "id": "kafka-demo-counter",
+        "type": "pg",
+        "name": "postgres",
+        "ttl_secs": 300,
+        "connection": {
+          "url": {
+            "type": "env",
+            "variable": "DATABASE_URL"
+          }
+        },
+        "copy": {
+          "mode": "schema"
+        }
+      }
+    ]
+  }
+}
