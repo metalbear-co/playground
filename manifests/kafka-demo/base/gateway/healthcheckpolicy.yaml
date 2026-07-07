@@ -1,0 +1,22 @@
+# GKE Gateway backend health check for the gateway service. Without this, the LB
+# health-checks "/" (now 404 because the app serves under BASE_PATH=/kafka-demo)
+# and marks the backend unhealthy -> 503. Point it at /health, which stays at root.
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: gateway-healthcheck
+spec:
+  default:
+    checkIntervalSec: 10
+    config:
+      httpHealthCheck:
+        port: 80
+        requestPath: /health
+      type: HTTP
+    healthyThreshold: 1
+    timeoutSec: 5
+    unhealthyThreshold: 3
+  targetRef:
+    group: ""
+    kind: Service
+    name: gateway

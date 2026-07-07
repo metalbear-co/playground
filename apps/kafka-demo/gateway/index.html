@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kafka Demo — mirrord</title>
+  <style>
+    :root {
+      --purple: #6a4ff5;
+      --orange: #f59e0b;
+      --bg: #0f1020;
+      --card: #1b1c33;
+      --muted: #9aa0c3;
+      --idle: #2a2c4a;
+      --ok: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #241f4a 0%, var(--bg) 60%);
+      color: #eef0ff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+    .wrap { width: 100%; max-width: 720px; }
+    h1 { font-size: 1.9rem; margin: 0 0 4px; }
+    h1 .k { color: var(--orange); }
+    p.sub { color: var(--muted); margin: 0 0 28px; }
+    .controls {
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+      margin-bottom: 32px;
+    }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+    input {
+      background: var(--card); border: 1px solid var(--idle); color: #fff;
+      padding: 12px 14px; border-radius: 10px; font-size: .95rem; min-width: 220px;
+    }
+    input:focus { outline: 2px solid var(--purple); border-color: transparent; }
+    button {
+      background: var(--purple); color: #fff; border: 0; cursor: pointer;
+      padding: 13px 26px; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      transition: transform .05s ease, opacity .2s ease;
+    }
+    button:hover { opacity: .92; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .chain { display: flex; align-items: center; gap: 8px; margin-bottom: 28px; }
+    .node {
+      flex: 1; background: var(--card); border: 1px solid var(--idle);
+      border-radius: 14px; padding: 18px 14px; text-align: center;
+      transition: all .3s ease; position: relative;
+    }
+    .node .name { font-weight: 700; font-size: 1.05rem; }
+    .node .topic { font-size: .72rem; color: var(--muted); margin-top: 4px; font-family: ui-monospace, monospace; }
+    .node.active { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(106,79,245,.25); }
+    .node.done { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(34,197,94,.2); }
+    .node.done .dot { background: var(--ok); }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--idle);
+      position: absolute; top: 12px; right: 12px; transition: background .3s ease;
+    }
+    .node.active .dot { background: var(--purple); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .arrow { color: var(--muted); font-size: 1.3rem; }
+    .log {
+      background: #0c0d1c; border: 1px solid var(--idle); border-radius: 12px;
+      padding: 14px 16px; font-family: ui-monospace, monospace; font-size: .82rem;
+      color: #cdd2ff; min-height: 120px; max-height: 260px; overflow-y: auto;
+      white-space: pre-wrap; line-height: 1.6;
+    }
+    .log .g { color: var(--muted); }
+    .log .s { color: var(--orange); }
+    .badge {
+      display: inline-block; font-size: .72rem; padding: 2px 8px; border-radius: 999px;
+      background: rgba(106,79,245,.18); color: #c3b8ff; margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1><span class="k">Kafka</span> → Kafka → Kafka <span class="badge">mirrord demo</span></h1>
+    <p class="sub">Press the button. The gateway produces one Kafka message; it flows through three services, each hop queue-to-queue.</p>
+
+    <div class="controls">
+      <button id="go">Produce message ▶</button>
+    </div>
+
+    <div class="chain">
+      <div class="node" id="n-a"><span class="dot"></span><div class="name">Service A</div><div class="topic">kafka-demo.a</div></div>
+      <div class="arrow">→</div>
+      <div class="node" id="n-b"><span class="dot"></span><div class="name">Service B</div><div class="topic">kafka-demo.b</div></div>
+      <div class="arrow">→</div>
+      <div class="node" id="n-c"><span class="dot"></span><div class="name">Service C</div><div class="topic">kafka-demo.c</div></div>
+    </div>
+
+    <div class="log" id="log"><span class="g">Waiting for a message…</span></div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const nodes = { a: $("n-a"), b: $("n-b"), c: $("n-c") };
+    const logEl = $("log");
+
+    function resetChain() {
+      Object.values(nodes).forEach(n => n.classList.remove("active", "done"));
+      logEl.innerHTML = "";
+    }
+    function logLine(ev) {
+      const t = new Date(ev.ts).toLocaleTimeString();
+      const sess = ev.session ? ` <span class="s">[session=${ev.session}]</span>` : "";
+      logEl.innerHTML += `<span class="g">${t}</span> ${ev.service}: ${ev.message}${sess}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function poll(traceId) {
+      const seen = new Set();
+      const started = Date.now();
+      while (Date.now() - started < 30000) {
+        let events = [];
+        try {
+          const res = await fetch(`trace/${traceId}`);
+          events = await res.json();
+        } catch (e) { /* keep polling */ }
+
+        for (const ev of events) {
+          const key = ev.stage + ev.ts + ev.message;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          logLine(ev);
+          const node = nodes[ev.stage];
+          if (node) {
+            // clear previous active states, mark this one
+            if (ev.stage === "a") { nodes.a.classList.add("active"); }
+            if (ev.stage === "b") { nodes.a.classList.replace("active","done"); nodes.b.classList.add("active"); }
+            if (ev.stage === "c") { nodes.b.classList.replace("active","done"); nodes.c.classList.add("active"); }
+            if (ev.done) { nodes.c.classList.replace("active","done"); }
+          }
+        }
+        if (events.some(e => e.done)) return;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+
+    $("go").addEventListener("click", async () => {
+      const btn = $("go");
+      btn.disabled = true;
+      resetChain();
+      try {
+        const res = await fetch("produce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payload: "hello from the button",
+          }),
+        });
+        const { traceId } = await res.json();
+        logLine({ ts: Date.now(), service: "gateway", message: `produced traceId=${traceId}` });
+        await poll(traceId);
+      } catch (e) {
+        logEl.innerHTML += `\nerror: ${e}`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
