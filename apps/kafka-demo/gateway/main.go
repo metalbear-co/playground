@@ -29,6 +29,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel"
@@ -55,7 +56,9 @@ type ChainMessage struct {
 	Session  string `json:"session"`
 }
 
-// clickCounter increments once per button press; its value goes into each message.
+// clickCounter is the in-memory fallback used only when DATABASE_URL is unset or
+// the database is unreachable; otherwise the count is persisted in Postgres so it
+// survives gateway restarts.
 var clickCounter atomic.Int64
 
 type Config struct {
@@ -64,6 +67,9 @@ type Config struct {
 	FirstTopic   string
 	TraceTopic   string
 	TraceGroupID string
+	// DatabaseURL, when set, persists the click counter in Postgres (survives
+	// restarts). Empty = in-memory counter (resets on restart).
+	DatabaseURL string
 	// BasePath lets the app be served under a sub-path (e.g. "/kafka-demo") behind
 	// an ingress that does NOT rewrite. Empty = served at root. No trailing slash.
 	BasePath string
@@ -76,6 +82,7 @@ func loadConfig() Config {
 	viper.SetDefault("FIRST_TOPIC", "kafka-demo.a")
 	viper.SetDefault("TRACE_TOPIC", "kafka-demo.trace")
 	viper.SetDefault("TRACE_GROUP_ID", "kafka-demo-gateway")
+	viper.SetDefault("DATABASE_URL", "")
 	viper.SetDefault("BASE_PATH", "")
 
 	return Config{
@@ -84,8 +91,50 @@ func loadConfig() Config {
 		FirstTopic:   viper.GetString("FIRST_TOPIC"),
 		TraceTopic:   viper.GetString("TRACE_TOPIC"),
 		TraceGroupID: viper.GetString("TRACE_GROUP_ID"),
+		DatabaseURL:  viper.GetString("DATABASE_URL"),
 		BasePath:     strings.TrimSuffix(viper.GetString("BASE_PATH"), "/"),
 	}
+}
+
+// setupCounterDB connects to Postgres and ensures the counter table exists.
+// Returns nil (no error) with a nil pool when DATABASE_URL is unset — the gateway
+// then falls back to the in-memory counter.
+func setupCounterDB(ctx context.Context, url string) (*pgxpool.Pool, error) {
+	if url == "" {
+		return nil, nil
+	}
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	_, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS kafka_demo_click_counter (
+		id int PRIMARY KEY,
+		count bigint NOT NULL
+	)`)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
+}
+
+// nextSequence returns the next click number. Backed by Postgres when pool is
+// non-nil (atomic increment, persisted); otherwise falls back to the in-memory
+// counter (also used if the DB call fails, so the demo never blocks on the DB).
+func nextSequence(ctx context.Context, pool *pgxpool.Pool) int64 {
+	if pool == nil {
+		return clickCounter.Add(1)
+	}
+	var n int64
+	err := pool.QueryRow(ctx, `
+		INSERT INTO kafka_demo_click_counter (id, count) VALUES (1, 1)
+		ON CONFLICT (id) DO UPDATE SET count = kafka_demo_click_counter.count + 1
+		RETURNING count`).Scan(&n)
+	if err != nil {
+		log.Printf("db counter error, falling back to memory: %v", err)
+		return clickCounter.Add(1)
+	}
+	return n
 }
 
 // traceStore keeps the last events per traceId in memory so the UI can poll them.
@@ -134,6 +183,15 @@ func main() {
 	cfg := loadConfig()
 	initPropagator()
 	store := newTraceStore()
+
+	// Persistent click counter in Postgres (falls back to memory if unset/unreachable).
+	dbPool, err := setupCounterDB(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("counter DB setup failed, using in-memory counter: %v", err)
+	} else if dbPool != nil {
+		defer dbPool.Close()
+		log.Printf("click counter persisted in Postgres")
+	}
 
 	// One franz-go client: produces to the first topic AND consumes the trace topic.
 	cl, err := kgo.NewClient(
@@ -184,7 +242,7 @@ func main() {
 			req.Payload = "hello from the button"
 		}
 
-		seq := clickCounter.Add(1)
+		seq := nextSequence(c.Request.Context(), dbPool)
 		traceID := newTraceID()
 
 		// Extract any propagated context (W3C baggage / traceparent) from the incoming

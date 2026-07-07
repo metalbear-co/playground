@@ -44,8 +44,13 @@ Runs on the same cluster as shop (uses that cluster's Kafka), in its own
 `kafka-demo` namespace. Images are pushed to GHCR (public, like the shop images)
 and pulled by the cluster — so authenticate to GHCR first.
 
+The gateway persists the button click counter in Postgres via a Secret
+(`kafka-demo-db`), so the connection string is **never committed** — pass it as
+`DATABASE_URL` and `deploy.sh` creates the Secret for you.
+
 ```bash
 gh auth token | docker login ghcr.io -u <you> --password-stdin   # one-time
+export DATABASE_URL='postgresql://USER:PASSWORD@postgres.infra.svc.cluster.local:5432/postgres'
 ./apps/kafka-demo/scripts/deploy.sh                              # build+push+apply
 kubectl -n kafka-demo port-forward svc/gateway 8080:80
 open http://localhost:8080

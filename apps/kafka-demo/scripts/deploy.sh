@@ -24,6 +24,13 @@ for s in gateway service-a service-b service-c; do
     --push .
 done
 
+echo "==> Ensuring namespace + DB secret (connection string stays out of git)"
+kubectl create namespace kafka-demo --dry-run=client -o yaml | kubectl apply -f -
+if ! kubectl -n kafka-demo get secret kafka-demo-db >/dev/null 2>&1; then
+  : "${DATABASE_URL:?Set DATABASE_URL to your Postgres connection string, e.g. postgresql://USER:PASSWORD@postgres.infra.svc.cluster.local:5432/postgres}"
+  kubectl -n kafka-demo create secret generic kafka-demo-db --from-literal=url="$DATABASE_URL"
+fi
+
 echo "==> Applying manifests to the kafka-demo namespace only"
 kubectl apply -k manifests/kafka-demo
 
