@@ -24,9 +24,9 @@
     },
     "db_branches": [
       {
-        "id": "kafka-demo-counter",
         "type": "pg",
-        "name": "postgres",
+        "version": "16",
+        "name": "kafkademo",
         "ttl_secs": 300,
         "connection": {
           "url": {
