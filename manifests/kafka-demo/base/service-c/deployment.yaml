@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-c
+  labels:
+    app: service-c
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-c
+  template:
+    metadata:
+      labels:
+        app: service-c
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-kafka-demo-service-c:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            # Which context formats the OTel propagator injects/extracts. The
+            # `baggage` entry is what carries mirrord-session across every hop.
+            - name: OTEL_PROPAGATORS
+              value: "tracecontext,baggage"
+            - name: KAFKA_ADDRESS
+              value: "kafka.infra.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "kafka-demo.c"
+            - name: NEXT_TOPIC
+              value: ""
+            - name: TRACE_TOPIC
+              value: "kafka-demo.trace"
+            - name: KAFKA_CONSUMER_GROUP
+              value: "service-c"
+            - name: STAGE
+              value: "c"
+            - name: SERVICE_NAME
+              value: "service-c"
+            # service-c is the terminal service: it persists the processed-message
+            # counter in Postgres. Connection string comes from a Secret (created
+            # out-of-band; see scripts/deploy.sh), never committed to git.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-demo-db
+                  key: url
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

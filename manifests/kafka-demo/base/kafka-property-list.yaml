@@ -1,0 +1,19 @@
+# Kafka broker connection used by mirrord queue splitting for every service in
+# this namespace. Referenced by clientConfig: kafka-demo-connection in each
+# MirrordSplitConfig. Requires the mirrord operator (>= 3.170.0) to be installed.
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: kafka-demo-connection
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.infra.svc.cluster.local:9092
+    - name: client.id
+      value: mirrord-operator-kafka-demo
+    - name: session.timeout.ms
+      value: "30000"
+    - name: max.poll.interval.ms
+      value: "60000"
+    - name: partition.assignment.strategy
+      value: range

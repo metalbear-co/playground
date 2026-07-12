@@ -1,0 +1,23 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "kafka-demo",
+    "path": {
+      "deployment": "service-a"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": "steal",
+      "outgoing": true
+    },
+    "split_queues": {
+      "relay": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "baggage": ".*mirrord-session={{key}}.*"
+        }
+      }
+    }
+  }
+}
