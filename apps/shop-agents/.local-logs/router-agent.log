@@ -1,0 +1,13 @@
+
+> shop-agents-router@1.0.0 predev
+> rm -rf src/shared && cp -r ../shared src/shared
+
+
+> shop-agents-router@1.0.0 dev
+> tsx watch src/index.ts
+
+[router-agent] listening on 3012
+[router-agent] error: Error: order-agent returned 502: {"error":"fetch failed","context":{"trace":[{"agent":"router-agent","action":"received","detail":"What is the status of order 1?"},{"agent":"router-agent","action":"delegate","detail":"order-agent"},{"agent":"order-agent","action":"received","detail":"What is the status of order 1?"},{"agent":"order-agent","action":"fetch","detail":"GET /orders/1"}]}}
+    at delegateToOrderAgent (/Users/adna/Desktop/CONTRIBUTION/playground/apps/shop-agents/router-agent/src/index.ts:86:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <anonymous> (/Users/adna/Desktop/CONTRIBUTION/playground/apps/shop-agents/router-agent/src/index.ts:115:24)

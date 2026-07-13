@@ -1,0 +1,17 @@
+
+> shop-agents-order@1.0.0 predev
+> rm -rf src/shared && cp -r ../shared src/shared
+
+
+> shop-agents-order@1.0.0 dev
+> tsx watch src/index.ts
+
+[order-agent] listening on 3011
+[order-agent] error: [TypeError: fetch failed] {
+  [cause]: AggregateError [ECONNREFUSED]: 
+      at internalConnectMultiple (node:net:1193:18)
+      at afterConnectMultiple (node:net:1783:7) {
+    code: 'ECONNREFUSED',
+    [errors]: [ [Error], [Error] ]
+  }
+}
