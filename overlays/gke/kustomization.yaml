@@ -12,6 +12,8 @@ resources:
   - visualization
   - visualization-shop-application.yaml
   - visualization-shop
+  - mirrord-share-ingress-application.yaml
+  - mirrord-preview
   - gateway.yaml
   - namespace.yaml
   - certificate.yaml

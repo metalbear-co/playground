@@ -1,0 +1,23 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: mirrord-preview-gateway
+  namespace: mirrord
+  annotations:
+    # Certificate Manager map holding the wildcard cert for *.preview.playground.metalbear.dev.
+    # TLS is configured entirely by this annotation, so listeners carry no tls block.
+    networking.gke.io/certmap: mirrord-preview-certmap
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  addresses:
+    # Reserved global static IP; the wildcard A record points here.
+    - type: NamedAddress
+      value: mirrord-preview-ip
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.preview.playground.metalbear.dev"
+      allowedRoutes:
+        namespaces:
+          from: Same
