@@ -1,0 +1,31 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "kafka-demo",
+    "path": {
+      "deployment": "service-c-ev"
+    }
+  },
+  "feature": {
+    "preview": {
+      "ttl_mins": 120,
+      "creation_timeout_secs": 600,
+      "idle": {
+        "start_idle": true,
+        "timeout_secs": 300,
+        "wake_timeout_secs": 90
+      }
+    },
+    "network": {
+      "outgoing": true
+    },
+    "split_queues": {
+      "relay": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "baggage": ".*mirrord-session={{key}}.*"
+        }
+      }
+    }
+  }
+}

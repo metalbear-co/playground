@@ -17,7 +17,9 @@ PLATFORM="${PLATFORM:-linux/amd64}"
 
 echo "==> Target cluster: $(kubectl config current-context)"
 echo "==> Building + pushing images to $REGISTRY ($PLATFORM)"
-for s in gateway service-a service-b service-c; do
+# cronjob is only used by the event-driven overlay, but build it here too so a
+# single build step covers both modes (harmless for the base deploy).
+for s in gateway service-a service-b service-c cronjob; do
   docker buildx build --platform "$PLATFORM" \
     -f "apps/kafka-demo/$s/Dockerfile" \
     -t "$REGISTRY/playground-kafka-demo-$s:latest" \

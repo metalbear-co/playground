@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Event-driven mode: A -> B(writes DB state) -> CronJob Z(reads DB, emits) -> C.
+# Deployed ALONGSIDE the base A->B->C demo in the same kafka-demo namespace, with
+# distinct *-ev names and a kafka-demo.ev.* topic prefix, so both run at once.
+#
+# The shared namespace, DB secret, and Kafka MirrordPropertyList (kafka-demo-connection,
+# referenced by the split configs below) are provided by the base demo or by
+# scripts/deploy-event-driven.sh — kustomize's load restrictor won't let an overlay
+# pull those loose files up from ../../base.
+namespace: kafka-demo
+
+resources:
+  - gateway-ev
+  - service-a-ev
+  - service-b-ev
+  - service-c-ev
+  - cronjob-z
+
+commonLabels:
+  env: playground
+  team: kafka-demo

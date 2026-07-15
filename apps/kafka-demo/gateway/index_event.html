@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Event-Driven Demo — mirrord</title>
+  <style>
+    :root {
+      --purple: #6a4ff5;
+      --orange: #f59e0b;
+      --bg: #0f1020;
+      --card: #1b1c33;
+      --muted: #9aa0c3;
+      --idle: #2a2c4a;
+      --ok: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #241f4a 0%, var(--bg) 60%);
+      color: #eef0ff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+    .wrap { width: 100%; max-width: 820px; }
+    h1 { font-size: 1.9rem; margin: 0 0 4px; }
+    h1 .k { color: var(--orange); }
+    p.sub { color: var(--muted); margin: 0 0 28px; }
+    .controls {
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+      margin-bottom: 32px;
+    }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+    input {
+      background: var(--card); border: 1px solid var(--idle); color: #fff;
+      padding: 12px 14px; border-radius: 10px; font-size: .95rem; min-width: 220px;
+    }
+    input:focus { outline: 2px solid var(--purple); border-color: transparent; }
+    button {
+      background: var(--purple); color: #fff; border: 0; cursor: pointer;
+      padding: 13px 26px; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      transition: transform .05s ease, opacity .2s ease;
+    }
+    button:hover { opacity: .92; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .chain { display: flex; align-items: center; gap: 8px; margin-bottom: 28px; }
+    .node {
+      flex: 1; background: var(--card); border: 1px solid var(--idle);
+      border-radius: 14px; padding: 18px 14px; text-align: center;
+      transition: all .3s ease; position: relative;
+    }
+    .node .name { font-weight: 700; font-size: 1.05rem; }
+    .node .topic { font-size: .72rem; color: var(--muted); margin-top: 4px; font-family: ui-monospace, monospace; }
+    .node.active { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(106,79,245,.25); }
+    .node.done { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(34,197,94,.2); }
+    .node.done .dot { background: var(--ok); }
+    /* CronJob Z is a scheduled, DB-driven hop — dashed to read as "not a queue hop". */
+    .node.cron { border-style: dashed; }
+    .node.cron .topic { color: var(--orange); }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--idle);
+      position: absolute; top: 12px; right: 12px; transition: background .3s ease;
+    }
+    .node.active .dot { background: var(--purple); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .arrow { color: var(--muted); font-size: 1.3rem; }
+    .arrow.async { color: var(--orange); font-size: 1rem; letter-spacing: 1px; }
+    .log {
+      background: #0c0d1c; border: 1px solid var(--idle); border-radius: 12px;
+      padding: 14px 16px; font-family: ui-monospace, monospace; font-size: .82rem;
+      color: #cdd2ff; min-height: 120px; max-height: 260px; overflow-y: auto;
+      white-space: pre-wrap; line-height: 1.6;
+    }
+    .log .g { color: var(--muted); }
+    .log .s { color: var(--orange); }
+    .badge {
+      display: inline-block; font-size: .72rem; padding: 2px 8px; border-radius: 999px;
+      background: rgba(106,79,245,.18); color: #c3b8ff; margin-left: 8px;
+    }
+    /* CronJob Z control + DB-state demo panels */
+    .cron-bar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--idle); border-radius: 12px;
+      padding: 12px 16px; margin: 22px 0 14px;
+    }
+    .cron-bar .title { font-weight: 700; }
+    .cron-bar .status { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+    .cron-bar .sdot { width: 9px; height: 9px; border-radius: 50%; background: var(--idle); }
+    .cron-bar.on .sdot { background: var(--ok); animation: pulse 1.2s infinite; }
+    .cron-bar .grow { flex: 1; }
+    .cron-bar .interval { font-size: .82rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+    .cron-bar .interval input {
+      width: 58px; min-width: 0; padding: 7px 8px; font-size: .85rem; text-align: right;
+    }
+    .btn-sm { padding: 8px 16px; font-size: .85rem; border-radius: 9px; }
+    .btn-stop { background: #e0554e; }
+    .btn-ghost { background: transparent; border: 1px solid var(--idle); }
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    @media (max-width: 640px) { .panels { grid-template-columns: 1fr; } }
+    .panel { background: #0c0d1c; border: 1px solid var(--idle); border-radius: 12px; padding: 12px 14px; }
+    .panel h3 { margin: 0 0 8px; font-size: .82rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+    .cronlog { font-family: ui-monospace, monospace; font-size: .78rem; color: #cdd2ff;
+      max-height: 220px; overflow-y: auto; white-space: pre-wrap; line-height: 1.55; }
+    .cronlog .t { color: var(--muted); }
+    table.db { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    table.db th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--idle); }
+    table.db td { padding: 4px 6px; border-bottom: 1px solid rgba(42,44,74,.5); font-family: ui-monospace, monospace; }
+    .pill { display: inline-block; font-size: .7rem; padding: 1px 8px; border-radius: 999px; font-weight: 600; }
+    .pill.pending { background: rgba(245,158,11,.18); color: var(--orange); }
+    .pill.emitted { background: rgba(34,197,94,.18); color: var(--ok); }
+    .muted-empty { color: var(--muted); font-size: .8rem; }
+    /* Service C completed-message counter */
+    .countbar {
+      display: flex; align-items: center; gap: 14px; margin: 0 0 22px;
+      background: linear-gradient(90deg, rgba(34,197,94,.10), rgba(34,197,94,.02));
+      border: 1px solid rgba(34,197,94,.35); border-radius: 12px; padding: 14px 18px;
+    }
+    .count-num { font-size: 2rem; font-weight: 800; color: var(--ok); line-height: 1; min-width: 44px; text-align: center; }
+    .count-num.bump { animation: bump .4s ease; }
+    @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+    .count-lbl { font-size: .9rem; color: #eef0ff; }
+    .count-lbl .mono { font-family: ui-monospace, monospace; font-size: .8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1><span class="k">Event-driven</span> flow <span class="badge">mirrord demo</span></h1>
+    <p class="sub">Press the button. Service A emits an event; Service B writes state to the DB; a CronJob periodically sees the changed state and emits the next event; Service C consumes it.</p>
+
+    <div class="controls">
+      <div>
+        <label for="session">mirrord session (optional — tag this flow for a preview)</label>
+        <input id="session" type="text" placeholder="e.g. your username" autocomplete="off" />
+      </div>
+      <button id="go">Produce message ▶</button>
+    </div>
+
+    <div class="chain">
+      <div class="node" id="n-a"><span class="dot"></span><div class="name">Service A</div><div class="topic">kafka-demo.ev.a</div></div>
+      <div class="arrow">→</div>
+      <div class="node" id="n-b"><span class="dot"></span><div class="name">Service B</div><div class="topic">✎ writes DB state</div></div>
+      <div class="arrow async">⋯⏱⋯</div>
+      <div class="node cron" id="n-z"><span class="dot"></span><div class="name">CronJob Z</div><div class="topic">reads DB → kafka-demo.ev.c</div></div>
+      <div class="arrow">→</div>
+      <div class="node" id="n-c"><span class="dot"></span><div class="name">Service C</div><div class="topic">kafka-demo.ev.c</div></div>
+    </div>
+
+    <!-- Service C terminal DB counter (shown only when CRON_ENABLED on the gateway) -->
+    <div class="countbar" id="count-tile" style="display:none">
+      <span class="count-num" id="count-val">0</span>
+      <span class="count-lbl">messages have completed the chain at <b>Service C</b>
+        <br><span class="mono">count(kafka_demo_click_counter) — incremented in Postgres on each message that reaches Service C</span></span>
+    </div>
+
+    <div class="log" id="log"><span class="g">Waiting for a message…</span></div>
+
+    <!-- CronJob Z control + DB-state (shown only when CRON_ENABLED on the gateway) -->
+    <div id="cron-section" style="display:none">
+      <div class="cron-bar" id="cron-bar">
+        <span class="title">CronJob Z</span>
+        <span class="status"><span class="sdot"></span><span id="cron-state">stopped</span></span>
+        <span class="grow"></span>
+        <span class="interval">every <input id="cron-interval" type="number" min="1" step="1" value="15" /> s
+          <button class="btn-sm btn-ghost" id="cron-apply">Apply</button></span>
+        <button class="btn-sm" id="cron-start">Start CronJob Z ▶</button>
+        <button class="btn-sm btn-stop" id="cron-stop">Stop ■</button>
+        <button class="btn-sm btn-ghost" id="cron-run">Run once ↻</button>
+        <button class="btn-sm btn-ghost" id="cron-clear">Clear logs ⌫</button>
+      </div>
+      <div class="panels">
+        <div class="panel">
+          <h3>CronJob Z activity</h3>
+          <div class="cronlog" id="cronlog"><span class="muted-empty">CronJob Z is stopped. Start it (or Run once) to inspect DB state.</span></div>
+        </div>
+        <div class="panel">
+          <h3>DB state — kafka_demo_events</h3>
+          <div id="dbstate"><span class="muted-empty">No rows yet. Produce a message; Service B writes a "pending" row here.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const nodes = { a: $("n-a"), b: $("n-b"), z: $("n-z"), c: $("n-c") };
+    const logEl = $("log");
+
+    function resetChain() {
+      Object.values(nodes).forEach(n => n.classList.remove("active", "done"));
+      logEl.innerHTML = "";
+    }
+    function logLine(ev) {
+      const t = new Date(ev.ts).toLocaleTimeString();
+      const sess = ev.session ? ` <span class="s">[session=${ev.session}]</span>` : "";
+      logEl.innerHTML += `<span class="g">${t}</span> ${ev.service}: ${ev.message}${sess}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function note(msg) {
+      logEl.innerHTML += `<span class="g">${new Date().toLocaleTimeString()}</span> ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function poll(traceId) {
+      const seen = new Set();
+      const started = Date.now();
+      let waitedForCron = false;
+      // The CronJob runs on a schedule (every ~minute), so the B -> Z hop can take
+      // up to ~60s. Poll longer than the base demo and hint while we wait.
+      while (Date.now() - started < 90000) {
+        let events = [];
+        try {
+          const res = await fetch(`trace/${traceId}`);
+          events = await res.json();
+        } catch (e) { /* keep polling */ }
+
+        for (const ev of events) {
+          const key = ev.stage + ev.ts + ev.message;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          logLine(ev);
+          const node = nodes[ev.stage];
+          if (node) {
+            if (ev.stage === "a") { nodes.a.classList.add("active"); }
+            if (ev.stage === "b") { nodes.a.classList.replace("active","done"); nodes.b.classList.add("active"); }
+            if (ev.stage === "z") { nodes.b.classList.replace("active","done"); nodes.z.classList.add("active"); }
+            if (ev.stage === "c") { nodes.z.classList.replace("active","done"); nodes.c.classList.add("active"); }
+            if (ev.done) { nodes.c.classList.replace("active","done"); }
+          }
+        }
+
+        // Once B has written DB state but the CronJob hasn't fired yet, tell the
+        // viewer what they're waiting on (this is the DB-state-driven gap).
+        if (!waitedForCron && nodes.b.classList.contains("done") && !nodes.z.classList.contains("active") && !nodes.z.classList.contains("done")) {
+          waitedForCron = true;
+          note(`<span class="s">Service B wrote a "pending" row → waiting for CronJob Z to see the changed DB state (Start it or Run once below)…</span>`);
+        }
+
+        if (events.some(e => e.done)) return;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+
+    $("go").addEventListener("click", async () => {
+      const btn = $("go");
+      btn.disabled = true;
+      resetChain();
+      try {
+        const res = await fetch("produce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payload: "hello from the button",
+            session: $("session").value.trim(),
+          }),
+        });
+        const { traceId } = await res.json();
+        logLine({ ts: Date.now(), service: "gateway", message: `produced traceId=${traceId}` });
+        await poll(traceId);
+      } catch (e) {
+        logEl.innerHTML += `\nerror: ${e}`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ---- CronJob Z control + DB state (only when the gateway has CRON_ENABLED) ----
+    const cronBar = $("cron-bar"), cronState = $("cron-state");
+    const cronLogEl = $("cronlog"), dbEl = $("dbstate");
+    let cronSeen = -1;
+
+    function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    function renderCronLog(entries) {
+      entries = entries || [];
+      // Only re-render when the line count changed (covers new lines AND clears).
+      if (entries.length === cronSeen) return;
+      cronSeen = entries.length;
+      if (!entries.length) {
+        cronLogEl.innerHTML = `<span class="muted-empty">Log cleared. Start CronJob Z (or Run once) to inspect DB state.</span>`;
+        return;
+      }
+      cronLogEl.innerHTML = entries.map(e => {
+        const t = new Date(e.ts).toLocaleTimeString();
+        return `<span class="t">${t}</span> ${esc(e.message)}`;
+      }).join("\n");
+      cronLogEl.scrollTop = cronLogEl.scrollHeight;
+    }
+
+    function renderDb(rows) {
+      if (!rows || !rows.length) {
+        dbEl.innerHTML = `<span class="muted-empty">No rows yet. Produce a message; Service B writes a "pending" row here.</span>`;
+        return;
+      }
+      const body = rows.map(r => `<tr>
+        <td>${r.id}</td>
+        <td>${esc(r.session || "—")}</td>
+        <td>${esc((r.payload || "").slice(0,18))}</td>
+        <td><span class="pill ${r.status}">${r.status}</span></td>
+        <td>${esc(r.createdAt || "")}</td></tr>`).join("");
+      dbEl.innerHTML = `<table class="db"><thead><tr>
+        <th>id</th><th>session</th><th>payload</th><th>status</th><th>created</th></tr></thead>
+        <tbody>${body}</tbody></table>`;
+    }
+
+    async function pollCron() {
+      try {
+        const s = await (await fetch("cron/status")).json();
+        if (!s.enabled) return; // controls stay hidden
+        cronState.textContent = s.running ? `running (every ${s.intervalSecs}s)` : "stopped";
+        cronBar.classList.toggle("on", !!s.running);
+        // Reflect the server's interval, but don't clobber the field while editing.
+        const intInput = $("cron-interval");
+        if (document.activeElement !== intInput) intInput.value = s.intervalSecs;
+        renderCronLog(s.log);
+      } catch (e) { /* keep polling */ }
+      try {
+        const rows = await (await fetch("db-state")).json();
+        renderDb(rows);
+      } catch (e) { /* keep polling */ }
+      try {
+        const { completed } = await (await fetch("count")).json();
+        renderCount(completed);
+      } catch (e) { /* keep polling */ }
+    }
+
+    let lastCount = -1;
+    function renderCount(n) {
+      if (typeof n !== "number" || n === lastCount) return;
+      const el = $("count-val");
+      el.textContent = n;
+      if (lastCount !== -1 && n > lastCount) { // pulse on increment
+        el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+      }
+      lastCount = n;
+    }
+
+    async function cronAction(path) {
+      try { await fetch(path, { method: "POST" }); } catch (e) {}
+      pollCron();
+    }
+
+    async function applyInterval() {
+      const secs = Math.max(1, parseInt($("cron-interval").value || "15", 10));
+      $("cron-interval").value = secs;
+      try {
+        await fetch("cron/interval", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secs }),
+        });
+      } catch (e) {}
+      pollCron();
+    }
+
+    async function clearLogs() {
+      try { await fetch("cron/clear-log", { method: "POST" }); } catch (e) {}
+      cronSeen = -1; // force the activity log to re-render as cleared
+      logEl.innerHTML = `<span class="g">Logs cleared. Press the button to produce a message…</span>`;
+      pollCron();
+    }
+
+    async function initCron() {
+      let s;
+      try { s = await (await fetch("cron/status")).json(); } catch (e) { return; }
+      if (!s || !s.enabled) return; // gateway without CRON_ENABLED: leave section hidden
+      $("cron-section").style.display = "";
+      $("count-tile").style.display = "";
+      $("cron-start").addEventListener("click", () => cronAction("cron/start"));
+      $("cron-stop").addEventListener("click", () => cronAction("cron/stop"));
+      $("cron-run").addEventListener("click", () => cronAction("cron/run"));
+      $("cron-clear").addEventListener("click", clearLogs);
+      $("cron-apply").addEventListener("click", applyInterval);
+      $("cron-interval").addEventListener("keydown", (e) => { if (e.key === "Enter") applyInterval(); });
+      pollCron();
+      setInterval(pollCron, 1500);
+    }
+    initCron();
+  </script>
+</body>
+</html>

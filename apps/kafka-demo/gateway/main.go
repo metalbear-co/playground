@@ -27,6 +27,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel"
@@ -63,6 +64,20 @@ type Config struct {
 	// BasePath lets the app be served under a sub-path (e.g. "/kafka-demo") behind
 	// an ingress that does NOT rewrite. Empty = served at root. No trailing slash.
 	BasePath string
+	// UIVariant selects which embedded page to serve. "" (default) = the base
+	// Kafka -> Kafka -> Kafka UI. "event-driven" = the A -> B(DB) -> CronJob Z -> C
+	// UI. The rest of the gateway (produce/trace) is variant-agnostic.
+	UIVariant string
+	// CronEnabled turns on the in-gateway, UI-controllable CronJob Z (start/stop
+	// buttons, activity log, DB-state panel) for the interactive event-driven demo.
+	// Requires DatabaseURL. Off by default so the real k8s CronJob owns the schedule.
+	CronEnabled bool
+	// DatabaseURL is the Postgres connection for the cron runner + DB-state panel.
+	DatabaseURL string
+	// CronOutputTopic is where the cron runner emits (service-c's input).
+	CronOutputTopic string
+	// CronIntervalSecs is how often the running cron inspects DB state.
+	CronIntervalSecs int
 }
 
 func loadConfig() Config {
@@ -73,14 +88,24 @@ func loadConfig() Config {
 	viper.SetDefault("TRACE_TOPIC", "kafka-demo.trace")
 	viper.SetDefault("TRACE_GROUP_ID", "kafka-demo-gateway")
 	viper.SetDefault("BASE_PATH", "")
+	viper.SetDefault("UI_VARIANT", "")
+	viper.SetDefault("CRON_ENABLED", false)
+	viper.SetDefault("DATABASE_URL", "")
+	viper.SetDefault("CRON_OUTPUT_TOPIC", "kafka-demo.ev.c")
+	viper.SetDefault("CRON_INTERVAL_SECS", 15)
 
 	return Config{
-		Port:         viper.GetString("PORT"),
-		KafkaAddress: viper.GetString("KAFKA_ADDRESS"),
-		FirstTopic:   viper.GetString("FIRST_TOPIC"),
-		TraceTopic:   viper.GetString("TRACE_TOPIC"),
-		TraceGroupID: viper.GetString("TRACE_GROUP_ID"),
-		BasePath:     strings.TrimSuffix(viper.GetString("BASE_PATH"), "/"),
+		Port:             viper.GetString("PORT"),
+		KafkaAddress:     viper.GetString("KAFKA_ADDRESS"),
+		FirstTopic:       viper.GetString("FIRST_TOPIC"),
+		TraceTopic:       viper.GetString("TRACE_TOPIC"),
+		TraceGroupID:     viper.GetString("TRACE_GROUP_ID"),
+		BasePath:         strings.TrimSuffix(viper.GetString("BASE_PATH"), "/"),
+		UIVariant:        viper.GetString("UI_VARIANT"),
+		CronEnabled:      viper.GetBool("CRON_ENABLED"),
+		DatabaseURL:      viper.GetString("DATABASE_URL"),
+		CronOutputTopic:  viper.GetString("CRON_OUTPUT_TOPIC"),
+		CronIntervalSecs: viper.GetInt("CRON_INTERVAL_SECS"),
 	}
 }
 
@@ -147,6 +172,22 @@ func main() {
 	// Background consumer of the trace topic. Everything services emit lands here.
 	go consumeTrace(cl, store)
 
+	// Optional: in-gateway, UI-controllable CronJob Z for the interactive demo.
+	var cron *cronRunner
+	if cfg.CronEnabled && cfg.DatabaseURL != "" {
+		pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+		if err != nil {
+			log.Fatalf("cron: connect Postgres: %v", err)
+		}
+		defer pool.Close()
+		if err := ensureEventsTable(context.Background(), pool); err != nil {
+			log.Fatalf("cron: ensure events table: %v", err)
+		}
+		cron = newCronRunner(pool, cl, store, cfg.CronOutputTopic,
+			time.Duration(cfg.CronIntervalSecs)*time.Second)
+		log.Printf("cron control enabled (output=%s interval=%ds)", cfg.CronOutputTopic, cfg.CronIntervalSecs)
+	}
+
 	router := gin.Default()
 	router.Use(cors.Default())
 
@@ -159,10 +200,14 @@ func main() {
 	app := router.Group(cfg.BasePath)
 
 	// Serve the embedded single-page UI, injecting <base> so the page's relative
-	// fetches ("produce", "trace/..") resolve under BasePath.
+	// fetches ("produce", "trace/..") resolve under BasePath. UI_VARIANT picks which
+	// page: the base Kafka chain, or the event-driven (DB + CronJob) flow.
 	indexPage := indexHTML
+	if cfg.UIVariant == "event-driven" {
+		indexPage = indexEventHTML
+	}
 	if cfg.BasePath != "" {
-		indexPage = bytes.Replace(indexHTML, []byte("<head>"),
+		indexPage = bytes.Replace(indexPage, []byte("<head>"),
 			[]byte("<head>\n  <base href=\""+cfg.BasePath+"/\">"), 1)
 	}
 	app.GET("/", func(c *gin.Context) {
@@ -228,6 +273,68 @@ func main() {
 	app.GET("/trace/:id", func(c *gin.Context) {
 		c.JSON(http.StatusOK, store.get(c.Param("id")))
 	})
+
+	// CronJob Z control + DB-state, for the interactive event-driven demo. Only wired
+	// up when CRON_ENABLED=true; otherwise the UI hides these controls.
+	if cron != nil {
+		app.POST("/cron/start", func(c *gin.Context) {
+			cron.start()
+			c.JSON(http.StatusOK, gin.H{"running": cron.isRunning()})
+		})
+		app.POST("/cron/stop", func(c *gin.Context) {
+			cron.stop()
+			c.JSON(http.StatusOK, gin.H{"running": cron.isRunning()})
+		})
+		app.POST("/cron/run", func(c *gin.Context) {
+			go cron.runOnce(context.Background()) // one-off run, don't block the request
+			c.JSON(http.StatusOK, gin.H{"running": cron.isRunning()})
+		})
+		app.POST("/cron/clear-log", func(c *gin.Context) {
+			cron.clearLog()
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+		app.POST("/cron/interval", func(c *gin.Context) {
+			var req struct {
+				Secs int `json:"secs"`
+			}
+			_ = c.ShouldBindJSON(&req)
+			if req.Secs < 1 {
+				req.Secs = 1
+			}
+			cron.setInterval(time.Duration(req.Secs) * time.Second)
+			c.JSON(http.StatusOK, gin.H{"intervalSecs": req.Secs})
+		})
+		app.GET("/cron/status", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"enabled":      true,
+				"running":      cron.isRunning(),
+				"intervalSecs": cron.intervalSecs(),
+				"log":          cron.snapshotLogs(),
+			})
+		})
+		app.GET("/db-state", func(c *gin.Context) {
+			rows, err := cron.fetchAll(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, rows)
+		})
+		// GET /count -> service-c's terminal DB counter (messages that completed the chain).
+		app.GET("/count", func(c *gin.Context) {
+			n, err := cron.completedCount(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"completed": n})
+		})
+	} else {
+		// Report disabled so the UI can hide the cron/DB panels.
+		app.GET("/cron/status", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"enabled": false})
+		})
+	}
 
 	log.Printf("gateway listening on :%s (kafka=%s first_topic=%s trace_topic=%s)",
 		cfg.Port, cfg.KafkaAddress, cfg.FirstTopic, cfg.TraceTopic)

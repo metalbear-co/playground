@@ -1,0 +1,59 @@
+# CronJob Z — the DB-state-driven hop of the event-driven demo. Every minute it
+# reads the "pending" rows service-b-ev wrote to kafka_demo_events, emits a Kafka
+# event (re-tagged with the originating mirrord-session) to kafka-demo.ev.c, and
+# marks them "emitted". This is the workload a developer runs under a mirrord
+# preview with DB branching (target: cronjob/cronjob-z) so it reads an isolated DB.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cronjob-z
+  labels:
+    app: cronjob-z
+spec:
+  schedule: "*/1 * * * *"
+  # Don't stack runs if one overruns; skip a tick rather than overlap.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 30
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Each run is short-lived; give it a bounded lifetime.
+      activeDeadlineSeconds: 120
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: cronjob-z
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: main
+              image: ghcr.io/metalbear-co/playground-kafka-demo-cronjob:latest
+              imagePullPolicy: Always
+              env:
+                - name: OTEL_PROPAGATORS
+                  value: "tracecontext,baggage"
+                - name: KAFKA_ADDRESS
+                  value: "kafka.infra.svc.cluster.local:9092"
+                - name: OUTPUT_TOPIC
+                  value: "kafka-demo.ev.c"
+                - name: TRACE_TOPIC
+                  value: "kafka-demo.ev.trace"
+                - name: STAGE
+                  value: "z"
+                - name: SERVICE_NAME
+                  value: "cronjob-z"
+                # Reads the state service-b-ev wrote. Reuses the base demo's DB secret.
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: kafka-demo-db
+                      key: url
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
