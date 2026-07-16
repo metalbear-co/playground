@@ -40,6 +40,19 @@ spec:
             # Serve the 4-stage A -> B(DB) -> CronJob Z -> C page.
             - name: UI_VARIANT
               value: "event-driven"
+            # Interactive CronJob Z: shows the schedule/controls, activity log,
+            # live DB-state panel, and Service C counter in the UI, and runs the
+            # cron in-process. The k8s CronJob Z resource is suspended so this is
+            # the single driver (no double-processing).
+            - name: CRON_ENABLED
+              value: "true"
+            - name: CRON_INTERVAL_SECS
+              value: "15"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-demo-db
+                  key: url
           ports:
             - containerPort: 80
               protocol: TCP

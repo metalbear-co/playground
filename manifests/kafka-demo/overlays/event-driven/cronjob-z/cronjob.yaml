@@ -11,6 +11,11 @@ metadata:
     app: cronjob-z
 spec:
   schedule: "*/1 * * * *"
+  # Suspended by default: the gateway's in-process CronJob runner (CRON_ENABLED)
+  # drives the flow interactively from the UI, so this scheduled resource is kept
+  # for the mirrord cronjob-branching target but not run on a schedule (avoids
+  # double-processing). Set to false to let the real CronJob drive it instead.
+  suspend: true
   # Don't stack runs if one overruns; skip a tick rather than overlap.
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 30

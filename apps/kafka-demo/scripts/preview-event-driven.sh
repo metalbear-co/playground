@@ -26,7 +26,7 @@
 # and cronjob DB-branching).
 set -euo pipefail
 
-NS=kafka-demo
+NS=kafka-demo-event
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IDLE_CFG="${SCRIPT_DIR}/../service-c/mirrord-preview-ev.json"
 CRON_CFG="${SCRIPT_DIR}/../cronjob/mirrord-preview.json"

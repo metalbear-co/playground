@@ -261,6 +261,14 @@ func (r *cronRunner) completedCount(ctx context.Context) (int64, error) {
 	return n, err
 }
 
+// clearEvents deletes all rows from kafka_demo_events (the DB-state panel), resetting
+// the id sequence — a clean slate for the next demo run. Leaves the Service C
+// completed-message counter untouched (it's a lifetime total).
+func (r *cronRunner) clearEvents(ctx context.Context) error {
+	_, err := r.db.Exec(ctx, `TRUNCATE TABLE kafka_demo_events RESTART IDENTITY`)
+	return err
+}
+
 // ensureEventsTable creates the tables the gateway reads if they don't exist yet, so
 // the DB-state panel, cron runner, and completed-count tile work even before service-b
 // or service-c has written its first row.

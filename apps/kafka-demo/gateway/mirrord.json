@@ -1,22 +1,19 @@
 {
   "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
-    "namespace": "kafka-demo-event",
-    "path": {
-      "deployment": "service-c-ev"
-    }
-  },
-  "feature": {
+    "path": { "deployment": "gateway-ev" },
+    "namespace": "kafka-demo-event"
+  },  
+    "feature": {
+    "fs": "read",
     "network": {
-      "outgoing": true
-    },
-    "split_queues": {
-      "relay": {
-        "queue_type": "Kafka",
-        "message_filter": {
-          "baggage": ".*mirrord-session={{key}}.*"
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
         }
-      }
+      },
+      "outgoing":true
     },"db_branches": [
     {
       "type": "pg",

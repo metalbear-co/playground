@@ -18,9 +18,10 @@ spec:
             type: PathPrefix
             value: /kafka-demo-ev
       backendRefs:
+        # No namespace -> defaults to this HTTPRoute's namespace (kafka-demo-event),
+        # so no cross-namespace ReferenceGrant is needed.
         - group: ""
           kind: Service
           name: gateway-ev
-          namespace: kafka-demo
           port: 80
           weight: 1

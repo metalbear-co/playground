@@ -1,7 +1,7 @@
 {
   "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
-    "namespace": "kafka-demo",
+    "namespace": "kafka-demo-event",
     "path": {
       "deployment": "service-c-ev"
     }

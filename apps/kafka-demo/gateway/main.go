@@ -320,6 +320,14 @@ func main() {
 			}
 			c.JSON(http.StatusOK, rows)
 		})
+		// POST /db/clear -> empty kafka_demo_events (the DB-state panel).
+		app.POST("/db/clear", func(c *gin.Context) {
+			if err := cron.clearEvents(c.Request.Context()); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
 		// GET /count -> service-c's terminal DB counter (messages that completed the chain).
 		app.GET("/count", func(c *gin.Context) {
 			n, err := cron.completedCount(c.Request.Context())
