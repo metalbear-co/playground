@@ -81,11 +81,21 @@
     .log {
       background: #0c0d1c; border: 1px solid var(--idle); border-radius: 12px;
       padding: 14px 16px; font-family: ui-monospace, monospace; font-size: .82rem;
-      color: #cdd2ff; min-height: 120px; max-height: 260px; overflow-y: auto;
-      white-space: pre-wrap; line-height: 1.6;
+      color: #cdd2ff; min-height: 120px; max-height: 440px; overflow-y: auto;
+      white-space: pre-wrap; line-height: 1.7;
     }
     .log .g { color: var(--muted); }
     .log .s { color: var(--orange); }
+    /* Per-service colored badges in the log. */
+    .log .svc { display:inline-block; font-weight:700; font-size:.7rem; padding:1px 7px;
+                border-radius:5px; letter-spacing:.4px; text-transform:uppercase; }
+    .log .svc.gw { color:#22d3ee; background:rgba(34,211,238,.14); }
+    .log .svc.a  { color:#4b93ff; background:rgba(59,130,246,.16); }
+    .log .svc.b  { color:#9a8bff; background:rgba(106,79,245,.22); }
+    .log .svc.z  { color:#fbbf24; background:rgba(245,158,11,.16); }
+    .log .svc.c  { color:#34d399; background:rgba(34,197,94,.16); }
+    .log .meta { color:#6b7099; font-size:.76rem; }
+    .log .meta .k { color:#aeb4e6; }
     .badge {
       display: inline-block; font-size: .72rem; padding: 2px 8px; border-radius: 999px;
       background: rgba(106,79,245,.18); color: #c3b8ff; margin-left: 8px;
@@ -153,13 +163,6 @@
       <div class="node" id="n-c"><span class="dot"></span><div class="name">Service C</div><div class="topic">kafka-demo.ev.c</div></div>
     </div>
 
-    <!-- Service C terminal DB counter (shown only when CRON_ENABLED on the gateway) -->
-    <div class="countbar" id="count-tile" style="display:none">
-      <span class="count-num" id="count-val">0</span>
-      <span class="count-lbl">messages have completed the chain at <b>Service C</b>
-        <br><span class="mono">count(kafka_demo_click_counter) — incremented in Postgres on each message that reaches Service C</span></span>
-    </div>
-
     <!-- CronJob Z controls, full width (shown only when CRON_ENABLED) -->
     <div id="cron-section" style="display:none">
       <div class="cron-bar" id="cron-bar">
@@ -180,12 +183,6 @@
       <!-- One combined log: app flow (A/B/C) + CronJob Z activity, time-ordered. -->
       <div class="main-left">
         <div class="log" id="log"><span class="g">Waiting for a message…</span></div>
-      </div>
-      <div class="main-right">
-        <div class="panel db-under" id="db-panel" style="display:none">
-          <h3>DB state — kafka_demo_events</h3>
-          <div id="dbstate"><span class="muted-empty">No rows yet. Produce a message; Service B writes a "pending" row here.</span></div>
-        </div>
       </div>
     </div>
   </div>
@@ -220,9 +217,21 @@
     function resetChain() {
       Object.values(nodes).forEach(n => n.classList.remove("active", "done"));
     }
+    // Map a stage (gateway|a|b|z|c) to a colored badge + label.
+    const SVC = { gateway:["gw","gateway"], a:["a","Service A"], b:["b","Service B"], z:["z","CronJob Z"], c:["c","Service C"] };
+    function svcBadge(stage, service) {
+      const m = SVC[stage] || ["gw", service || "service"];
+      return `<span class="svc ${m[0]}">${esc(m[1])}</span>`;
+    }
+    function metaBits(ev) {
+      const bits = [];
+      if (ev.traceId) bits.push(`trace <span class="k">${esc(String(ev.traceId).slice(0, 8))}</span>`);
+      if (ev.session)  bits.push(`session <span class="k">${esc(ev.session)}</span>`);
+      return bits.length ? `  <span class="meta">· ${bits.join(" · ")}</span>` : "";
+    }
     function logLine(ev) {
-      const sess = ev.session ? ` <span class="s">[session=${ev.session}]</span>` : "";
-      addLog(ev.ts, `${esc(ev.service)}: ${esc(ev.message)}${sess}`, "flow" + (ev.stage || "") + ev.ts + ev.message);
+      addLog(ev.ts, `${svcBadge(ev.stage, ev.service)} ${esc(ev.message)}${metaBits(ev)}`,
+        "flow" + (ev.stage || "") + ev.ts + ev.message);
     }
     function note(msg) { addLog(Date.now(), msg); }
 
@@ -279,7 +288,7 @@
           }),
         });
         const { traceId } = await res.json();
-        logLine({ ts: Date.now(), service: "gateway", message: `produced traceId=${traceId}` });
+        logLine({ ts: Date.now(), stage: "gateway", service: "gateway", traceId, message: `produced "New order placed" → kafka-demo.ev.a` });
         await poll(traceId);
       } catch (e) {
         addLog(Date.now(), `<span class="s">error:</span> ${esc(String(e))}`);
@@ -290,31 +299,14 @@
 
     // ---- CronJob Z control + DB state (only when the gateway has CRON_ENABLED) ----
     const cronBar = $("cron-bar"), cronState = $("cron-state");
-    const dbEl = $("dbstate");
 
     function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
     // CronJob Z activity feeds the SAME combined log (deduped, time-ordered).
     function renderCronLog(entries) {
       for (const e of (entries || [])) {
-        addLog(e.ts, `<span class="s">cronjob-z</span> ${esc(e.message)}`, "cron" + e.ts + e.message);
+        addLog(e.ts, `${svcBadge("z")} ${esc(e.message)}`, "cron" + e.ts + e.message);
       }
-    }
-
-    function renderDb(rows) {
-      if (!rows || !rows.length) {
-        dbEl.innerHTML = `<span class="muted-empty">No rows yet. Produce a message; Service B writes a "pending" row here.</span>`;
-        return;
-      }
-      const body = rows.map(r => `<tr>
-        <td>${r.id}</td>
-        <td>${esc(r.session || "—")}</td>
-        <td>${esc((r.payload || "").slice(0,18))}</td>
-        <td><span class="pill ${r.status}">${r.status}</span></td>
-        <td>${esc(r.createdAt || "")}</td></tr>`).join("");
-      dbEl.innerHTML = `<table class="db"><thead><tr>
-        <th>id</th><th>session</th><th>payload</th><th>status</th><th>created</th></tr></thead>
-        <tbody>${body}</tbody></table>`;
     }
 
     const NOCACHE = { cache: "no-store" };
@@ -329,25 +321,6 @@
         if (document.activeElement !== intInput) intInput.value = s.intervalSecs;
         renderCronLog(s.log);
       } catch (e) { /* keep polling */ }
-      try {
-        const rows = await (await fetch("db-state", NOCACHE)).json();
-        renderDb(rows);
-      } catch (e) { /* keep polling */ }
-      try {
-        const { completed } = await (await fetch("count", NOCACHE)).json();
-        renderCount(completed);
-      } catch (e) { /* keep polling */ }
-    }
-
-    let lastCount = -1;
-    function renderCount(n) {
-      if (typeof n !== "number" || n === lastCount) return;
-      const el = $("count-val");
-      el.textContent = n;
-      if (lastCount !== -1 && n > lastCount) { // pulse on increment
-        el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
-      }
-      lastCount = n;
     }
 
     async function cronAction(path) {
@@ -384,8 +357,6 @@
       try { s = await (await fetch("cron/status")).json(); } catch (e) { return; }
       if (!s || !s.enabled) return; // gateway without CRON_ENABLED: leave section hidden
       $("cron-section").style.display = "";
-      $("count-tile").style.display = "";
-      $("db-panel").style.display = "";
       $("cron-start").addEventListener("click", () => cronAction("cron/start"));
       $("cron-stop").addEventListener("click", () => cronAction("cron/stop"));
       $("cron-run").addEventListener("click", () => cronAction("cron/run"));

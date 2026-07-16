@@ -196,10 +196,11 @@ func handleRecord(cfg Config, cl *kgo.Client, db *pgxpool.Pool, rec *kgo.Record)
 	if cfg.DBMode == "event-sink" {
 		msgText := "wrote pending state to DB"
 		if db != nil {
-			if err := insertEventRow(context.Background(), db, msg); err != nil {
+			if id, err := insertEventRow(context.Background(), db, msg); err != nil {
 				log.Printf("[%s] events DB error: %v", cfg.ServiceName, err)
 			} else {
-				log.Printf("[%s] wrote pending event row (trace=%s session=%q) for CronJob Z", cfg.ServiceName, msg.TraceID, msg.Session)
+				msgText = fmt.Sprintf("wrote pending state to DB (id #%d)", id)
+				log.Printf("[%s] wrote pending state to DB id #%d (trace=%s session=%q) for CronJob Z", cfg.ServiceName, id, msg.TraceID, msg.Session)
 			}
 		}
 		emitTrace(cl, cfg.TraceTopic, msgCtx, TraceEvent{
@@ -311,11 +312,13 @@ func setupEventsDB(ctx context.Context, url string) (*pgxpool.Pool, error) {
 // insertEventRow records a consumed message as pending state for CronJob Z to see.
 // The session and traceId are stored so the CronJob can re-tag (baggage) and trace
 // the event it later emits.
-func insertEventRow(ctx context.Context, pool *pgxpool.Pool, msg ChainMessage) error {
-	_, err := pool.Exec(ctx, `
+func insertEventRow(ctx context.Context, pool *pgxpool.Pool, msg ChainMessage) (int64, error) {
+	var id int64
+	err := pool.QueryRow(ctx, `
 		INSERT INTO kafka_demo_events (trace_id, session, payload, status)
-		VALUES ($1, $2, $3, 'pending')`, msg.TraceID, msg.Session, msg.Payload)
-	return err
+		VALUES ($1, $2, $3, 'pending')
+		RETURNING id`, msg.TraceID, msg.Session, msg.Payload).Scan(&id)
+	return id, err
 }
 
 func emitTrace(cl *kgo.Client, topic string, ctx context.Context, ev TraceEvent) {

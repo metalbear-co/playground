@@ -1,20 +1,25 @@
 {
   "key": "changed-responce",
   "target": {
-    "path": "cronjob/cronjob-z/container/main",
-    "namespace": "kafka-demo-event"
+    "namespace": "kafka-demo-event",
+    "path": {
+      "deployment": "gateway-ev"
+    }
   },
   "feature": {
-    "copy_target": true,
+    "preview": {
+      "image": "ghcr.io/metalbear-co/playground-kafka-demo-gateway:latest",
+      "ttl_mins": 120,
+      "creation_timeout_secs": 600
+    },
     "network": {
-      "incoming": "off",
       "outgoing": true
     },
     "db_branches": [
       {
         "type": "pg",
-        "ttl_mins": 5,
         "version": "16",
+        "ttl_secs": 300,
         "connection": {
           "url": {
             "type": "env",

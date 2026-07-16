@@ -17,7 +17,7 @@
     },"db_branches": [
     {
       "type": "pg",
-      "ttl_secs": 30,    
+      "ttl_secs": 300,  
       "version": "16.0",
       "connection": {
         "url": "DATABASE_URL"
