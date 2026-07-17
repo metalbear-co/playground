@@ -13,7 +13,7 @@
     "db_branches": [
       {
         "type": "pg",
-        "ttl_mins": 5,
+        "ttl_secs": 300,
         "version": "16",
         "connection": {
           "url": {

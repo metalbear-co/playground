@@ -9,7 +9,7 @@
   "feature": {
     "preview": {
       "image": "ghcr.io/metalbear-co/playground-kafka-demo-service-c:preview",
-      "ttl_secs": 300,
+      "ttl_mins": 300,
       "creation_timeout_secs": 600
     },
     "network": {
