@@ -139,8 +139,9 @@ func main() {
 		// Match the operator's `partition.assignment.strategy: range` so the split
 		// group negotiates a common protocol.
 		kgo.Balancers(kgo.RangeBalancer()),
-		// New group with no committed offset starts at the end (only new messages).
-		kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()),
+		// New group with no committed offset starts at offset 0, so the message that
+		// woke the consumer isn't skipped on first join.
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 	)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
