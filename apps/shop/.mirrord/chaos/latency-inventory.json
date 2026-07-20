@@ -1,0 +1,15 @@
+{
+  "name": "latency to inventory-service",
+  "priority": 10,
+  "selector": {
+    "upstream": "inventory-service",
+    "percentage": 100
+  },
+  "effect": {
+    "latency": {
+      "read_ms": 750,
+      "write_ms": 100,
+      "jitter_ms": 50
+    }
+  }
+}

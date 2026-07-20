@@ -1,0 +1,15 @@
+{
+  "name": "latency to shop postgres",
+  "priority": 5,
+  "selector": {
+    "upstream": "postgres.infra.svc.cluster.local:5432",
+    "percentage": 100
+  },
+  "effect": {
+    "latency": {
+      "read_ms": 500,
+      "write_ms": 500,
+      "jitter_ms": 100
+    }
+  }
+}
