@@ -1,6 +1,6 @@
 # MetalMart – Shop Demo App
 
-Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Splitting**, **DB Branching**, and **Chaos Testing**.
+Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Splitting**, and **DB Branching**.
 
 ## Architecture
 
@@ -15,7 +15,6 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 1. **HTTP Filtering** – Order service uses `baggage: mirrord-session=<key>` header to route traffic (see `order-service/mirrord.json`)
 2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord-session=<key>` (see `delivery-service/mirrord.json`)
 3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart)
-4. **Chaos Testing** – Inject latency or connection errors into `order-service` outgoing TCP (inventory, Postgres, Kafka) via the mirrord UI chaos API. Example rule files live in `.mirrord/chaos/`; see [Chaos Testing below](#chaos-testing-local). Requires mirrord CLI **≥ 3.232.0**. Docs: [Chaos Testing](https://metalbear.com/mirrord/docs/use-cases/chaos-testing).
 
 ## Local Development
 
@@ -56,51 +55,6 @@ cd apps/shop/delivery-service && mirrord exec npm run dev
 cd apps/shop/inventory-service && mirrord exec npm run dev
 cd apps/shop/metal-mart-frontend && NEXT_BASE_PATH= npm run dev
 ```
-
-### Chaos Testing (local)
-
-Chaos rules are **per mirrord session** (they never affect other developers or cluster pods). They disrupt outgoing TCP from the process you run with mirrord — e.g. slow inventory calls, slow Postgres, or Kafka timeouts during checkout. Management is just HTTP against the local UI server (same as the [chaos docs](https://metalbear.com/mirrord/docs/use-cases/chaos-testing)).
-
-**Prereqs:** shop deployed in cluster, kubeconfig pointed at it, mirrord CLI **≥ 3.232.0**.
-
-```bash
-# 1. Start the UI server (serves the chaos API; leave running)
-mirrord ui
-# Copy the API token from the output (or: cat ~/.mirrord/token)
-
-# 2. In another terminal, run order-service under mirrord
-cd apps/shop/order-service
-mirrord exec -f mirrord.json -- npm run dev
-# Copy the session ID from the output
-
-# 3. Export once, then POST any rule file from apps/shop/.mirrord/chaos/
-export UI_ADDRESS='http://127.0.0.1:59281'
-export CHAOS_TOKEN="$(cat ~/.mirrord/token)"
-export SESSION_ID='<session-id-from-mirrord-exec>'
-export CHAOS_URL="$UI_ADDRESS/api/chaos/rules/$SESSION_ID"
-
-curl --request POST \
-  --header 'Content-Type: application/json' \
-  --header "x-auth-token: $CHAOS_TOKEN" \
-  --data @apps/shop/.mirrord/chaos/latency-inventory.json \
-  "$CHAOS_URL"
-
-# List / clear
-curl --header "x-auth-token: $CHAOS_TOKEN" "$CHAOS_URL"
-curl --request DELETE --header "x-auth-token: $CHAOS_TOKEN" "$CHAOS_URL"
-```
-
-Then checkout with `baggage: mirrord-session=<USER>` (same as `"key"` in `mirrord.json`) so HTTP steal routes to your local order-service.
-
-Example rules in `.mirrord/chaos/`:
-
-| File | Effect |
-|------|--------|
-| `latency-inventory.json` | ~750ms read latency on TCP to `inventory-service` |
-| `latency-postgres.json` | latency on `postgres.infra.svc.cluster.local:5432` |
-| `timeout-kafka.json` | 50% of connections to Kafka `timed_out` |
-
-Edit those JSON files (or POST a new one) and re-run the `curl` above. Start with `latency-inventory.json` alone if you want the clearest demo signal.
 
 ## Kubernetes (GKE / Docker Desktop)
 
