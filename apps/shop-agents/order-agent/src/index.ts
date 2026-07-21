@@ -3,10 +3,12 @@ import {
   type A2ASendRequest,
   type A2ASendResponse,
   type AgentCard,
+  type AgentDebug,
   appendTrace,
   messageText,
   textMessage,
 } from "./shared/a2a.js";
+import { composeCustomerReply } from "./llm.js";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -37,20 +39,22 @@ type DeliveryRow = {
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", llmMode: process.env.LLM_MODE || "buggy" });
 });
 
 app.get("/.well-known/agent.json", (_req, res) => {
   const card: AgentCard = {
     name: "order-agent",
-    description: "Looks up MetalMart orders and delivery status",
+    description:
+      "Looks up MetalMart orders/delivery, then drafts a customer reply via LLM",
     url: publicUrl,
-    version: "1.0.0",
+    version: "1.1.0",
     skills: [
       {
         id: "order_lookup",
-        name: "Order lookup",
-        description: "Fetch order and delivery status by order id",
+        name: "Order lookup + LLM reply",
+        description:
+          "Fetch order and delivery tools, then generate a grounded customer reply",
       },
     ],
   };
@@ -71,13 +75,34 @@ function formatItems(items: unknown): string {
   if (!Array.isArray(items)) return "unknown items";
   return items
     .map((item) => {
-      if (item && typeof item === "object" && "product_id" in item && "quantity" in item) {
-        const row = item as { product_id: number; quantity: number };
-        return `product ${row.product_id} × ${row.quantity}`;
+      if (!item || typeof item !== "object") return JSON.stringify(item);
+      const row = item as Record<string, unknown>;
+      const productId = row.productId ?? row.product_id;
+      const quantity = row.quantity;
+      if (typeof productId === "number" && typeof quantity === "number") {
+        return `product ${productId} × ${quantity}`;
       }
       return JSON.stringify(item);
     })
     .join(", ");
+}
+
+async function timedFetch(url: string): Promise<{
+  status: number;
+  ms: number;
+  json: unknown;
+  text: string;
+}> {
+  const started = Date.now();
+  const res = await fetch(url);
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return { status: res.status, ms: Date.now() - started, json, text };
 }
 
 app.post("/v1/message:send", async (req, res) => {
@@ -92,60 +117,123 @@ app.post("/v1/message:send", async (req, res) => {
   const orderId = extractOrderId(query);
   if (orderId == null || Number.isNaN(orderId)) {
     return res.status(400).json({
-      error: "Could not find an order id. Example: \"status of order 7\"",
+      error: 'Could not find an order id. Example: "status of order 7"',
       context,
     });
   }
 
+  const debug: AgentDebug = { tools: [], facts: {} };
+
   try {
+    const orderUrl = `${orderServiceUrl}/orders/${orderId}`;
     context = appendTrace(context, {
       agent: "order-agent",
-      action: "fetch",
-      detail: `GET /orders/${orderId}`,
+      action: "tool",
+      detail: `GET ${orderUrl}`,
     });
 
-    const orderRes = await fetch(`${orderServiceUrl}/orders/${orderId}`);
-    if (orderRes.status === 404) {
+    const orderHit = await timedFetch(orderUrl);
+    debug.tools!.push({
+      name: "order-service",
+      request: `GET /orders/${orderId}`,
+      status: orderHit.status,
+      ms: orderHit.ms,
+      bodyPreview: orderHit.text.slice(0, 280),
+    });
+    context = appendTrace(context, {
+      agent: "order-agent",
+      action: "tool_result",
+      detail: `order-service ${orderHit.status}`,
+      ms: orderHit.ms,
+      status: orderHit.status,
+    });
+
+    if (orderHit.status === 404) {
       const response: A2ASendResponse = {
         message: textMessage("agent", `Order #${orderId} was not found.`),
-        context: appendTrace(context, {
+        context: { ...appendTrace(context, {
           agent: "order-agent",
           action: "not_found",
           detail: String(orderId),
-        }),
+        }), debug },
       };
       return res.json(response);
     }
-    if (!orderRes.ok) {
-      throw new Error(`order-service returned ${orderRes.status}`);
+    if (orderHit.status >= 400 || !orderHit.json) {
+      throw new Error(`order-service returned ${orderHit.status}`);
     }
 
-    const order = (await orderRes.json()) as OrderRow;
+    const order = orderHit.json as OrderRow;
 
+    const deliveryUrl = `${deliveryServiceUrl}/deliveries/order/${orderId}`;
     context = appendTrace(context, {
       agent: "order-agent",
-      action: "fetch",
-      detail: `GET /deliveries/order/${orderId}`,
+      action: "tool",
+      detail: `GET ${deliveryUrl}`,
+    });
+
+    const deliveryHit = await timedFetch(deliveryUrl);
+    debug.tools!.push({
+      name: "delivery-service",
+      request: `GET /deliveries/order/${orderId}`,
+      status: deliveryHit.status,
+      ms: deliveryHit.ms,
+      bodyPreview: deliveryHit.text.slice(0, 280),
+    });
+    context = appendTrace(context, {
+      agent: "order-agent",
+      action: "tool_result",
+      detail: `delivery-service ${deliveryHit.status}`,
+      ms: deliveryHit.ms,
+      status: deliveryHit.status,
     });
 
     let deliveryStatus = "no delivery record yet";
-    const deliveryRes = await fetch(`${deliveryServiceUrl}/deliveries/order/${orderId}`);
-    if (deliveryRes.ok) {
-      const delivery = (await deliveryRes.json()) as DeliveryRow | null;
+    if (deliveryHit.status === 200 && deliveryHit.json) {
+      const delivery = deliveryHit.json as DeliveryRow;
       if (delivery?.status) deliveryStatus = delivery.status;
-    } else if (deliveryRes.status !== 404) {
-      throw new Error(`delivery-service returned ${deliveryRes.status}`);
+    } else if (deliveryHit.status !== 404) {
+      throw new Error(`delivery-service returned ${deliveryHit.status}`);
     }
 
-    const total = (order.total_cents / 100).toFixed(2);
-    const answer = [
-      `Order #${order.id}`,
-      `Status: ${order.status}`,
-      `Items: ${formatItems(order.items)}`,
-      `Total: $${total}`,
-      `Placed: ${new Date(order.created_at).toLocaleString()}`,
-      `Delivery: ${deliveryStatus}`,
-    ].join("\n");
+    const facts = {
+      orderId: order.id,
+      orderStatus: order.status,
+      items: formatItems(order.items),
+      total: (order.total_cents / 100).toFixed(2),
+      placed: new Date(order.created_at).toLocaleString(),
+      deliveryStatus,
+    };
+    debug.facts = {
+      order_id: String(facts.orderId),
+      order_status: facts.orderStatus,
+      items: facts.items,
+      total: `$${facts.total}`,
+      placed: facts.placed,
+      delivery_status: facts.deliveryStatus,
+    };
+
+    context = appendTrace(context, {
+      agent: "order-agent",
+      action: "llm",
+      detail: "compose customer reply",
+    });
+
+    const llm = await composeCustomerReply(facts);
+    debug.llm = {
+      mode: llm.mode,
+      model: llm.model,
+      systemPrompt: llm.systemPrompt,
+      userPrompt: llm.userPrompt,
+      rawOutput: llm.rawOutput,
+      note: llm.note,
+    };
+
+    context = appendTrace(context, {
+      agent: "order-agent",
+      action: "llm_result",
+      detail: `${llm.model} · ${llm.mode}`,
+    });
 
     context = appendTrace(context, {
       agent: "order-agent",
@@ -154,19 +242,21 @@ app.post("/v1/message:send", async (req, res) => {
     });
 
     const response: A2ASendResponse = {
-      message: textMessage("agent", answer),
-      context,
+      message: textMessage("agent", llm.answer),
+      context: { ...context, debug },
     };
     return res.json(response);
   } catch (err) {
     console.error("[order-agent] error:", err);
     return res.status(502).json({
       error: err instanceof Error ? err.message : "lookup failed",
-      context,
+      context: { ...context, debug },
     });
   }
 });
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`[order-agent] listening on ${port}`);
+  console.log(
+    `[order-agent] listening on ${port} (LLM_MODE=${process.env.LLM_MODE || "buggy"})`
+  );
 });

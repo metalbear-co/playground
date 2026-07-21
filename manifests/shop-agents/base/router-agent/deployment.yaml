@@ -21,6 +21,8 @@ spec:
               value: "80"
             - name: ORDER_AGENT_URL
               value: "http://order-agent.shop-agents.svc.cluster.local"
+            - name: CATALOG_AGENT_URL
+              value: "http://catalog-agent.shop-agents.svc.cluster.local"
             - name: PUBLIC_URL
               value: "http://router-agent.shop-agents.svc.cluster.local"
           ports:

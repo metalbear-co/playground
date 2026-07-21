@@ -10,15 +10,38 @@ export type A2AMessage = {
   parts: A2APart[];
 };
 
-export type A2AContext = {
-  session?: string;
-  trace?: TraceStep[];
-};
-
 export type TraceStep = {
   agent: string;
   action: string;
   detail?: string;
+  ms?: number;
+  status?: number;
+};
+
+/** Tool + LLM introspection for the support debug console. */
+export type AgentDebug = {
+  tools?: Array<{
+    name: string;
+    request: string;
+    status: number;
+    ms: number;
+    bodyPreview?: string;
+  }>;
+  llm?: {
+    mode: "buggy" | "fixed";
+    model: string;
+    systemPrompt: string;
+    userPrompt: string;
+    rawOutput: string;
+    note?: string;
+  };
+  facts?: Record<string, string>;
+};
+
+export type A2AContext = {
+  session?: string;
+  trace?: TraceStep[];
+  debug?: AgentDebug;
 };
 
 export type AgentCard = {

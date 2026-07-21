@@ -1,12 +1,22 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@500;600;700;800&display=swap");
+
 :root {
-  --purple: #6a4ff5;
-  --purple-dark: #5538d4;
-  --orange: #f59e0b;
-  --bg: #f8f7fc;
-  --surface: #ffffff;
-  --text: #1a1a2e;
-  --muted: #64748b;
-  --border: #e2e8f0;
+  --mb-purple: #6a4ff5;
+  --mb-purple-bright: #8b7cff;
+  --mb-purple-dim: rgba(106, 79, 245, 0.18);
+  --mb-mint: #b8d4d2;
+  --bg: #07080d;
+  --bg-elevated: #0e1018;
+  --surface: #12141f;
+  --surface-2: #181b2a;
+  --text: #eef0f7;
+  --muted: #8b92a8;
+  --border: rgba(139, 124, 255, 0.22);
+  --danger: #ff6b8a;
+  --danger-bg: rgba(255, 107, 138, 0.1);
+  --ok: #5ddea8;
+  --ok-bg: rgba(93, 222, 168, 0.1);
+  --grid: rgba(106, 79, 245, 0.07);
 }
 
 * {
@@ -18,22 +28,36 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+  font-family: "Syne", system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
 }
 
+body {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(106, 79, 245, 0.28), transparent 55%);
+  background-size: 48px 48px, 48px 48px, 100% 100%;
+  background-attachment: fixed;
+}
+
 a {
-  color: var(--purple);
+  color: var(--mb-purple-bright);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
 }
 
 button {
-  font: inherit;
   cursor: pointer;
 }
 
-input,
-textarea,
-button {
-  font: inherit;
+code,
+pre,
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }

@@ -17,6 +17,9 @@ const publicUrl =
   process.env.PUBLIC_URL || "http://router-agent.shop-agents.svc.cluster.local";
 const orderAgentUrl =
   process.env.ORDER_AGENT_URL || "http://order-agent.shop-agents.svc.cluster.local";
+const catalogAgentUrl =
+  process.env.CATALOG_AGENT_URL ||
+  "http://catalog-agent.shop-agents.svc.cluster.local";
 
 app.use(express.json());
 
@@ -29,7 +32,7 @@ app.get("/.well-known/agent.json", (_req, res) => {
     name: "router-agent",
     description: "Routes MetalMart support questions to specialist agents",
     url: publicUrl,
-    version: "1.0.0",
+    version: "1.1.0",
     skills: [
       {
         id: "route",
@@ -41,17 +44,35 @@ app.get("/.well-known/agent.json", (_req, res) => {
   res.json(card);
 });
 
-function isOrderQuery(text: string): boolean {
+type RouteTarget = "order-agent" | "catalog-agent" | "unsupported";
+
+function classifyIntent(text: string): RouteTarget {
   const lower = text.toLowerCase();
-  return (
+
+  const orderLike =
     /\border\s*#?\s*\d+/i.test(text) ||
-    /\b\d{1,10}\b/.test(text) &&
+    (/\b\d{1,10}\b/.test(text) &&
       (lower.includes("order") ||
         lower.includes("delivery") ||
         lower.includes("ship") ||
         lower.includes("tracking") ||
-        lower.includes("status"))
-  );
+        (lower.includes("status") && !lower.includes("stock"))));
+
+  if (orderLike) return "order-agent";
+
+  const catalogLike =
+    lower.includes("product") ||
+    lower.includes("catalog") ||
+    lower.includes("inventory") ||
+    lower.includes("stock") ||
+    lower.includes("in stock") ||
+    lower.includes("price") ||
+    lower.includes("what do you sell") ||
+    lower.includes("what's in stock") ||
+    lower.includes("whats in stock");
+
+  if (catalogLike) return "catalog-agent";
+  return "unsupported";
 }
 
 function sessionFromRequest(
@@ -65,11 +86,13 @@ function sessionFromRequest(
   return match?.[1];
 }
 
-async function delegateToOrderAgent(
+async function delegate(
+  targetUrl: string,
+  targetName: string,
   body: A2ASendRequest,
   session: string | undefined
 ): Promise<A2ASendResponse> {
-  const res = await fetch(`${orderAgentUrl}/v1/message:send`, {
+  const res = await fetch(`${targetUrl}/v1/message:send`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -83,7 +106,7 @@ async function delegateToOrderAgent(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`order-agent returned ${res.status}: ${errText}`);
+    throw new Error(`${targetName} returned ${res.status}: ${errText}`);
   }
 
   return (await res.json()) as A2ASendResponse;
@@ -106,13 +129,38 @@ app.post("/v1/message:send", async (req, res) => {
 
   try {
     const session = sessionFromRequest(body, req);
-    if (isOrderQuery(query)) {
+    const intent = classifyIntent(query);
+
+    context = appendTrace(context, {
+      agent: "router-agent",
+      action: "classify",
+      detail: intent,
+    });
+
+    if (intent === "order-agent") {
       context = appendTrace(context, {
         agent: "router-agent",
         action: "delegate",
         detail: "order-agent",
       });
-      const response = await delegateToOrderAgent(
+      const response = await delegate(
+        orderAgentUrl,
+        "order-agent",
+        { message: body.message, context: { ...context, session } },
+        session
+      );
+      return res.json(response);
+    }
+
+    if (intent === "catalog-agent") {
+      context = appendTrace(context, {
+        agent: "router-agent",
+        action: "delegate",
+        detail: "catalog-agent",
+      });
+      const response = await delegate(
+        catalogAgentUrl,
+        "catalog-agent",
         { message: body.message, context: { ...context, session } },
         session
       );
@@ -128,7 +176,7 @@ app.post("/v1/message:send", async (req, res) => {
     const response: A2ASendResponse = {
       message: textMessage(
         "agent",
-        "I can help with order status and delivery questions. Try: \"What is the status of order 7?\""
+        'I can help with order status or product availability. Try "What is the status of order 7?" or "Is product 2 in stock?"'
       ),
       context,
     };

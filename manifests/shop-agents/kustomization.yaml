@@ -6,6 +6,7 @@ namespace: shop-agents
 resources:
   - ./base/router-agent
   - ./base/order-agent
+  - ./base/catalog-agent
   - ./base/support-frontend
 
 commonLabels:

@@ -4,6 +4,27 @@ type TraceStep = {
   agent: string;
   action: string;
   detail?: string;
+  ms?: number;
+  status?: number;
+};
+
+type AgentDebug = {
+  tools?: Array<{
+    name: string;
+    request: string;
+    status: number;
+    ms: number;
+    bodyPreview?: string;
+  }>;
+  llm?: {
+    mode: "buggy" | "fixed";
+    model: string;
+    systemPrompt: string;
+    userPrompt: string;
+    rawOutput: string;
+    note?: string;
+  };
+  facts?: Record<string, string>;
 };
 
 const routerUrl =
@@ -14,13 +35,16 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON", trace: [], answer: "" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid JSON", trace: [], answer: "", debug: null },
+      { status: 400 }
+    );
   }
 
   const query = body.query?.trim();
   if (!query) {
     return NextResponse.json(
-      { error: "query is required", trace: [], answer: "" },
+      { error: "query is required", trace: [], answer: "", debug: null },
       { status: 400 }
     );
   }
@@ -51,6 +75,7 @@ export async function POST(req: Request) {
           error: payload.error ?? `router-agent returned ${res.status}`,
           trace: (payload.context?.trace as TraceStep[]) ?? [],
           answer: "",
+          debug: (payload.context?.debug as AgentDebug) ?? null,
         },
         { status: res.status }
       );
@@ -65,6 +90,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       answer,
       trace: (payload.context?.trace as TraceStep[]) ?? [],
+      debug: (payload.context?.debug as AgentDebug) ?? null,
     });
   } catch (err) {
     return NextResponse.json(
@@ -72,6 +98,7 @@ export async function POST(req: Request) {
         error: err instanceof Error ? err.message : "Failed to reach router-agent",
         trace: [],
         answer: "",
+        debug: null,
       },
       { status: 502 }
     );

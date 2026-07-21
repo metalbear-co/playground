@@ -1,32 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: order-agent
+  name: catalog-agent
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: order-agent
+      app: catalog-agent
   template:
     metadata:
       labels:
-        app: order-agent
+        app: catalog-agent
     spec:
       containers:
-        - name: order-agent
-          image: ghcr.io/metalbear-co/playground-shop-agents-order:latest
+        - name: catalog-agent
+          image: ghcr.io/metalbear-co/playground-shop-agents-catalog:latest
           imagePullPolicy: Always
           env:
             - name: PORT
               value: "80"
-            - name: ORDER_SERVICE_URL
-              value: "http://order-service.shop.svc.cluster.local"
-            - name: DELIVERY_SERVICE_URL
-              value: "http://delivery-service.shop.svc.cluster.local"
+            - name: INVENTORY_SERVICE_URL
+              value: "http://inventory-service.shop.svc.cluster.local"
             - name: PUBLIC_URL
-              value: "http://order-agent.shop-agents.svc.cluster.local"
-            - name: LLM_MODE
-              value: "buggy"
+              value: "http://catalog-agent.shop-agents.svc.cluster.local"
           ports:
             - containerPort: 80
           readinessProbe:

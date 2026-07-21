@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MetalMart Support Agents",
-  description: "Internal support console for MetalMart order lookup",
+  title: "MetalBear · Support",
+  description: "MetalMart support workspace powered by mirrord-ready agents",
 };
 
 export default function RootLayout({
@@ -11,12 +11,6 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body>{children}</body>
     </html>
   );
