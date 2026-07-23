@@ -1,0 +1,28 @@
+# Kafka queue splitting for service-c-ev (mirrord operator >= 3.170.0).
+# This is the service a developer previews (idle mode): the CronJob's session-tagged
+# event on kafka-demo.ev.c is what wakes the idle preview and routes to their laptop.
+# Queue id "relay" must match feature.split_queues in the service's mirrord.json.
+apiVersion: queues.mirrord.metalbear.co/v1
+kind: MirrordSplitConfig
+metadata:
+  name: service-c-ev-split
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: service-c-ev
+  restart:
+    timeout: 180
+  queues:
+    - id: relay
+      kind: kafka
+      clientConfig: kafka-demo-connection
+      appConfig:
+        topic:
+          - env: KAFKA_TOPIC
+            containers:
+              - main
+        groupId:
+          - env: KAFKA_CONSUMER_GROUP
+            containers:
+              - main

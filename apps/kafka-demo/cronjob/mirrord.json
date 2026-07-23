@@ -1,0 +1,30 @@
+{
+  "key": "changed-responce",
+  "target": {
+    "path": "cronjob/cronjob-z/container/main",
+    "namespace": "kafka-demo-event"
+  },
+  "feature": {
+    "copy_target": true,
+    "network": {
+      "incoming": "off",
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "type": "pg",
+        "ttl_secs": 60,
+        "version": "16",
+        "connection": {
+          "url": {
+            "type": "env",
+            "variable": "DATABASE_URL"
+          }
+        },
+        "copy": {
+          "mode": "schema"
+        }
+      }
+    ]
+  }
+}

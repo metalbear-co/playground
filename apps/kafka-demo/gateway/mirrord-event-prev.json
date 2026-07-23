@@ -1,0 +1,35 @@
+{
+  "key": "changed-responce",
+  "target": {
+    "namespace": "kafka-demo-event",
+    "path": {
+      "deployment": "gateway-ev"
+    }
+  },
+  "feature": {
+    "preview": {
+      "image": "ghcr.io/metalbear-co/playground-kafka-demo-gateway:latest",
+      "ttl_mins": 120,
+      "creation_timeout_secs": 600
+    },
+    "network": {
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "type": "pg",
+        "version": "16",
+        "ttl_secs": 300,
+        "connection": {
+          "url": {
+            "type": "env",
+            "variable": "DATABASE_URL"
+          }
+        },
+        "copy": {
+          "mode": "schema"
+        }
+      }
+    ]
+  }
+}

@@ -1,9 +1,9 @@
 {
   "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
-    "namespace": "kafka-demo",
+    "namespace": "kafka-demo-event",
     "path": {
-      "deployment": "service-b"
+      "deployment": "service-b-ev"
     }
   },
   "feature": {
@@ -18,6 +18,19 @@
           "baggage": ".*mirrord-session={{key}}.*"
         }
       }
+    },
+    "db_branches": [
+    {
+      "type": "pg",
+      "ttl_secs": 30,    
+      "version": "16.0",
+      "connection": {
+        "url": "DATABASE_URL"
+      },
+      "copy": {
+        "mode": "schema"                 
+      }
     }
+   ]
   }
 }

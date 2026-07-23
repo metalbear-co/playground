@@ -97,6 +97,92 @@ your local service-b handles the message; leave it blank and the cluster handles
 ## Config (env vars)
 
 Services: `KAFKA_ADDRESS`, `KAFKA_TOPIC` (in), `NEXT_TOPIC` (out; empty = terminal),
-`TRACE_TOPIC`, `KAFKA_CONSUMER_GROUP`, `STAGE`, `SERVICE_NAME`, `WORK_MILLIS`, `PORT`.
-Gateway: `KAFKA_ADDRESS`, `FIRST_TOPIC`, `TRACE_TOPIC`, `TRACE_GROUP_ID`, `PORT`.
+`TRACE_TOPIC`, `KAFKA_CONSUMER_GROUP`, `STAGE`, `SERVICE_NAME`, `WORK_MILLIS`, `PORT`,
+`DB_MODE` (empty = terminal counter; `event-sink` = write pending state, no forward).
+Gateway: `KAFKA_ADDRESS`, `FIRST_TOPIC`, `TRACE_TOPIC`, `TRACE_GROUP_ID`, `BASE_PATH`,
+`UI_VARIANT` (empty = Kafka-chain UI; `event-driven` = the DB + CronJob UI), `PORT`.
 All: `OTEL_PROPAGATORS` (default `tracecontext,baggage`) — must include `baggage`.
+
+## Event-driven mode (DB state + CronJob)
+
+A **second, parallel** demo that mirrors an event-driven architecture where a service
+writes DB state and a **CronJob** periodically inspects that state and emits the next
+event. It runs alongside the base A→B→C demo (same namespace, `*-ev` names, its own
+`kafka-demo.ev.*` topics), so both are available at once.
+
+```
+[ button ] --HTTP--> gateway-ev --produce--> kafka-demo.ev.a
+                                                  │
+                                          service-a-ev  (consume ev.a → produce ev.b)
+                                                  │
+                                          kafka-demo.ev.b
+                                                  │
+                                          service-b-ev  (consume ev.b → WRITE DB state)
+                                                  │
+                                          kafka_demo_events (pending)      ← Postgres
+                                                  │
+                                          CronJob Z   (every ~1m: read pending state →
+                                                  │    emit kafka-demo.ev.c, mark emitted)
+                                          kafka-demo.ev.c
+                                                  │
+                                          service-c-ev  (consume ev.c → done)
+```
+
+The originating **`mirrord-session` baggage** is stored on the DB row and re-attached
+by CronJob Z to the event it emits, so the flow stays session-tagged end to end —
+that's what lets queue splitting and idle previews route a single developer's flow.
+
+### Deploy
+
+```bash
+gh auth token | docker login ghcr.io -u <you> --password-stdin   # one-time
+export DATABASE_URL='postgresql://USER:PASSWORD@postgres.infra.svc.cluster.local:5432/postgres'
+./apps/kafka-demo/scripts/deploy.sh                     # build+push ALL images (incl. cronjob)
+./apps/kafka-demo/scripts/deploy-event-driven.sh        # apply the event-driven overlay
+kubectl -n kafka-demo port-forward svc/gateway-ev 8081:80
+open http://localhost:8081/kafka-demo-ev
+```
+
+Press **Produce message** and watch **A → B (writes DB) → CronJob Z → C** light up. The
+B→Z hop waits for the CronJob's next tick (~1 min); use
+`scripts/preview-event-driven.sh trigger` to run it immediately.
+
+### The mirrord bit — the POC choreography
+
+This mode is built to show the two capabilities the POC sells:
+
+- **Idle Preview Environments** — a preview of `service-c-ev` that runs **zero pods**
+  until a matching Kafka message arrives, then boots to handle it
+  (`feature.preview.idle`, see `service-c/mirrord-preview-ev.json`).
+- **CronJob DB-branching** — CronJob Z run under mirrord reads an **isolated Postgres
+  branch** instead of shared staging (`copy_target` + `db_branches`, target
+  `cronjob/cronjob-z`, see `cronjob/mirrord-preview.json`).
+
+```bash
+# 1. start the idle preview of service-c-ev (0 pods until your event lands)
+./apps/kafka-demo/scripts/preview-event-driven.sh idle
+
+# 2. in the UI, set the session field to your username and press the button
+#    (service-b-ev writes a session-tagged pending row)
+
+# 3. run CronJob Z under mirrord against a branched DB
+./apps/kafka-demo/scripts/preview-event-driven.sh cron
+
+# → the branched CronJob reads only your rows, emits a session-tagged event,
+#   which wakes your idle service-c-ev preview to process only your message,
+#   while the cluster copy keeps serving everyone else. Shared staging DB is untouched.
+
+# cleanup
+./apps/kafka-demo/scripts/preview-event-driven.sh clean
+```
+
+> Requires an operator build with idle previews and cronjob DB-branching support,
+> in addition to the base demo's Kafka-splitting requirement (>= 3.170.0). The exact
+> interplay of a shared DB branch across the previewed CronJob and `service-c-ev` is
+> still being finalized.
+
+Tear down only the event-driven resources (base demo stays):
+
+```bash
+kubectl delete -k manifests/kafka-demo/overlays/event-driven
+```
