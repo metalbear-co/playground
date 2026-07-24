@@ -121,7 +121,13 @@ class OrderError extends Error {
 /** Create order via direct path: inventory → payment → DB → Kafka. */
 async function createOrderDirect(
   input: OrderInput
-): Promise<{ orderId: number; status: string }> {
+): Promise<{
+  orderId: number;
+  status: string;
+  demo?: string;
+  customer_email?: string | null;
+  baggage?: string | null;
+}> {
   const { items, total_cents: totalCents, customer_email, baggage } = input;
 
   for (const item of items) {
@@ -225,13 +231,13 @@ async function createOrderDirect(
     baggage,
   });
 
-    return {
-      orderId,
-      status: "preview served by mirrord",
-      demo: "preview-before-after",
-      customer_email: customer_email ?? null,
-      baggage: baggage ?? null,
- };
+  return {
+    orderId,
+    status: "preview served by mirrord",
+    demo: "preview-before-after",
+    customer_email: customer_email ?? null,
+    baggage: baggage ?? null,
+  };
 }
 
 app.post("/orders", async (req, res) => {
