@@ -112,6 +112,7 @@ jobs:
           echo "Created PR #$PR_NUMBER: $PR_URL"
 
       - name: Dispatch preview-shop-pr.yml start
+        id: dispatch_start
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ steps.meta.outputs.branch_name }}
@@ -120,6 +121,10 @@ jobs:
           PR_NUMBER: ${{ steps.create_pr.outputs.pr_number }}
         run: |
           set -euo pipefail
+          # Reruns reuse github.run_id, so the caller tag alone does not identify
+          # this attempt's preview run. Record a cutoff and only correlate against
+          # runs created after it.
+          echo "since=$(date -u -d '-30 seconds' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           gh workflow run preview-shop-pr.yml \
             --repo "${{ github.repository }}" \
             --ref main \
@@ -144,8 +149,11 @@ jobs:
               --workflow=preview-shop-pr.yml \
               --event workflow_dispatch \
               --limit 20 \
-              --json databaseId,displayTitle \
-              --jq '.[] | select(.displayTitle | contains("caller=${{ github.run_id }}")) | .databaseId' | head -n1)
+              --json databaseId,displayTitle,createdAt \
+              --jq '[.[]
+                     | select(.createdAt > "${{ steps.dispatch_start.outputs.since }}")
+                     | select(.displayTitle | test("caller=${{ github.run_id }}$"))]
+                    | .[0].databaseId // empty')
             if [ -n "$RUN_ID" ]; then
               echo "✓ Preview workflow started: run $RUN_ID"
               echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
@@ -314,6 +322,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Dispatch preview-shop-pr.yml stop
+        id: dispatch_stop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PREVIEW_KEY: ${{ needs.preview-test.outputs.preview_key }}
@@ -321,6 +330,7 @@ jobs:
           PR_URL: ${{ needs.preview-test.outputs.pr_url }}
         run: |
           set -euo pipefail
+          echo "since=$(date -u -d '-30 seconds' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           if [ -n "$PREVIEW_KEY" ]; then
             gh workflow run preview-shop-pr.yml \
               --repo "${{ github.repository }}" \
@@ -348,8 +358,11 @@ jobs:
               --workflow=preview-shop-pr.yml \
               --event workflow_dispatch \
               --limit 20 \
-              --json databaseId,displayTitle \
-              --jq '.[] | select(.displayTitle | contains("caller=${{ github.run_id }}-stop")) | .databaseId' | head -n1)
+              --json databaseId,displayTitle,createdAt \
+              --jq '[.[]
+                     | select(.createdAt > "${{ steps.dispatch_stop.outputs.since }}")
+                     | select(.displayTitle | test("caller=${{ github.run_id }}-stop$"))]
+                    | .[0].databaseId // empty')
             if [ -n "$RUN_ID" ]; then
               break
             fi
