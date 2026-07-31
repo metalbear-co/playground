@@ -1,0 +1,4 @@
+{
+  "excludeBranches": ["demo-*"],
+  "ignorePatterns": "**/node_modules/**\n**/.next/**\n**/dist/**\n**/package-lock.json\n**/pnpm-lock.yaml\n**/yarn.lock\ngo.sum\n**/go.sum\n**/uv.lock\nprotogen/**/*.pb.go\n**/*.pb.go\n**/*_grpc.pb.go\n**/.DS_Store\noverlays/localstack/charts/**\nbase/charts/**"
+}
