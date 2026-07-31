@@ -1,4 +1,4 @@
 {
   "excludeBranches": ["demo-*"],
-  "ignorePatterns": "**/node_modules/**\n**/.next/**\n**/dist/**\n**/package-lock.json\n**/pnpm-lock.yaml\n**/yarn.lock\ngo.sum\n**/go.sum\n**/uv.lock\nprotogen/**/*.pb.go\n**/*.pb.go\n**/*_grpc.pb.go\n**/.DS_Store\noverlays/localstack/charts/**\nbase/charts/**"
+  "ignorePatterns": "**/package-lock.json\n**/pnpm-lock.yaml\n**/yarn.lock\n**/go.sum\n**/uv.lock\n\n**/node_modules/**\n**/.next/**\n**/dist/**\n\n**/*.pb.go\n\noverlays/localstack/charts/**\nbase/charts/**\n\n**/.DS_Store"
 }
