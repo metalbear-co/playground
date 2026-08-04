@@ -299,7 +299,7 @@ type PgBranchDatabase = {
   postgresVersion: string;
   phase: string;
   expireTime?: string;
-  owners: { username: string; hostname: string }[];
+  owners: { username: string; k8sUsername?: string; hostname: string }[];
 };
 
 /**
@@ -576,12 +576,12 @@ const isMirrordCiOwner = (owner: { username?: string; k8sUsername?: string; host
 const formatMirrordOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
     ? MIRRORD_CI_LABEL
-    : `${owner.username ?? "unknown"} (${owner.hostname ?? "unknown"})`;
+    : `${owner.username ?? "unknown"} (${owner.k8sUsername ?? owner.hostname ?? "unknown"})`;
 
 const formatMirrordAgentOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
     ? MIRRORD_CI_LABEL
-    : (owner.hostname ?? "unknown");
+    : (owner.k8sUsername ?? owner.hostname ?? "unknown");
 
 /**
  * Build an index of possible string aliases for each architecture node so snapshot targets can be
