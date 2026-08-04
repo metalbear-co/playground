@@ -1,0 +1,2 @@
+I want to check if I still get a review if I explicitly ask Greptile for it, even though there's an author allowlist and I'm not in it.
+(Does `includeAuthors` apply only for default reviews, or also for explicitly requested reviews)
