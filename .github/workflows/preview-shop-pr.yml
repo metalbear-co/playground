@@ -52,8 +52,13 @@ on:
         required: false
         type: string
 
+# The event name is part of the group because the verification PR is created by
+# the Cubby app, whose pull_request event fires a (skipped, demo-* filter) run
+# that must not cancel the explicitly dispatched run for the same PR number.
+# Same-event cancellation still applies: a new push cancels an in-flight build
+# for the same PR, and a dispatched stop cancels a dispatched start.
 concurrency:
-  group: preview-shop-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
+  group: preview-shop-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
