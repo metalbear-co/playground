@@ -271,7 +271,7 @@ type PgBranchDatabase = {
   phase: string;
   expireTime?: string;
   connectionUrl?: string;
-  owners: { username: string; hostname: string }[];
+  owners: { username: string; k8sUsername: string; hostname: string }[];
 };
 
 type PreviewSession = {
@@ -757,6 +757,7 @@ const fetchPgBranchDatabases = async (
       const owner = (session.owner ?? {}) as Record<string, unknown>;
       return {
         username: (owner.username as string) ?? "unknown",
+        k8sUsername: (owner.k8sUsername as string) ?? "unknown",
         hostname: (owner.hostname as string) ?? "unknown",
       };
     });
@@ -1298,7 +1299,7 @@ const mockPgBranches: PgBranchDatabase[] = [
     phase: "Ready",
     expireTime: "2026-02-19T08:50:57.701063Z",
     owners: [
-      { username: "Ari Sprung", hostname: "Aris-MacBook-Pro.local" },
+      { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
     ],
   },
 ];
