@@ -1,0 +1,23 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "chat-service"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": "steal",
+      "outgoing": true
+    },
+    "split_queues": {
+      "support-chat": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "baggage": ".*mirrord-session={{key}}.*"
+        }
+      }
+    }
+  }
+}

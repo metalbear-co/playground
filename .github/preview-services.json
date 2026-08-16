@@ -43,6 +43,14 @@
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     },
     {
+      "name": "chat-service",
+      "path": "apps/shop/chat-service",
+      "deployment": "chat-service",
+      "namespace": "shop",
+      "build_args": "",
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
+    },
+    {
       "name": "receipt-service",
       "path": "apps/shop/receipt-service",
       "deployment": "receipt-service",
