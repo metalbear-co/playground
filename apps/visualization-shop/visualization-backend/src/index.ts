@@ -151,6 +151,7 @@ app.get(snapshotPaths, async (req, res) => {
   }
   if (
     req.query.queueSplittingMock === "true" ||
+    req.query.chatSplittingMock === "true" ||
     req.query.multipleSessionMock === "true" ||
     req.query.dbBranchMock === "true" ||
     req.query.ciRunnerMock === "true"
@@ -862,6 +863,7 @@ const refreshDynamicPgConnections = (_branches: PgBranchDatabase[]) => {
  */
 app.get(operatorStatusPaths, async (req, res) => {
   const requestUseMock = req.query.queueSplittingMock === "true";
+  const requestUseChatSplittingMock = req.query.chatSplittingMock === "true";
   const requestUseDbBranchMock = req.query.dbBranchMock === "true";
   const requestUseMultipleSessionMock = req.query.multipleSessionMock === "true";
   const requestUseCiRunnerMock = req.query.ciRunnerMock === "true";
@@ -880,6 +882,14 @@ app.get(operatorStatusPaths, async (req, res) => {
       ...mockMultipleSessionsOperatorStatus,
       pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
       previewSessions: mockMultipleSessionsOperatorStatus.previewSessions,
+      fetchedAt: new Date().toISOString(),
+    };
+    res.json(response);
+    return;
+  }
+  if (requestUseChatSplittingMock) {
+    const response: OperatorStatusResponse = {
+      ...mockChatSplittingOperatorStatus,
       fetchedAt: new Date().toISOString(),
     };
     res.json(response);
@@ -1060,6 +1070,12 @@ const knownDeployments: KnownDeployment[] = [
     description: "Receipt generation & delivery",
     deployment: "receipt-service",
   },
+  {
+    id: "chat-service",
+    name: "chat-service",
+    description: "Kafka-backed support chat with SSE streaming",
+    deployment: "chat-service",
+  },
 ];
 
 /** Sharable demo: playground-shaped snapshot + single Adna session on inventory-service (?sharableVisualizationMock). */
@@ -1067,6 +1083,14 @@ const mockSharableVisualizationSnapshot: ClusterSnapshot = {
   clusterName: "playground",
   updatedAt: "2026-05-03T00:26:10.131Z",
   services: [
+    {
+      id: "chat-service",
+      name: "chat-service",
+      description: "Kafka-backed support chat with SSE streaming",
+      lastUpdated: "2026-05-03T00:26:02.400Z",
+      status: "available",
+      availableReplicas: 1,
+    },
     {
       id: "delivery-service",
       name: "delivery-service",
@@ -1283,6 +1307,46 @@ const mockOperatorStatus: OperatorStatusResponse = {
       queueType: "Fallback",
     },
   ],
+  pgBranches: [],
+  previewSessions: [],
+  fetchedAt: new Date().toISOString(),
+};
+
+/**
+ * Mock for ?chatSplittingMock — a single Kafka split session on chat-service,
+ * mirroring the delivery-service pattern in mockOperatorStatus but focused on
+ * the support-chat topic for demoing chat message routing.
+ */
+const mockChatSplittingOperatorStatus: OperatorStatusResponse = {
+  sessions: [
+    {
+      sessionId: "7a1c44be90d2ff38",
+      target: { kind: "Deployment", name: "chat-service", container: "main", apiVersion: "apps/v1" },
+      namespace: "shop",
+      owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+      branchName: "feat/support-chat-kafka",
+      createdAt: "2026-02-18T07:27:49Z",
+      connectedAt: "2026-02-18T07:56:14.217820Z",
+      durationSeconds: 1706,
+    },
+  ],
+  sessionCount: 1,
+  kafkaTopics: [
+    {
+      topicName: "mirrord-tmp-xqzrwbndlp-support-chat",
+      sessionId: "7a1c44be90d2ff38",
+      clientConfig: "shop-kafka-connection",
+      topicType: "Filtered",
+    },
+    {
+      topicName: "mirrord-tmp-xqzrwbndlp-fallback-support-chat",
+      sessionId: "7a1c44be90d2ff38",
+      clientConfig: "shop-kafka-connection",
+      topicType: "Fallback",
+    },
+  ],
+  sqsQueues: [],
+  rmqQueues: [],
   pgBranches: [],
   previewSessions: [],
   fetchedAt: new Date().toISOString(),
