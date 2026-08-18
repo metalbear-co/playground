@@ -261,6 +261,28 @@ type RmqEphemeralQueue = {
   queueType: "Filtered" | "Fallback";
 };
 
+/**
+ * One split queue parsed from a MirrordClusterSplitSession CR
+ * (queues.mirrord.metalbear.co/v1). The operator records every queue-splitting
+ * session in this single CRD regardless of broker kind (kafka, sqs, rmq,
+ * googlePubSub, azureServiceBus, redisPubSub, temporal, bullMq); the legacy
+ * per-kind CRs (MirrordSqsSession, MirrordRMQSession, MirrordKafkaEphemeralTopic)
+ * are no longer written by current operator versions.
+ */
+type SplitSessionQueue = {
+  kind: string;
+  queueId: string;
+  sessionId: string;
+  /** Target workload consuming the queue. */
+  consumer: string;
+  namespace: string;
+  jqFilter?: string;
+  /** Original queue/topic name (or URL) -> ephemeral mirrord name for this session. */
+  nameMappings: Record<string, string>;
+  /** Env vars the operator rewrites on the consumer workload. */
+  envVarNames: string[];
+};
+
 type PgBranchDatabase = {
   name: string;
   namespace: string;
@@ -297,6 +319,9 @@ type OperatorStatusResponse = {
   kafkaTopics: KafkaEphemeralTopic[];
   sqsQueues: SqsEphemeralQueue[];
   rmqQueues: RmqEphemeralQueue[];
+  /** Split queues of broker kinds the UI has no dedicated section for yet
+   * (googlePubSub, azureServiceBus, redisPubSub, temporal, bullMq). */
+  otherQueueSplits?: SplitSessionQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
   fetchedAt: string;
@@ -435,12 +460,18 @@ const kafkaTopicTypeFromName = (topicName: string): KafkaEphemeralTopic["topicTy
  * Reads MirrordClusterSplitSession; filtered topics from status.tmpResources,
  * fallback topics from the target pod's patched KAFKA_TOPIC env.
  */
-const fetchKafkaFromClusterSplitSessions = async (
+/**
+ * List MirrordClusterSplitSession CRs and flatten them into one entry per split
+ * queue, across all broker kinds. Ephemeral names live in kind-specific maps on
+ * `status.ready.tmpResources` (`queue` for RMQ, `topic` for Kafka, `subscription`
+ * for SQS, `channel` for pub/sub brokers, `taskQueue` for task queues); only the
+ * maps relevant to the queue's kind are populated, so all are merged blindly.
+ */
+const fetchClusterSplitQueues = async (
   kubeConfig: KubeConfig,
-): Promise<KafkaEphemeralTopic[]> => {
+): Promise<SplitSessionQueue[]> => {
   const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
-  const topics: KafkaEphemeralTopic[] = [];
+  const out: SplitSessionQueue[] = [];
 
   let items: Array<Record<string, unknown>> = [];
   try {
@@ -456,7 +487,7 @@ const fetchKafkaFromClusterSplitSessions = async (
       "Failed to list MirrordClusterSplitSessions:",
       err instanceof Error ? err.message : err,
     );
-    return topics;
+    return out;
   }
 
   for (const item of items) {
@@ -465,37 +496,79 @@ const fetchKafkaFromClusterSplitSessions = async (
     const status = (item.status ?? {}) as Record<string, unknown>;
     const labels = (metadata.labels ?? {}) as Record<string, string>;
     const sessionId = labels["operator.metalbear.co/session-id"] ?? "unknown";
-
-    const queues = (spec.queues ?? []) as Array<Record<string, unknown>>;
-    const hasKafkaQueue = queues.some((q) => q.kind === "kafka");
-    if (!hasKafkaQueue) continue;
-
     const target = (spec.target ?? {}) as Record<string, unknown>;
-    const targetName = (target.name as string) ?? "unknown";
-    const targetNs = (spec.namespace as string) ?? defaultNamespace;
+    const consumer = (target.name as string) ?? "unknown";
+    const namespace = (spec.namespace as string) ?? defaultNamespace;
 
     const ready = (status.ready ?? {}) as Record<string, unknown>;
     const tmpResources = (ready.tmpResources ?? []) as Array<Record<string, unknown>>;
-    const filteredTopicNames = new Set<string>();
+    const envUpdates =
+      (ready.envUpdates ?? {}) as Record<string, Array<{ name?: string }>>;
+    const envVarNames = [
+      ...new Set(
+        Object.values(envUpdates)
+          .flat()
+          .map((e) => e?.name)
+          .filter((n): n is string => Boolean(n)),
+      ),
+    ];
 
-    for (const resource of tmpResources) {
-      const topicMap = (resource.topic ?? {}) as Record<string, string>;
-      for (const topicName of Object.values(topicMap)) {
-        if (!topicName) continue;
-        filteredTopicNames.add(topicName);
-        topics.push({
-          topicName,
-          sessionId,
-          clientConfig: "shop-kafka-connection",
-          topicType: kafkaTopicTypeFromName(topicName),
-        });
+    const queues = (spec.queues ?? []) as Array<Record<string, unknown>>;
+    for (const queue of queues) {
+      const queueId = (queue.id as string) ?? "unknown";
+      const nameMappings: Record<string, string> = {};
+      for (const resource of tmpResources) {
+        if (resource.queueId !== queueId) continue;
+        for (const field of ["queue", "topic", "subscription", "channel", "taskQueue"]) {
+          const mapping = (resource[field] ?? {}) as Record<string, string>;
+          for (const [original, ephemeral] of Object.entries(mapping)) {
+            if (ephemeral) nameMappings[original] = ephemeral;
+          }
+        }
       }
+      const entry: SplitSessionQueue = {
+        kind: (queue.kind as string) ?? "unknown",
+        queueId,
+        sessionId,
+        consumer,
+        namespace,
+        nameMappings,
+        envVarNames,
+      };
+      const jqFilter = queue.jqFilter as string | undefined;
+      if (jqFilter !== undefined) entry.jqFilter = jqFilter;
+      out.push(entry);
+    }
+  }
+
+  return out;
+};
+
+const fetchKafkaFromClusterSplitSessions = async (
+  kubeConfig: KubeConfig,
+  splitQueues: SplitSessionQueue[],
+): Promise<KafkaEphemeralTopic[]> => {
+  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+  const topics: KafkaEphemeralTopic[] = [];
+
+  for (const queue of splitQueues) {
+    if (queue.kind !== "kafka") continue;
+
+    const filteredTopicNames = new Set<string>();
+    for (const topicName of Object.values(queue.nameMappings)) {
+      filteredTopicNames.add(topicName);
+      topics.push({
+        topicName,
+        sessionId: queue.sessionId,
+        clientConfig: "shop-kafka-connection",
+        topicType: kafkaTopicTypeFromName(topicName),
+      });
     }
 
     try {
       const podsResult = await coreApi.listNamespacedPod({
-        namespace: targetNs,
-        labelSelector: `app=${targetName}`,
+        namespace: queue.namespace,
+        labelSelector: `app=${queue.consumer}`,
       });
       const seenFallback = new Set<string>();
       for (const pod of podsResult.items ?? []) {
@@ -510,14 +583,14 @@ const fetchKafkaFromClusterSplitSessions = async (
         seenFallback.add(topicName);
         topics.push({
           topicName,
-          sessionId,
+          sessionId: queue.sessionId,
           clientConfig: "shop-kafka-connection",
           topicType: "Fallback",
         });
       }
     } catch (err) {
       console.warn(
-        `Failed to list pods for Kafka consumer ${targetName} in ${targetNs}:`,
+        `Failed to list pods for Kafka consumer ${queue.consumer} in ${queue.namespace}:`,
         err instanceof Error ? err.message : err,
       );
     }
@@ -532,10 +605,11 @@ const fetchKafkaFromClusterSplitSessions = async (
  */
 const fetchKafkaEphemeralTopics = async (
   kubeConfig: KubeConfig,
+  splitQueues: SplitSessionQueue[],
 ): Promise<KafkaEphemeralTopic[]> => {
   const [legacyTopics, splitSessionTopics] = await Promise.all([
     fetchLegacyKafkaEphemeralTopics(kubeConfig),
-    fetchKafkaFromClusterSplitSessions(kubeConfig),
+    fetchKafkaFromClusterSplitSessions(kubeConfig, splitQueues),
   ]);
 
   const seen = new Set<string>();
@@ -550,10 +624,10 @@ const fetchKafkaEphemeralTopics = async (
 };
 
 /**
- * Query MirrordSqsSession custom resources from the operator CRD.
- * Returns ephemeral SQS queues linked to active splitting sessions.
+ * Query legacy MirrordSqsSession custom resources from the operator CRD.
+ * Only populated by pre-MirrordClusterSplitSession operator versions.
  */
-const fetchSqsEphemeralQueues = async (
+const fetchLegacySqsEphemeralQueues = async (
   kubeConfig: KubeConfig,
 ): Promise<SqsEphemeralQueue[]> => {
   const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
@@ -593,6 +667,56 @@ const fetchSqsEphemeralQueues = async (
   return queues;
 };
 
+/** SQS name mappings hold full queue URLs; the queue name is the last path segment. */
+const fetchSqsFromClusterSplitSessions = (
+  splitQueues: SplitSessionQueue[],
+): SqsEphemeralQueue[] => {
+  const queues: SqsEphemeralQueue[] = [];
+  for (const queue of splitQueues) {
+    if (queue.kind !== "sqs") continue;
+    for (const [originalUrl, sessionUrl] of Object.entries(queue.nameMappings)) {
+      const queueName = sessionUrl.split("/").pop() ?? sessionUrl;
+      const originalQueueName = originalUrl.split("/").pop() ?? originalUrl;
+      const entry: SqsEphemeralQueue = {
+        queueName,
+        originalQueueName,
+        sessionId: queue.sessionId,
+        consumer: queue.consumer,
+      };
+      if (queue.jqFilter !== undefined) entry.jqFilter = queue.jqFilter;
+      queues.push(entry);
+    }
+  }
+  return queues;
+};
+
+/**
+ * Ephemeral SQS queues from active queue-splitting sessions.
+ * Merges legacy MirrordSqsSession CRs with MirrordClusterSplitSession.
+ */
+const fetchSqsEphemeralQueues = async (
+  kubeConfig: KubeConfig,
+  splitQueues: SplitSessionQueue[],
+): Promise<SqsEphemeralQueue[]> => {
+  const legacyQueues = await fetchLegacySqsEphemeralQueues(kubeConfig).catch((err) => {
+    console.warn(
+      "Failed to list legacy MirrordSqsSessions:",
+      err instanceof Error ? err.message : err,
+    );
+    return [] as SqsEphemeralQueue[];
+  });
+
+  const seen = new Set<string>();
+  const merged: SqsEphemeralQueue[] = [];
+  for (const queue of [...legacyQueues, ...fetchSqsFromClusterSplitSessions(splitQueues)]) {
+    const key = `${queue.sessionId}:${queue.queueName}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(queue);
+  }
+  return merged;
+};
+
 const deriveRmqOriginalQueueName = (mirrordQueue: string): string => {
   const collapsed = mirrordQueue.replace(/-fallback-/g, "-");
   const known = "order-notifications";
@@ -602,13 +726,13 @@ const deriveRmqOriginalQueueName = (mirrordQueue: string): string => {
 };
 
 /**
- * Discover ephemeral mirrord RabbitMQ queues for active queue-splitting sessions.
- * For each MirrordRMQSession, emit:
+ * Discover ephemeral mirrord RabbitMQ queues from legacy MirrordRMQSession CRs.
+ * Only populated by pre-MirrordClusterSplitSession operator versions. Emits:
  *   - Filtered: queue from `status.Ready.envUpdates.<env>.outputName` (consumed by local user).
  *   - Fallback: queue from the consumer pod's actual env value (consumed by the deployed pod;
  *     mirrord patches it to a `mirrord-main-<id>-...` queue).
  */
-const fetchRmqEphemeralQueues = async (
+const fetchLegacyRmqEphemeralQueues = async (
   kubeConfig: KubeConfig,
 ): Promise<RmqEphemeralQueue[]> => {
   const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
@@ -705,6 +829,99 @@ const fetchRmqEphemeralQueues = async (
   }
 
   return out;
+};
+
+/**
+ * Ephemeral RMQ queues from MirrordClusterSplitSession CRs. Emits:
+ *   - Filtered: the session queue from `status.ready.tmpResources[].queue`
+ *     (consumed by the local user).
+ *   - Fallback: queue from the consumer pod's actual env value (consumed by the
+ *     deployed pod; mirrord patches it to a `mirrord-main-<id>-...` queue).
+ */
+const fetchRmqFromClusterSplitSessions = async (
+  kubeConfig: KubeConfig,
+  splitQueues: SplitSessionQueue[],
+): Promise<RmqEphemeralQueue[]> => {
+  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+  const out: RmqEphemeralQueue[] = [];
+
+  for (const queue of splitQueues) {
+    if (queue.kind !== "rmq") continue;
+
+    const filterOutputs = new Set<string>();
+    for (const [originalName, sessionQueue] of Object.entries(queue.nameMappings)) {
+      filterOutputs.add(sessionQueue);
+      out.push({
+        queueName: sessionQueue,
+        originalQueueName: originalName,
+        sessionId: queue.sessionId,
+        consumer: queue.consumer,
+        queueType: "Filtered",
+      });
+    }
+
+    if (queue.envVarNames.length === 0 || queue.consumer === "unknown") continue;
+
+    try {
+      const podsResult = await coreApi.listNamespacedPod({
+        namespace: queue.namespace,
+        labelSelector: `app=${queue.consumer}`,
+      });
+      const seen = new Set<string>();
+      for (const pod of podsResult.items ?? []) {
+        const containers = pod.spec?.containers ?? [];
+        const main = containers.find((c) => c.name === "main") ?? containers[0];
+        const env = main?.env ?? [];
+        for (const envVarName of queue.envVarNames) {
+          const e = env.find((x) => x.name === envVarName);
+          const raw = (typeof e?.value === "string" ? e.value : "").trim();
+          if (!raw.startsWith("mirrord-")) continue;
+          if (filterOutputs.has(raw)) continue;
+          if (seen.has(raw)) continue;
+          seen.add(raw);
+          out.push({
+            queueName: raw,
+            originalQueueName:
+              Object.keys(queue.nameMappings)[0] ?? deriveRmqOriginalQueueName(raw),
+            sessionId: queue.sessionId,
+            consumer: queue.consumer,
+            queueType: "Fallback",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to list pods for RMQ consumer ${queue.consumer} in ${queue.namespace}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return out;
+};
+
+/**
+ * Ephemeral RMQ queues from active queue-splitting sessions.
+ * Merges legacy MirrordRMQSession CRs with MirrordClusterSplitSession.
+ */
+const fetchRmqEphemeralQueues = async (
+  kubeConfig: KubeConfig,
+  splitQueues: SplitSessionQueue[],
+): Promise<RmqEphemeralQueue[]> => {
+  const [legacyQueues, splitSessionQueues] = await Promise.all([
+    fetchLegacyRmqEphemeralQueues(kubeConfig),
+    fetchRmqFromClusterSplitSessions(kubeConfig, splitQueues),
+  ]);
+
+  const seen = new Set<string>();
+  const merged: RmqEphemeralQueue[] = [];
+  for (const queue of [...legacyQueues, ...splitSessionQueues]) {
+    const key = `${queue.sessionId}:${queue.queueName}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(queue);
+  }
+  return merged;
 };
 
 /**
@@ -944,34 +1161,41 @@ app.get(operatorStatusPaths, async (req, res) => {
     });
     return;
   }
+  const kubeConfig = kubeConfigRef;
   try {
-    const [sessions, kafkaTopics, sqsQueues, rmqQueues, pgBranches, previewSessions] = await Promise.all([
-      fetchOperatorSessions(kubeConfigRef).catch((err) => {
+    // Single list of MirrordClusterSplitSessions shared by the kafka/sqs/rmq
+    // fetchers; each derives its kind from the same result.
+    const splitQueuesPromise = fetchClusterSplitQueues(kubeConfig);
+    const [sessions, splitQueues, kafkaTopics, sqsQueues, rmqQueues, pgBranches, previewSessions] = await Promise.all([
+      fetchOperatorSessions(kubeConfig).catch((err) => {
         console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
         return [] as OperatorSession[];
       }),
-      fetchKafkaEphemeralTopics(kubeConfigRef).catch((err) => {
+      splitQueuesPromise,
+      splitQueuesPromise.then((sq) => fetchKafkaEphemeralTopics(kubeConfig, sq)).catch((err) => {
         console.warn("Failed to fetch kafka topics:", err instanceof Error ? err.message : err);
         return [] as KafkaEphemeralTopic[];
       }),
-      fetchSqsEphemeralQueues(kubeConfigRef).catch((err) => {
+      splitQueuesPromise.then((sq) => fetchSqsEphemeralQueues(kubeConfig, sq)).catch((err) => {
         console.warn("Failed to fetch SQS sessions:", err instanceof Error ? err.message : err);
         return [] as SqsEphemeralQueue[];
       }),
-      fetchRmqEphemeralQueues(kubeConfigRef).catch((err) => {
+      splitQueuesPromise.then((sq) => fetchRmqEphemeralQueues(kubeConfig, sq)).catch((err) => {
         console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
         return [] as RmqEphemeralQueue[];
       }),
-      fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
+      fetchPgBranchDatabases(kubeConfig).catch((err) => {
         console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
         return [] as PgBranchDatabase[];
       }),
-      fetchPreviewSessions(kubeConfigRef).catch((err) => {
+      fetchPreviewSessions(kubeConfig).catch((err) => {
         console.warn("Failed to fetch preview sessions:", err instanceof Error ? err.message : err);
         return [] as PreviewSession[];
       }),
     ]);
     const allSessions = sessions;
+    const handledKinds = new Set(["kafka", "sqs", "rmq"]);
+    const otherQueueSplits = splitQueues.filter((q) => !handledKinds.has(q.kind));
     console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
     refreshDynamicPgConnections(pgBranches);
     const response: OperatorStatusResponse = {
@@ -980,6 +1204,7 @@ app.get(operatorStatusPaths, async (req, res) => {
       kafkaTopics,
       sqsQueues,
       rmqQueues,
+      otherQueueSplits,
       pgBranches,
       previewSessions,
       fetchedAt: new Date().toISOString(),
