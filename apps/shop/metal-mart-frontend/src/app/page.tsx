@@ -5,8 +5,9 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
+import DiscountBadge from "@/components/DiscountBadge";
 import ProductImage from "@/components/ProductImage";
-import { getPrimaryImageUrl, type Product } from "@/lib/product";
+import { getPrimaryImageUrl, getDiscountPercent, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -24,6 +25,7 @@ function ProductTile({
 }) {
   const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
+  const discountPercent = getDiscountPercent(product);
 
   const elevatedClass = elevated ? "relative z-30" : "";
 
@@ -35,6 +37,7 @@ function ProductTile({
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
+        {discountPercent && <DiscountBadge percent={discountPercent} size="default" />}
         <div className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -72,6 +75,7 @@ function ProductTile({
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
+        {discountPercent && <DiscountBadge percent={discountPercent} size="default" />}
         <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -110,6 +114,7 @@ function ProductTile({
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
+      {discountPercent && <DiscountBadge percent={discountPercent} size="default" />}
       <div className="relative aspect-square overflow-hidden bg-slate-100">
         {getPrimaryImageUrl(product) ? (
           <ProductImage

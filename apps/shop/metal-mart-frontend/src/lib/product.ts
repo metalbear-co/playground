@@ -24,3 +24,13 @@ export function getImageUrls(product: Product): string[] {
   const single = product.image_url;
   return single ? [single] : [];
 }
+
+/**
+ * Discount percentage for a product, or null if not on sale.
+ * Derived from the product id (no discount field in the inventory API yet)
+ * so a stable subset of products always shows a badge.
+ */
+export function getDiscountPercent(product: Product): number | null {
+  if (product.id % 3 !== 0) return null;
+  return 10 + (product.id % 4) * 5;
+}
