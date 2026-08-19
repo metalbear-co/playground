@@ -225,7 +225,7 @@ async function createOrderDirect(
     baggage,
   });
 
-  return { orderId, status: "confirmed", message: "Your order is on its way!" };
+  return { orderId, status: "order confirmed" };
 }
 
 app.post("/orders", async (req, res) => {
