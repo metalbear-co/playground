@@ -1,12 +1,17 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { Pool } from "pg";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory",
-});
+let dbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory";
+// mirrord branch DB URLs may omit the database name — ensure we connect to "inventory"
+if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
+  dbUrl += "/inventory";
+}
+
+const pool = new Pool({ connectionString: dbUrl });
 
 async function initDb() {
   const client = await pool.connect();
@@ -46,21 +51,6 @@ async function initDb() {
       UPDATE products SET image_urls = jsonb_build_array(image_url)
       WHERE (image_urls IS NULL OR image_urls = '[]'::jsonb) AND image_url IS NOT NULL
     `);
-    const { rows } = await client.query("SELECT COUNT(*) FROM products");
-    if (parseInt(rows[0].count, 10) === 0) {
-      // image_urls: Cloudinary public IDs. T-shirts have [front, back]; stickers have [single].
-      await client.query(`
-        INSERT INTO products (name, description, price_cents, stock, image_urls, is_new) VALUES
-        ('Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 200, '["team_work_makes_the_Dream_work_ljp4we"]', true),
-        ('Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 50, '["team_Work_makes_the_Dream_Work_-_front_w5qdnb", "team_work_makes_the_dream_work_-_back_onanux"]', true),
-        ('Mind The Gap Sticker', 'MetalBear Mind The Gap sticker', 499, 200, '["Mind_the_Gap_pkyuc6"]', false),
-        ('Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2499, 50, '["Mind_the_gap_-_Front_anazkh", "Mind_the_gap_-_Back_oh9jyf"]', false),
-        ('Increase Velocity Sticker', 'MetalBear Increase Velocity sticker', 499, 200, '["Increase_velocity_mfsov2"]', false),
-        ('Increase Velocity T-Shirt', 'MetalBear Increase Velocity tee — front and back designs', 2499, 50, '["Increase_Velocity_-_Front_c2dgw6", "Increase_Velocity_-_Back_ywhxi6"]', false),
-        ('Cloudboat Willie T-Shirt', 'MetalBear Cloudboat Willie tee — front and back designs', 2499, 50, '["Cloudboat_Willie_-_Front_wpgqi2", "Cloudboat_Willie_-_Back_z05dna"]', false),
-        ('A mirrord Is Born T-Shirt', 'MetalBear A mirrord Is Born tee — front and back designs', 2499, 50, '["A_mirrord_is_born_-_Front_xy8l8p", "A_mirrord_is_born_-_Back_bytwh2"]', false)
-      `);
-    }
   } finally {
     client.release();
   }
@@ -110,6 +100,62 @@ app.get("/products/:id", async (req, res) => {
   }
 });
 
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.patch("/products/:id/stock", writeLimiter, async (req, res) => {
+  const id = parseInt(req.params.id as string, 10);
+  const { stock } = req.body;
+  if (isNaN(id) || typeof stock !== "number" || stock < 0) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  try {
+    const { rows } = await pool.query(
+      "UPDATE products SET stock = $1 WHERE id = $2 RETURNING stock",
+      [stock, id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    res.json({ stock: rows[0].stock });
+  } catch (err) {
+    console.error("Error updating stock:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/products/:id/reserve", writeLimiter, async (req, res) => {
+  console.log("Reserve request headers:", JSON.stringify(req.headers, null, 2));
+  console.log("Reserve request body:", JSON.stringify(req.body, null, 2));
+  const id = parseInt(req.params.id as string, 10);
+  const { quantity = 1 } = req.body;
+  if (isNaN(id) || typeof quantity !== "number" || quantity < 1) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  try {
+    const before = await pool.query("SELECT stock FROM products WHERE id = $1", [id]);
+    const stockBefore = before.rows.length > 0 ? before.rows[0].stock : "N/A";
+    console.log(`[Inventory] Product ${id} stock BEFORE reserve: ${stockBefore}`);
+
+    const { rows } = await pool.query(
+      "UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1 RETURNING stock",
+      [quantity, id]
+    );
+    if (rows.length === 0) {
+      return res.status(409).json({ error: "Insufficient stock or product not found" });
+    }
+    console.log(`[Inventory] Product ${id} stock AFTER reserve: ${rows[0].stock} (reserved ${quantity})`);
+    res.json({ reserved: true, remaining: rows[0].stock });
+  } catch (err) {
+    console.error("Error reserving stock:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.post("/products/:id/check-stock", async (req, res) => {
   console.log("Check-stock request headers:", JSON.stringify(req.headers, null, 2));
   console.log("Check-stock request body:", JSON.stringify(req.body, null, 2));
@@ -133,6 +179,7 @@ app.post("/products/:id/check-stock", async (req, res) => {
 
 async function main() {
   await initDb();
+  console.log(`[Inventory] DATABASE_URL: ${process.env.DATABASE_URL || "not set (using default)"}`);
   app.listen(port, "0.0.0.0", () => {
     console.log(`Inventory service listening on port ${port}`);
   });

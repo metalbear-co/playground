@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kafka-demo
+
+resources:
+  - ./base/namespace.yaml
+  - ./base/kafka-property-list.yaml
+  - ./base/gateway
+  - ./base/service-a
+  - ./base/service-b
+  - ./base/service-c
+
+commonLabels:
+  env: playground
+  team: kafka-demo

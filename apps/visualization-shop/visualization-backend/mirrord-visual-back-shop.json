@@ -1,0 +1,21 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "visualization-shop",
+    "path": {
+      "deployment": "visualization-shop-backend"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
+        }
+      },
+      "outgoing": true
+    }
+  }
+
+}

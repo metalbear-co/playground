@@ -1,0 +1,34 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "kafka-demo-event",
+    "path": {
+      "deployment": "service-c-ev"
+    }
+  },
+  "feature": {
+    "network": {
+      "outgoing": true
+    },
+    "split_queues": {
+      "relay": {
+        "queue_type": "Kafka",
+        "message_filter": {
+          "baggage": ".*mirrord-session={{key}}.*"
+        }
+      }
+    },"db_branches": [
+    {
+      "type": "pg",
+      "ttl_secs": 30,    
+      "version": "16.0",
+      "connection": {
+        "url": "DATABASE_URL"
+      },
+      "copy": {
+        "mode": "schema"                 
+      }
+    }
+   ]
+  }
+}

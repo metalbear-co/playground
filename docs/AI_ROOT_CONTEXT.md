@@ -28,7 +28,7 @@
 ## Apps (source: `apps/`)
 
 - **`apps/ip-visit/`** – IP visit counter demo: ip-info, ip-info-grpc, ip-visit-counter, ip-visit-frontend, ip-visit-consumer (Kafka), ip-visit-sqs-consumer. Uses Redis, optional SQS/Kafka.
-- **`apps/shop/`** – **MetalMart** ecommerce demo: metal-mart-frontend (Next.js), inventory-service, order-service, payment-service, delivery-service. Uses Postgres + Kafka (+ Temporal for checkout/delivery workflows). See `apps/shop/README.md`.
+- **`apps/shop/`** – **MetalMart** ecommerce demo: metal-mart-frontend (Next.js), inventory-service, order-service, payment-service, delivery-service. Uses Postgres + Kafka. See `apps/shop/README.md`.
 - **`apps/visualization/`** – visualization-frontend + visualization-backend.
 
 Manifests that deploy these live under **`manifests/`** (e.g. `manifests/shop`, `manifests/ip-visit`, `manifests/visualization`).
@@ -46,7 +46,7 @@ Manifests that deploy these live under **`manifests/`** (e.g. `manifests/shop`, 
 
 1. **Bootstrap (one-time or when changing platform config):**  
    `kubectl apply -k overlays/gke`  
-   This applies Argo CD, the Gateway, namespaces, **Argo Applications** (e.g. shop, ip-visit, visualization, shared-infra, temporal), and GKE-specific resources (HTTPRoutes, HealthCheckPolicies, etc.).
+   This applies Argo CD, the Gateway, namespaces, **Argo Applications** (e.g. shop, ip-visit, visualization, shared-infra), and GKE-specific resources (HTTPRoutes, HealthCheckPolicies, etc.).
 
 2. **App content:**  
    Argo CD syncs from **`metalbear-co/playground`** **`main`** (or configured branch). Each Application points at a path under **`manifests/`** (e.g. `manifests/shop`). So merging to `main` updates what Argo syncs; the overlay only defines *that* the app exists and how it's exposed (routes, health checks).

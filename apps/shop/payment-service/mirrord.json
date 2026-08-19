@@ -1,18 +1,19 @@
 {
+  "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "namespace": "shop",
     "path": {
       "deployment": "payment-service"
     }
   },
-  "feature": { 
+  "feature": {
     "network": {
       "outgoing": true
     },
     "split_queues": {
       "payments": {
         "queue_type": "SQS",
-        "jq_filter": ".Body | fromjson | .customer_email | test(\"metalbear\\\\.com\")"
+        "jq_filter": ".Body | fromjson | .jwt | split(\".\") | .[1] | gsub(\"-\"; \"+\") | gsub(\"_\"; \"/\") | . as $s | $s + (\"=\" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .customer_email | test(\"metalbear\\\\.com\")"
       }
     }
   }

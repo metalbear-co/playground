@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trade-feed
+spec:
+  selector:
+    matchLabels:
+      app: trade-feed
+  template:
+    metadata:
+      labels:
+        app: trade-feed
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-trade-feed:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: UDP_PORT
+              value: "9999"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - containerPort: 9999
+              protocol: UDP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

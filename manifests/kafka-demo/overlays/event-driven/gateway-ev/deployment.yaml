@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-ev
+  labels:
+    app: gateway-ev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway-ev
+  template:
+    metadata:
+      labels:
+        app: gateway-ev
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-kafka-demo-gateway:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            # Which context formats the OTel propagator injects/extracts. The
+            # `baggage` entry is what carries mirrord-session across every hop.
+            - name: OTEL_PROPAGATORS
+              value: "tracecontext,baggage"
+            - name: KAFKA_ADDRESS
+              value: "kafka.infra.svc.cluster.local:9092"
+            # Event-driven topics (kafka-demo.ev.*), parallel to the base demo.
+            - name: FIRST_TOPIC
+              value: "kafka-demo.ev.a"
+            - name: TRACE_TOPIC
+              value: "kafka-demo.ev.trace"
+            - name: TRACE_GROUP_ID
+              value: "kafka-demo-gateway-ev"
+            # Served under its own sub-path so it does not collide with the base UI.
+            - name: BASE_PATH
+              value: "/kafka-demo-ev"
+            # Serve the 4-stage A -> B(DB) -> CronJob Z -> C page.
+            - name: UI_VARIANT
+              value: "event-driven"
+            # Interactive CronJob Z: shows the schedule/controls, activity log,
+            # live DB-state panel, and Service C counter in the UI, and runs the
+            # cron in-process. The k8s CronJob Z resource is suspended so this is
+            # the single driver (no double-processing).
+            - name: CRON_ENABLED
+              value: "true"
+            - name: CRON_INTERVAL_SECS
+              value: "15"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-demo-db
+                  key: url
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

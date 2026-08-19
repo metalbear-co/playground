@@ -1,0 +1,226 @@
+# Daily health check of the live MetalMart shop at playground.metalbear.dev/shop.
+# Verifies frontend + 4 API endpoints with per-check retry (1 retry, 30s backoff).
+# Slack alerts only on failure or red->green recovery to avoid alert fatigue.
+# Also sweeps stale daily-check-* branches left behind by preview-verification.yml
+# if its runner was killed before cleanup could run.
+name: Shop Health Check
+
+on:
+  schedule:
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  stale-branch-sweep:
+    name: Sweep stale daily-check branches
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete daily-check-* branches older than 24h
+        run: |
+          set -euo pipefail
+          git fetch --prune origin '+refs/heads/daily-check-*:refs/remotes/origin/daily-check-*' --quiet || true
+
+          THRESHOLD=$(date -u -d '24 hours ago' +%s)
+          NOW=$(date +%s)
+          deleted=0
+          failed=0
+          scanned=0
+          while read -r ref ts; do
+            [ -z "$ref" ] && continue
+            branch=${ref#origin/}
+            scanned=$((scanned + 1))
+            age_hours=$(( (NOW - ts) / 3600 ))
+            if [ "$ts" -lt "$THRESHOLD" ]; then
+              echo "Deleting stale branch: $branch (age: ${age_hours}h)"
+              if git push origin --delete "$branch"; then
+                echo "  ✓ deleted"
+                deleted=$((deleted + 1))
+              else
+                echo "  ✗ failed to delete $branch" >&2
+                failed=$((failed + 1))
+              fi
+            else
+              echo "Keeping: $branch (age: ${age_hours}h)"
+            fi
+          done < <(git for-each-ref --format='%(refname:short) %(committerdate:unix)' 'refs/remotes/origin/daily-check-*')
+          echo ""
+          echo "Scanned: $scanned, deleted: $deleted, failed: $failed"
+          [ "$failed" -eq 0 ]
+
+  health-check:
+    name: Run health checks
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 5
+    outputs:
+      overall: ${{ steps.run_checks.outputs.overall }}
+      failed_list: ${{ steps.run_checks.outputs.failed_list }}
+    steps:
+      - name: Run all checks with retry
+        id: run_checks
+        run: |
+          set +e
+          SHOP=https://playground.metalbear.dev/shop
+          ORDER_ID=""
+          : > /tmp/failed.txt
+
+          check() {
+            local name=$1
+            local fn=$2
+            for attempt in 1 2; do
+              if $fn; then
+                echo "✓ $name (attempt $attempt)"
+                return 0
+              fi
+              echo "✗ $name attempt $attempt failed"
+              [ "$attempt" -eq 1 ] && sleep 30
+            done
+            echo "$name" >> /tmp/failed.txt
+            return 1
+          }
+
+          check_frontend() {
+            body=$(curl -sSf --max-time 20 "$SHOP") || return 1
+            echo "$body" | grep -q '<html'
+          }
+
+          check_products() {
+            resp=$(curl -sSf --max-time 20 "$SHOP/api/products") || return 1
+            count=$(echo "$resp" | jq 'length' 2>/dev/null) || return 1
+            [ "$count" -ge 1 ]
+          }
+
+          check_banner() {
+            resp=$(curl -sSf --max-time 20 "$SHOP/api/banner") || return 1
+            echo "$resp" | jq -e '.text' >/dev/null 2>&1
+          }
+
+          check_create_order() {
+            resp=$(curl -sSf --max-time 30 -X POST "$SHOP/api/orders" \
+              -H 'Content-Type: application/json' \
+              -d '{"items":[{"productId":1,"quantity":1}],"total_cents":1999,"customer_email":"health-check-bot@metalbear.dev"}') || return 1
+            oid=$(echo "$resp" | jq -e '.orderId' 2>/dev/null) || return 1
+            status=$(echo "$resp" | jq -r '.status' 2>/dev/null)
+            [ "$status" = "confirmed" ] || return 1
+            ORDER_ID=$oid
+            return 0
+          }
+
+          check_verify_order() {
+            [ -n "$ORDER_ID" ] || return 1
+            resp=$(curl -sSf --max-time 20 "$SHOP/api/orders/$ORDER_ID") || return 1
+            echo "$resp" | jq -e '.status == "confirmed"' >/dev/null 2>&1
+          }
+
+          check frontend check_frontend
+          check products check_products
+          check banner check_banner
+          check create_order check_create_order
+          check verify_order check_verify_order
+
+          if [ -s /tmp/failed.txt ]; then
+            failed_list=$(paste -sd, /tmp/failed.txt)
+            echo "overall=fail" >> "$GITHUB_OUTPUT"
+            echo "failed_list=$failed_list" >> "$GITHUB_OUTPUT"
+            echo ""
+            echo "❌ Failed checks: $failed_list"
+            exit 1
+          else
+            echo "overall=pass" >> "$GITHUB_OUTPUT"
+            echo "failed_list=" >> "$GITHUB_OUTPUT"
+            echo ""
+            echo "✅ All checks passed"
+          fi
+
+  notify:
+    name: Slack notify on failure or recovery
+    needs: health-check
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Look up previous completed run conclusion
+        id: prev
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          prev=$(gh run list \
+            --repo ${{ github.repository }} \
+            --workflow=health-check.yml \
+            --status completed \
+            --limit 1 \
+            --json conclusion \
+            --jq '.[0].conclusion // "none"')
+          echo "conclusion=$prev" >> "$GITHUB_OUTPUT"
+          echo "Previous completed run conclusion: $prev"
+
+      - name: Decide whether to notify
+        id: decide
+        run: |
+          overall="${{ needs.health-check.outputs.overall }}"
+          prev="${{ steps.prev.outputs.conclusion }}"
+          if [ "$overall" = "fail" ]; then
+            echo "action=failure" >> "$GITHUB_OUTPUT"
+          elif [ "$overall" = "pass" ] && [ "$prev" = "failure" ]; then
+            echo "action=recovered" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post failure to Slack
+        if: steps.decide.outputs.action == 'failure'
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                { "type": "header", "text": { "type": "plain_text", "text": "🚨 Shop Health Check Failed" } },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Target:*\nhttps://playground.metalbear.dev/shop" },
+                    { "type": "mrkdwn", "text": "*Failed checks:*\n`${{ needs.health-check.outputs.failed_list }}`" }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Full logs>" }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Post recovery to Slack
+        if: steps.decide.outputs.action == 'recovered'
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                { "type": "header", "text": { "type": "plain_text", "text": "✅ Shop Health Check Recovered" } },
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": "All checks passing again at https://playground.metalbear.dev/shop" }
+                },
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Run details>" }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

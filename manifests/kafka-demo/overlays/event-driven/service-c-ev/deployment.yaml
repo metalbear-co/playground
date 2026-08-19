@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-c-ev
+  labels:
+    app: service-c-ev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-c-ev
+  template:
+    metadata:
+      labels:
+        app: service-c-ev
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-kafka-demo-service-c:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: OTEL_PROPAGATORS
+              value: "tracecontext,baggage"
+            - name: KAFKA_ADDRESS
+              value: "kafka.infra.svc.cluster.local:9092"
+            # Consumes the events CronJob Z emits.
+            - name: KAFKA_TOPIC
+              value: "kafka-demo.ev.c"
+            - name: NEXT_TOPIC
+              value: ""
+            - name: TRACE_TOPIC
+              value: "kafka-demo.ev.trace"
+            - name: KAFKA_CONSUMER_GROUP
+              value: "service-c-ev"
+            - name: STAGE
+              value: "c"
+            - name: SERVICE_NAME
+              value: "service-c"
+            # Terminal service: persist the processed-message counter in Postgres
+            # (kafka_demo_click_counter) — same as the base demo's service-c. Reuses
+            # the base demo's DB secret.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-demo-db
+                  key: url
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

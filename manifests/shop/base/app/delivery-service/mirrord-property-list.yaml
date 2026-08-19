@@ -1,0 +1,18 @@
+# Kafka broker connection for mirrord queue splitting on delivery-service.
+# Replaces MirrordKafkaClientConfig (shop-kafka-config in mirrord namespace).
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: shop-kafka-connection
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.infra.svc.cluster.local:9092
+    - name: client.id
+      value: mirrord-operator-shop
+    - name: session.timeout.ms
+      value: "30000"
+    - name: max.poll.interval.ms
+      value: "60000"
+    - name: partition.assignment.strategy
+      value: range

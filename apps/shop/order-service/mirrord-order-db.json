@@ -1,0 +1,34 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-service"
+    }
+  },
+  "feature": {
+    "fs": "read",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
+        }
+      },
+      "outgoing":true
+    },"db_branches": [
+    {
+      "type": "pg",
+      "ttl_secs": 30,    
+      "version": "16.0",
+      "connection": {
+        "url": "DATABASE_URL"
+      },
+      "copy": {
+        "mode": "schema"                 
+      }
+    }
+  ]
+  
+  }
+}

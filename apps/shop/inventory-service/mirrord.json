@@ -1,4 +1,5 @@
 {
+  "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "path": "deploy/inventory-service",
     "namespace": "shop"
@@ -8,26 +9,23 @@
       "incoming": {
         "mode": "steal",
         "http_filter": {
-          "header_filter": "X-PG-Tenant: dev"
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
         }
       },
       "outgoing": true
     },
     "db_branches": [
       {
-        "id": "metal-mart-dev",
+        "id": "{{key}}01-branch-db",
         "type": "pg",
-        "version": "16",
-        "ttl_secs": 30,   
+        "ttl_secs": 30,
+        "version": "16.0",
         "connection": {
-          "url": {
-            "type": "env",
-            "variable": "DATABASE_URL"
-          }
+          "url": "DATABASE_URL"
         },
-      "copy": {
-        "mode": "schema"                   
-      }
+        "copy": {
+          "mode": "all"
+        }
       }
     ]
   }

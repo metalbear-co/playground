@@ -54,12 +54,13 @@ export const architectureZones: ArchitectureZone[] = [
       "payment-service",
       "receipt-service",
       "delivery-service",
+      "notifications-service",
       "kafka",
       "sqs",
+      "rabbitmq",
       "postgres-inventory",
       "postgres-orders",
       "postgres-deliveries",
-      // "temporal",
       "mirrord-operator",
       "mirrord-agent",
     ],
@@ -82,7 +83,7 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "ingress",
     label: "Ingress + Service",
     stack: "GKE",
-    description: "Public entrypoint routing traffic to the Metal Mart frontend.",
+    description: "Public entrypoint routing traffic to the MetalMart frontend.",
     group: "infra",
     zone: "cluster",
   },
@@ -105,8 +106,8 @@ export const architectureNodes: ArchitectureNode[] = [
   {
     id: "mirrord-layer",
     label: "mirrord-layer",
-    stack: "LD_PRELOAD",
-    description: "Intercepts libc calls from the local process.",
+    stack: "LD_PRELOAD / DLL injection",
+    description: "Intercepts libc (Linux/macOS) and kernel32 (Windows) calls from the local process.",
     group: "mirrord",
     zone: "local",
   },
@@ -139,8 +140,8 @@ export const architectureNodes: ArchitectureNode[] = [
   {
     id: "order-service",
     label: "order-service",
-    stack: "Node.js / Express / Temporal",
-    description: "Order orchestration with optional durable workflows.",
+    stack: "Node.js / Express",
+    description: "Order orchestration: stock check, payment, Kafka emit, notifications.",
     group: "service",
     repoPath: "shop/order-service/",
     zone: "cluster",
@@ -173,6 +174,15 @@ export const architectureNodes: ArchitectureNode[] = [
     zone: "cluster",
   },
   {
+    id: "notifications-service",
+    label: "notifications-service",
+    stack: "Node.js / Express",
+    description: "RabbitMQ consumer for order notification messages after checkout.",
+    group: "service",
+    repoPath: "shop/notifications-service/",
+    zone: "cluster",
+  },
+  {
     id: "kafka",
     label: "Kafka Producer",
     stack: "orders",
@@ -189,11 +199,19 @@ export const architectureNodes: ArchitectureNode[] = [
     zone: "cluster",
   },
   {
+    id: "rabbitmq",
+    label: "RabbitMQ",
+    stack: "order-notifications",
+    description: "Delivers order notifications to notifications-service.",
+    group: "queue",
+    zone: "cluster",
+  },
+  {
     id: "postgres-inventory",
     label: "PostgreSQL",
     stack: "Inventory DB",
     description: "Stores product catalog and stock levels.",
-    group: "data",
+    group: "infra",
     zone: "cluster",
   },
   {
@@ -201,7 +219,7 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "PostgreSQL",
     stack: "Orders DB",
     description: "Stores order records and status.",
-    group: "data",
+    group: "infra",
     zone: "cluster",
   },
   {
@@ -209,17 +227,9 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "PostgreSQL",
     stack: "Deliveries DB",
     description: "Stores delivery tracking records.",
-    group: "data",
+    group: "infra",
     zone: "cluster",
   },
-  // {
-  //   id: "temporal",
-  //   label: "Temporal",
-  //   stack: "Workflow engine",
-  //   description: "Durable workflow orchestration for the checkout flow.",
-  //   group: "infra",
-  //   zone: "cluster",
-  // },
 ];
 
 export const architectureEdges: ArchitectureEdge[] = [
@@ -293,13 +303,20 @@ export const architectureEdges: ArchitectureEdge[] = [
     label: "Emit order event",
     intent: "data",
   },
-  // {
-  //   id: "order-to-temporal",
-  //   source: "order-service",
-  //   target: "temporal",
-  //   label: "Checkout workflow",
-  //   intent: "control",
-  // },
+  {
+    id: "order-to-rabbitmq",
+    source: "order-service",
+    target: "rabbitmq",
+    label: "Publish notification",
+    intent: "data",
+  },
+  {
+    id: "rabbitmq-to-notifications",
+    source: "rabbitmq",
+    target: "notifications-service",
+    label: "Consume messages",
+    intent: "data",
+  },
   {
     id: "order-to-postgres",
     source: "order-service",
@@ -363,8 +380,10 @@ export const groupPalette: Record<
 > = {
   entry: { background: "#FFFFFF", border: "#0F172A", text: "#111827" },
   infra: { background: "#FFFFFF", border: "#6B7280", text: "#111827" },
-  service: { background: "#FBF8F2", border: "#EA580C", text: "#111827" },
+  /** Core services — amber/yellow border (same hue as the former “Queues & Streams” accent). */
+  service: { background: "#FFFBEB", border: "#CA8A04", text: "#111827" },
   data: { background: "#FFFFFF", border: "#DC2626", text: "#111827" },
-  queue: { background: "#FFFFFF", border: "#CA8A04", text: "#111827" },
+  /** Kafka, SQS, RabbitMQ — same as `infra` (no separate “Queues & Streams” legend). */
+  queue: { background: "#FFFFFF", border: "#6B7280", text: "#111827" },
   mirrord: { background: "#EEF2FF", border: "#4F46E5", text: "#111827" },
 };

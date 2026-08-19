@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 type TableListResponse = {
   dbId: string;
@@ -87,6 +87,50 @@ export default function DatabaseViewerDialog({
   const handleTableSelect = (table: string) => {
     setSelectedTable(table);
     setPage(1);
+  };
+
+  const [editingCell, setEditingCell] = useState<{
+    rowIndex: number;
+    column: string;
+  } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editRef = useRef<HTMLInputElement>(null);
+
+  const handleCellDoubleClick = (
+    rowIndex: number,
+    column: string,
+    currentValue: unknown,
+  ) => {
+    if (column !== "stock") return;
+    setEditingCell({ rowIndex, column });
+    setEditValue(String(currentValue ?? ""));
+    setTimeout(() => editRef.current?.focus(), 0);
+  };
+
+  const handleCellSave = async () => {
+    if (!editingCell || !tableData) return;
+    const row = tableData.rows[editingCell.rowIndex];
+    const rowId = row["id"] as number;
+    if (rowId === undefined) return;
+
+    try {
+      const res = await fetch(`${backendUrl}/db/${dbId}/update-cell`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableName: selectedTable,
+          column: editingCell.column,
+          value: Number(editValue),
+          rowId,
+        }),
+      });
+      if (res.ok && selectedTable) {
+        fetchTableData(selectedTable, page);
+      }
+    } catch {
+      // silently fail
+    }
+    setEditingCell(null);
   };
 
   const formatCellValue = (value: unknown): string => {
@@ -223,10 +267,30 @@ export default function DatabaseViewerDialog({
                           {tableData.columns.map((col) => (
                             <td
                               key={col}
-                              className="px-4 py-2 whitespace-nowrap text-gray-800 max-w-xs truncate"
+                              className={`px-4 py-2 whitespace-nowrap text-gray-800 max-w-xs truncate ${col === "stock" ? "cursor-pointer" : ""}`}
                               title={formatCellValue(row[col])}
+                              onDoubleClick={() =>
+                                handleCellDoubleClick(i, col, row[col])
+                              }
                             >
-                              {formatCellValue(row[col])}
+                              {editingCell?.rowIndex === i &&
+                              editingCell?.column === col ? (
+                                <input
+                                  ref={editRef}
+                                  type="number"
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleCellSave();
+                                    if (e.key === "Escape")
+                                      setEditingCell(null);
+                                  }}
+                                  onBlur={handleCellSave}
+                                  className="w-20 rounded border border-blue-400 px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              ) : (
+                                formatCellValue(row[col])
+                              )}
                             </td>
                           ))}
                         </tr>

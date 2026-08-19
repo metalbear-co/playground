@@ -1,0 +1,29 @@
+# Kafka queue splitting for service-c (mirrord operator >= 3.170.0).
+# Queue id "relay" must match feature.split_queues in apps/kafka-demo/service-c/mirrord.json.
+# When a developer runs service-c locally with mirrord, messages whose `baggage`
+# header matches their session are routed to their laptop; everything else stays
+# on the in-cluster service-c.
+apiVersion: queues.mirrord.metalbear.co/v1
+kind: MirrordSplitConfig
+metadata:
+  name: service-c-split
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: service-c
+  restart:
+    timeout: 180
+  queues:
+    - id: relay
+      kind: kafka
+      clientConfig: kafka-demo-connection
+      appConfig:
+        topic:
+          - env: KAFKA_TOPIC
+            containers:
+              - main
+        groupId:
+          - env: KAFKA_CONSUMER_GROUP
+            containers:
+              - main

@@ -1,5 +1,7 @@
 {
-  "target": {
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+   "target": {
+    "namespace": "shop",
     "path": {
       "deployment": "delivery-service"
     }
@@ -13,7 +15,7 @@
       "orders": {
         "queue_type": "Kafka",
         "message_filter": {
-          "x-pg-tenant": "dev"
+          "baggage": ".*mirrord-session={{key}}.*"
         }
       }
     }

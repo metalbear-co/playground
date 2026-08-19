@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import { AppsV1Api, CoreV1Api, KubeConfig } from "@kubernetes/client-node";
@@ -277,26 +278,34 @@ const knownDeployments: KnownDeployment[] = [
 const defaultNamespace = process.env.WATCH_NAMESPACE || "default";
 const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
 
+const K8S_SERVICE_ACCOUNT_TOKEN_PATH =
+  "/var/run/secrets/kubernetes.io/serviceaccount/token";
+
 /**
- * Attempt to load Kubernetes credentials (preferring in-cluster config, falling back to local kubeconfig).
+ * In-cluster config only when pod SA exists; otherwise ~/.kube/config.
+ * loadFromCluster() does not throw — without this guard, local runs use https://undefined:undefined.
  */
 const loadKubeConfiguration = (): KubeConfig | null => {
   const kubeConfig = new KubeConfig();
-  try {
+  const inCluster =
+    Boolean(process.env.KUBERNETES_SERVICE_HOST) &&
+    fs.existsSync(K8S_SERVICE_ACCOUNT_TOKEN_PATH);
+
+  if (inCluster) {
     kubeConfig.loadFromCluster();
     console.log("Loaded in-cluster Kubernetes configuration");
     return kubeConfig;
-  } catch (clusterError) {
-    try {
-      kubeConfig.loadFromDefault();
-      console.log("Loaded local kubeconfig");
-      return kubeConfig;
-    } catch (localError) {
-      console.warn(
-        "Kubernetes configuration not found; automatic snapshot updates disabled.",
-      );
-      return null;
-    }
+  }
+
+  try {
+    kubeConfig.loadFromDefault();
+    console.log("Loaded local kubeconfig");
+    return kubeConfig;
+  } catch {
+    console.warn(
+      "Kubernetes configuration not found; automatic snapshot updates disabled.",
+    );
+    return null;
   }
 };
 

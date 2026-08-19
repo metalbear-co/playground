@@ -1,0 +1,22 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "metal-mart-frontend"
+    }
+  },
+  "feature": {
+    "env": {
+      "exclude": "NODE_ENV",
+      "override": {
+        "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
+      }
+    },
+    "network": {
+      "dns": true,
+      "outgoing": {
+        "ignore_localhost": true
+      }
+    }
+  }
+}

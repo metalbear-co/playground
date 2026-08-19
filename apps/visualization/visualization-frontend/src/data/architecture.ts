@@ -98,8 +98,8 @@ export const architectureNodes: ArchitectureNode[] = [
   {
     id: "mirrord-layer",
     label: "mirrord-layer",
-    stack: "LD_PRELOAD",
-    description: "Intercepts libc calls from the local process.",
+    stack: "LD_PRELOAD / DLL injection",
+    description: "Intercepts libc (Linux/macOS) and kernel32 (Windows) calls from the local process.",
     group: "mirrord",
     zone: "local",
   },

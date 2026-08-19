@@ -23,6 +23,8 @@ spec:
                 secretKeyRef:
                   name: postgres-credentials
                   key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
               protocol: TCP
@@ -40,7 +42,8 @@ spec:
               memory: 256Mi
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: postgres-data
         - name: init-scripts
           configMap:
             name: postgres-init

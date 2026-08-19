@@ -1,0 +1,45 @@
+{
+   "key": "changed-responce",
+  "target": {
+    "namespace": "kafka-demo-event",
+    "path": {
+      "deployment": "gateway-ev"
+    }
+  },
+  "feature": {
+    "preview": {
+      "idle": {
+        "start_idle": true,
+        "sleep_after_secs": 300,
+        "wake_timeout_secs": 120
+      },
+      "image": "ghcr.io/metalbear-co/playground-kafka-demo-gateway:latest",
+      "ttl_mins": 120,
+      "creation_timeout_secs": 600
+    },
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
+        }
+      }
+    },
+    "db_branches": [
+      {
+        "type": "pg",
+        "version": "16",
+        "ttl_secs": 300,
+        "connection": {
+          "url": {
+            "type": "env",
+            "variable": "DATABASE_URL"
+          }
+        },
+        "copy": {
+          "mode": "schema"
+        }
+      }
+    ]
+  }
+}

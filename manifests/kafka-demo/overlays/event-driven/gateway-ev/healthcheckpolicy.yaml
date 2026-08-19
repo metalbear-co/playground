@@ -1,0 +1,21 @@
+# GKE Gateway backend health check for the event-driven gateway service. Points at
+# /health (which stays at root), not "/" (which 404s under BASE_PATH=/kafka-demo-ev).
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: gateway-ev-healthcheck
+spec:
+  default:
+    checkIntervalSec: 10
+    config:
+      httpHealthCheck:
+        port: 80
+        requestPath: /health
+      type: HTTP
+    healthyThreshold: 1
+    timeoutSec: 5
+    unhealthyThreshold: 3
+  targetRef:
+    group: ""
+    kind: Service
+    name: gateway-ev

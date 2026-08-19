@@ -1,0 +1,19 @@
+# Broker connection for mirrord RabbitMQ queue splitting (cluster properties only).
+# Requires: helm --set operator.rmqSplitting=true on mirrord-operator.
+# See: https://metalbear.com/mirrord/docs/sharing-the-cluster/queue-splitting (RabbitMQ tab)
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: shop-rabbitmq-cluster
+spec:
+  properties:
+    - name: host
+      value: rabbitmq.infra.svc.cluster.local
+    - name: port
+      value: "5672"
+    - name: username
+      value: shop
+    - name: password
+      value: playground
+    - name: vhost
+      value: /

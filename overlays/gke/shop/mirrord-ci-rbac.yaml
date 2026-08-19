@@ -17,7 +17,7 @@ rules:
     resources: ["mirrordclustersessions"]
     verbs: ["get", "list", "watch", "create", "delete"]
   - apiGroups: ["queues.mirrord.metalbear.co"]
-    resources: ["mirrordkafkaephemeraltopics", "mirrordsqssessions"]
+    resources: ["mirrordkafkaephemeraltopics", "mirrordclustersplitsessions", "mirrordsqssessions"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["policies.mirrord.metalbear.co"]
     resources: ["mirrordpolicies"]

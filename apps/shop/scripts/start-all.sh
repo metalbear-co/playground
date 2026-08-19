@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Start everything: Temporal, Postgres, Kafka, and all shop app services.
+# Start everything: Postgres, Kafka, RabbitMQ, and all shop app services.
 # Run from repo root: ./apps/shop/scripts/start-all.sh
 # Or from apps/shop: ./scripts/start-all.sh
 # Requires: Docker Desktop, Node.js, npm
-#
-# To use direct checkout at runtime: set USE_TEMPORAL=false when running order-service.
 
 set -e
 
@@ -16,48 +14,17 @@ ORDER_DIR="${SHOP_DIR}/order-service"
 INVENTORY_DIR="${SHOP_DIR}/inventory-service"
 PAYMENT_DIR="${SHOP_DIR}/payment-service"
 DELIVERY_DIR="${SHOP_DIR}/delivery-service"
+NOTIFICATIONS_DIR="${SHOP_DIR}/notifications-service"
 FRONTEND_DIR="${SHOP_DIR}/metal-mart-frontend"
 
 NETWORK="shop-network"
-TEMPORAL_PG="temporal-postgresql"
-TEMPORAL_SVC="temporal"
-TEMPORAL_UI="temporal-ui"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
+RABBIT_CONTAINER="shop-rabbitmq"
 
 # --- Docker: network ---
 echo "Creating network ${NETWORK}..."
 docker network create "${NETWORK}" 2>/dev/null || true
-
-# --- Docker: Temporal Postgres ---
-echo "Starting Temporal Postgres..."
-docker run -d --name "${TEMPORAL_PG}" --network "${NETWORK}" \
-  -e POSTGRES_PASSWORD=temporal -e POSTGRES_USER=temporal \
-  postgres:15 2>/dev/null || docker start "${TEMPORAL_PG}"
-
-echo "Waiting for Temporal Postgres (10s)..."
-sleep 10
-
-# --- Docker: Temporal server ---
-echo "Starting Temporal server (port 7233)..."
-docker run -d --name "${TEMPORAL_SVC}" --network "${NETWORK}" -p 7233:7233 \
-  -e DB=postgres12 -e DB_PORT=5432 -e POSTGRES_USER=temporal -e POSTGRES_PWD=temporal \
-  -e POSTGRES_SEEDS="${TEMPORAL_PG}" \
-  temporalio/auto-setup:1.24.2 2>/dev/null || docker start "${TEMPORAL_SVC}"
-
-echo "Waiting for Temporal (20s)..."
-sleep 20
-
-echo "Registering namespace 'temporal'..."
-docker run --rm --network "${NETWORK}" \
-  -e TEMPORAL_ADDRESS="${TEMPORAL_SVC}:7233" -e TEMPORAL_CLI_ADDRESS="${TEMPORAL_SVC}:7233" \
-  temporalio/admin-tools:1.24.2 \
-  tctl --namespace default namespace register temporal --description "Shop" 2>/dev/null || true
-
-# --- Docker: Temporal Web UI ---
-echo "Starting Temporal Web UI (port 8080)..."
-docker run -d --name "${TEMPORAL_UI}" --network "${NETWORK}" -p 8080:8080 \
-  -e TEMPORAL_ADDRESS="${TEMPORAL_SVC}:7233" temporalio/ui:2.22.2 2>/dev/null || docker start "${TEMPORAL_UI}"
 
 # --- Docker: Shop Postgres (orders, inventory, deliveries) ---
 echo "Starting Shop Postgres (port 5432)..."
@@ -88,6 +55,18 @@ fi
 echo "Waiting for Kafka (10s)..."
 sleep 10
 
+# --- Docker: RabbitMQ (AMQP for notifications-service) ---
+echo "Starting RabbitMQ (port 5672, management 15672)..."
+if docker ps -a --format '{{.Names}}' | grep -q "^${RABBIT_CONTAINER}$"; then
+  docker start "${RABBIT_CONTAINER}"
+else
+  docker run -d --name "${RABBIT_CONTAINER}" --network "${NETWORK}" -p 5672:5672 -p 15672:15672 \
+    -e RABBITMQ_DEFAULT_USER=shop -e RABBITMQ_DEFAULT_PASS=playground \
+    rabbitmq:3.13-management-alpine
+fi
+echo "Waiting for RabbitMQ (8s)..."
+sleep 8
+
 # --- Shop app services (background) ---
 echo "Starting shop app services..."
 
@@ -106,14 +85,19 @@ export KAFKA_ADDRESS=localhost:9092
 (cd "${DELIVERY_DIR}" && npm run dev > "${SHOP_DIR}/.delivery.log" 2>&1) &
 DELIVERY_PID=$!
 
+export PORT=3005
+export RABBITMQ_URL="amqp://shop:playground@localhost:5672/"
+export RABBITMQ_QUEUE="order-notifications"
+(cd "${NOTIFICATIONS_DIR}" && npm run dev > "${SHOP_DIR}/.notifications.log" 2>&1) &
+NOTIFICATIONS_PID=$!
+
 export PORT=3001
 export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/orders"
 export INVENTORY_SERVICE_URL="http://localhost:3002"
 export PAYMENT_SERVICE_URL="http://localhost:3003"
 export KAFKA_ADDRESS=localhost:9092
-export USE_TEMPORAL=true
-export TEMPORAL_ADDRESS=localhost:7233
-export TEMPORAL_NAMESPACE=temporal
+export RABBITMQ_URL="amqp://shop:playground@localhost:5672/"
+export RABBITMQ_QUEUE="order-notifications"
 (cd "${ORDER_DIR}" && npm run dev > "${SHOP_DIR}/.order.log" 2>&1) &
 ORDER_PID=$!
 
@@ -125,12 +109,11 @@ export DELIVERY_SERVICE_URL="http://localhost:3004"
 FRONTEND_PID=$!
 
 echo ""
-echo "Shop is starting. PIDs: order=${ORDER_PID} inventory=${INVENTORY_PID} payment=${PAYMENT_PID} delivery=${DELIVERY_PID} frontend=${FRONTEND_PID}"
-echo "Logs: .order.log .inventory.log .payment.log .delivery.log .frontend.log"
+echo "Shop is starting. PIDs: order=${ORDER_PID} inventory=${INVENTORY_PID} payment=${PAYMENT_PID} delivery=${DELIVERY_PID} notifications=${NOTIFICATIONS_PID} frontend=${FRONTEND_PID}"
+echo "Logs: .order.log .inventory.log .payment.log .delivery.log .notifications.log .frontend.log"
 echo ""
 echo "URLs:"
 echo "  Shop:        http://localhost:3000"
-echo "  Temporal UI: http://localhost:8080"
 echo ""
-echo "To stop app services: kill ${ORDER_PID} ${INVENTORY_PID} ${PAYMENT_PID} ${DELIVERY_PID} ${FRONTEND_PID}"
-echo "To stop Docker: docker stop ${TEMPORAL_UI} ${TEMPORAL_SVC} ${TEMPORAL_PG} ${SHOP_PG} ${KAFKA_CONTAINER}"
+echo "To stop app services: kill ${ORDER_PID} ${INVENTORY_PID} ${PAYMENT_PID} ${DELIVERY_PID} ${NOTIFICATIONS_PID} ${FRONTEND_PID}"
+echo "To stop Docker: docker stop ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"

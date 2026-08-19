@@ -1,21 +1,16 @@
 import "./otel.js";
-import path from "path";
-import { fileURLToPath } from "url";
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { NativeConnection, Worker } from "@temporalio/worker";
-import { Connection, Client } from "@temporalio/client";
-import { orderMode } from "./config.js";
+import jwt from "jsonwebtoken";
 import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
 import { inventoryUrl } from "./connections.js";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
-import * as activities from "./activities.js";
-import { CheckoutWorkflow } from "./workflows/checkout.js";
+import { publishOrderNotification } from "./rabbit.js";
+import { publishOrderEventToPubSub } from "./pubsub.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const workflowBundlePath = path.join(__dirname, "workflow-bundle.js");
+const JWT_SECRET = process.env.JWT_SECRET || "demo-secret-key";
 
 const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
@@ -78,8 +73,8 @@ app.get("/banner", (_req, res) => {
 type OrderInput = {
   items: Array<{ productId: number; quantity: number }>;
   total_cents: number;
-  tenant?: string;
   customer_email?: string;
+  baggage?: string;
 };
 
 const MAX_PRODUCT_ID = 2 ** 31 - 1; // safe integer, prevents URL injection
@@ -123,41 +118,11 @@ class OrderError extends Error {
   }
 }
 
-/** Create order via Temporal workflow (durable, retries, etc.). */
-async function createOrderViaTemporal(
-  input: OrderInput
-): Promise<{ orderId: number; status: string }> {
-  const temporalAddress = process.env.TEMPORAL_ADDRESS || "localhost:7233";
-  const namespace = process.env.TEMPORAL_NAMESPACE || "temporal";
-  console.log("[Temporal] Client connecting to", temporalAddress, "namespace", namespace);
-  const connection = await Connection.connect({ address: temporalAddress });
-  const client = new Client({
-    connection,
-    namespace,
-  });
-  const taskQueue = process.env.TEMPORAL_TASK_QUEUE || "order-checkout";
-  const workflowId = `checkout-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  console.log("[Temporal] Starting workflow", workflowId, "taskQueue", taskQueue);
-  const handle = await client.workflow.start(CheckoutWorkflow, {
-    taskQueue,
-    workflowId,
-    args: [input],
-  });
-  const resultTimeoutMs = 90_000; // 90s so gateway does not 502 before we respond
-  const result = await Promise.race([
-    handle.result(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Workflow result timeout (no worker?)")), resultTimeoutMs)
-    ),
-  ]);
-  return result;
-}
-
-/** Create order via original direct path: inventory → payment → DB → Kafka. */
+/** Create order via direct path: inventory → payment → DB → Kafka. */
 async function createOrderDirect(
   input: OrderInput
 ): Promise<{ orderId: number; status: string }> {
-  const { items, total_cents: totalCents, tenant, customer_email } = input;
+  const { items, total_cents: totalCents, customer_email, baggage } = input;
 
   for (const item of items) {
     const productId = encodeURIComponent(String(item.productId));
@@ -183,6 +148,22 @@ async function createOrderDirect(
         productId: item.productId,
       });
     }
+
+    const reserveRes = await fetch(
+      `${inventoryUrl}/products/${productId}/reserve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: item.quantity || 1 }),
+      }
+    );
+    if (!reserveRes.ok) {
+      const err = await reserveRes.json().catch(() => ({}));
+      throw new OrderError(err.error || "Stock reservation failed", 409, {
+        error: err.error || "Stock reservation failed",
+        productId: item.productId,
+      });
+    }
   }
 
   const client = await pool.connect();
@@ -199,29 +180,60 @@ async function createOrderDirect(
     client.release();
   }
 
-  await sqsClient.send(
-    new SendMessageCommand({
-      QueueUrl: sqsQueueUrl,
-      MessageBody: JSON.stringify({ orderId, amount: totalCents, items, customer_email: customer_email ?? null }),
-    })
+  const token = jwt.sign(
+    { orderId, amount: totalCents, customer_email: customer_email ?? null },
+    JWT_SECRET,
+    { expiresIn: "1h" }
   );
+  console.log("[Order] JWT created for order %d: %s", orderId, token);
+
+  if (sqsQueueUrl) {
+    await sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: sqsQueueUrl,
+        MessageBody: JSON.stringify({ jwt: token }),
+      })
+    );
+  } else {
+    console.warn(
+      "[Order] SQS_QUEUE_URL unset — skipping payment SQS (local dev; payment-service will not debit)"
+    );
+  }
 
   await sendOrderToKafka({
     orderId,
     items,
     status: "confirmed",
-    tenant,
+    baggage,
+  });
+
+  await publishOrderNotification({
+    orderId,
+    status: "confirmed",
+    customer_email: customer_email ?? null,
+    total_cents: totalCents,
+    event: "order_confirmed",
+    baggage,
+  });
+
+  await publishOrderEventToPubSub({
+    orderId,
+    status: "confirmed",
+    customer_email: customer_email ?? null,
+    total_cents: totalCents,
+    event: "order_confirmed",
+    baggage,
   });
 
   return { orderId, status: "confirmed" };
 }
 
 app.post("/orders", async (req, res) => {
-  const tenant = req.headers["x-pg-tenant"] as string | undefined;
+  const baggage = req.headers["baggage"] as string | undefined;
   const body = req.body as { items?: unknown; total_cents?: number; customer_email?: string };
   const total_cents = typeof body.total_cents === "number" ? body.total_cents : 0;
   const customer_email = typeof body.customer_email === "string" ? body.customer_email : undefined;
-  console.log("Order request:", JSON.stringify({ tenant, total_cents, customer_email, items: body.items }, null, 2));
+  console.log("Order request:", JSON.stringify({ baggage, total_cents, customer_email, items: body.items }, null, 2));
 
   const validated = validateOrderItems(body.items);
   if ("error" in validated) {
@@ -233,20 +245,14 @@ app.post("/orders", async (req, res) => {
   }
   const { items } = validated;
 
-  const input: OrderInput = { items, total_cents, tenant, customer_email };
+  const input: OrderInput = { items, total_cents, customer_email, baggage };
 
   try {
-    const result =
-      orderMode === "temporal"
-        ? await createOrderViaTemporal(input)
-        : await createOrderDirect(input);
+    const result = await createOrderDirect(input);
     console.log("Order response:", JSON.stringify(result, null, 2));
     return res.status(201).json(result);
   } catch (err) {
-    console.error(
-      orderMode === "temporal" ? "Temporal order error:" : "Order error:",
-      err
-    );
+    console.error("Order error:", err);
     if (err instanceof OrderError) {
       return res.status(err.status).json(err.body);
     }
@@ -276,54 +282,13 @@ app.get("/orders/:id", orderReadLimiter, async (req, res) => {
   }
 });
 
-async function runTemporalWorker() {
-  const temporalAddress = process.env.TEMPORAL_ADDRESS || "localhost:7233";
-  const namespace = process.env.TEMPORAL_NAMESPACE || "temporal";
-  console.log("[Temporal] Starting worker, address:", temporalAddress, "namespace:", namespace);
-  try {
-    console.log("[Temporal] Connecting...");
-    const connection = await NativeConnection.connect({
-      address: temporalAddress,
-    });
-    console.log("[Temporal] Connected");
-    const workerOptions = {
-      connection,
-      namespace,
-      taskQueue: process.env.TEMPORAL_TASK_QUEUE || "order-checkout",
-      activities,
-    };
-    const workflowOpt = existsSync(workflowBundlePath)
-      ? { workflowBundle: { codePath: workflowBundlePath } }
-      : { workflowsPath: path.join(__dirname, "workflows") };
-    console.log("[Temporal] Creating worker, workflowBundle:", existsSync(workflowBundlePath));
-    const worker = await Worker.create({
-      ...workerOptions,
-      ...workflowOpt,
-    });
-    console.log("[Temporal] Worker started (task queue: order-checkout)");
-    await worker.run();
-  } catch (err) {
-    console.error("[Temporal] Worker error (server stays up, Temporal checkout will fail until fixed):", err);
-    // Do not process.exit(1) so the pod stays up and health/other routes keep working
-  }
-}
-
 async function main() {
-  console.log("[Order] Starting, orderMode:", orderMode);
+  console.log("[Order] Starting");
   await producer.connect();
   await initDb();
 
-  if (orderMode === "temporal") {
-    runTemporalWorker().catch((err) => {
-      console.error("[Temporal] Unhandled worker error:", err);
-      process.exit(1);
-    });
-  }
-
   app.listen(port, "0.0.0.0", () => {
-    console.log(
-      `[Order] Listening on port ${port} (order mode: ${orderMode})`
-    );
+    console.log(`[Order] Listening on port ${port}`);
   });
 }
 

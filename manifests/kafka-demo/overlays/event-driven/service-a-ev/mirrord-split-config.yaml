@@ -1,0 +1,26 @@
+# Kafka queue splitting for service-a-ev (mirrord operator >= 3.170.0).
+# Queue id "relay" must match feature.split_queues in the service's mirrord.json.
+apiVersion: queues.mirrord.metalbear.co/v1
+kind: MirrordSplitConfig
+metadata:
+  name: service-a-ev-split
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: service-a-ev
+  restart:
+    timeout: 180
+  queues:
+    - id: relay
+      kind: kafka
+      clientConfig: kafka-demo-connection
+      appConfig:
+        topic:
+          - env: KAFKA_TOPIC
+            containers:
+              - main
+        groupId:
+          - env: KAFKA_CONSUMER_GROUP
+            containers:
+              - main

@@ -7,13 +7,13 @@ resources:
   - ip-visit-application.yaml
   - ip-visit
   - shop-application.yaml
-  - shop-mirrord-application.yaml
-  - temporal-application.yaml
   - shop
   - visualization-application.yaml
   - visualization
   - visualization-shop-application.yaml
   - visualization-shop
+  - mirrord-share-ingress-application.yaml
+  - mirrord-preview
   - gateway.yaml
   - namespace.yaml
   - certificate.yaml

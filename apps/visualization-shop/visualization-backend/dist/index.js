@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
@@ -11,6 +12,14 @@ const port = process.env.PORT || 8080;
 app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
+/** Proxies/CDNs must not cache snapshot or operator-status — demo query params must always hit origin. */
+app.use((req, res, next) => {
+    const p = req.path ?? "";
+    if (p.includes("snapshot") || p.includes("operator-status")) {
+        res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+    }
+    next();
+});
 /**
  * In-memory store that keeps the latest cluster snapshot. All pollers and API handlers interact with
  * this store so the frontend can always pull a single coherent object.
@@ -82,7 +91,17 @@ const operatorStatusPaths = [
  * Return the current snapshot. Optional `?refresh=1` forces pollers to run before responding.
  */
 app.get(snapshotPaths, async (req, res) => {
-    if (req.query.queueSplittingMock === "true") {
+    if (req.query.sharableVisualizationMock === "true") {
+        res.json({
+            ...mockSharableVisualizationSnapshot,
+            updatedAt: new Date().toISOString(),
+        });
+        return;
+    }
+    if (req.query.queueSplittingMock === "true" ||
+        req.query.multipleSessionMock === "true" ||
+        req.query.dbBranchMock === "true" ||
+        req.query.ciRunnerMock === "true") {
         res.json(mockSnapshot);
         return;
     }
@@ -133,6 +152,7 @@ app.post(snapshotRefreshPaths, async (_req, res) => {
  */
 const fetchOperatorSessions = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
     const result = await customApi.listClusterCustomObject({
         group: "mirrord.metalbear.co",
         version: "v1alpha",
@@ -141,18 +161,43 @@ const fetchOperatorSessions = async (kubeConfig) => {
     const body = result;
     const items = body.items ?? [];
     const now = Date.now();
-    return items.map((item) => {
+    const sessions = [];
+    for (const item of items) {
         const metadata = (item.metadata ?? {});
         const spec = (item.spec ?? {});
         const status = (item.status ?? {});
         const target = (spec.target ?? {});
         const owner = (spec.owner ?? {});
         const jiraMetrics = (spec.jiraMetrics ?? {});
+        const specCopyTarget = spec.copyTarget;
+        const statusCopyTarget = status.copyTarget;
         const createdAt = metadata.creationTimestamp ?? new Date().toISOString();
         const connectedAt = status.connectedTimestamp;
         const createdMs = new Date(createdAt).getTime();
         const durationSeconds = Math.floor((now - createdMs) / 1000);
-        return {
+        let copyTarget;
+        if (specCopyTarget) {
+            const copyPodName = statusCopyTarget?.name ?? target.name;
+            const ns = spec.namespace ?? "default";
+            let originalTargetDeployment;
+            try {
+                const pod = await coreApi.readNamespacedPod({ name: copyPodName, namespace: ns });
+                const annotation = pod?.metadata?.annotations?.["operator.metalbear.co/copy-target-state"];
+                if (annotation) {
+                    const parsed = JSON.parse(annotation);
+                    originalTargetDeployment = parsed?.spec?.target?.deployment;
+                }
+            }
+            catch (err) {
+                console.warn(`Failed to read copy pod ${copyPodName} in ${ns}:`, err.message ?? err);
+            }
+            copyTarget = {
+                scaleDown: Boolean(specCopyTarget.scaledown),
+                copyPodName,
+                originalTargetDeployment,
+            };
+        }
+        sessions.push({
             sessionId: metadata.name ?? "unknown",
             target: {
                 kind: target.kind ?? "Unknown",
@@ -172,40 +217,196 @@ const fetchOperatorSessions = async (kubeConfig) => {
             durationSeconds: Number.isFinite(durationSeconds)
                 ? durationSeconds
                 : undefined,
-        };
-    });
+            copyTarget,
+        });
+    }
+    return sessions;
 };
 /**
- * Query MirrordKafkaEphemeralTopic custom resources from the operator CRD.
- * Returns topic names linked to sessions via the session-id label.
+ * Legacy Kafka split topics (MirrordKafkaTopicsConsumer flow).
  */
-const fetchKafkaEphemeralTopics = async (kubeConfig) => {
+const fetchLegacyKafkaEphemeralTopics = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-    const result = await customApi.listClusterCustomObject({
-        group: "queues.mirrord.metalbear.co",
-        version: "v1alpha",
-        plural: "mirrordkafkaephemeraltopics",
-    });
-    const body = result;
-    const items = body.items ?? [];
-    return items.map((item) => {
+    try {
+        const result = await customApi.listClusterCustomObject({
+            group: "queues.mirrord.metalbear.co",
+            version: "v1alpha",
+            plural: "mirrordkafkaephemeraltopics",
+        });
+        const body = result;
+        const items = body.items ?? [];
+        return items.map((item) => {
+            const metadata = (item.metadata ?? {});
+            const spec = (item.spec ?? {});
+            const labels = (metadata.labels ?? {});
+            const topicName = spec.name ?? "unknown";
+            return {
+                topicName,
+                sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
+                clientConfig: spec.clientConfig ?? "unknown",
+                topicType: topicName.includes("-fallback-") ? "Fallback" : "Filtered",
+            };
+        });
+    }
+    catch (err) {
+        console.warn("Failed to list MirrordKafkaEphemeralTopics:", err instanceof Error ? err.message : err);
+        return [];
+    }
+};
+const kafkaTopicTypeFromName = (topicName) => topicName.includes("-fallback-") ? "Fallback" : "Filtered";
+/**
+ * Kafka split topics from MirrordSplitConfig sessions (operator >= 3.170).
+ * Reads MirrordClusterSplitSession; filtered topics from status.tmpResources,
+ * fallback topics from the target pod's patched KAFKA_TOPIC env.
+ */
+/**
+ * List MirrordClusterSplitSession CRs and flatten them into one entry per split
+ * queue, across all broker kinds. Ephemeral names live in kind-specific maps on
+ * `status.ready.tmpResources` (`queue` for RMQ, `topic` for Kafka, `subscription`
+ * for SQS, `channel` for pub/sub brokers, `taskQueue` for task queues); only the
+ * maps relevant to the queue's kind are populated, so all are merged blindly.
+ */
+const fetchClusterSplitQueues = async (kubeConfig) => {
+    const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+    const out = [];
+    let items = [];
+    try {
+        const result = await customApi.listClusterCustomObject({
+            group: "queues.mirrord.metalbear.co",
+            version: "v1",
+            plural: "mirrordclustersplitsessions",
+        });
+        const body = result;
+        items = body.items ?? [];
+    }
+    catch (err) {
+        console.warn("Failed to list MirrordClusterSplitSessions:", err instanceof Error ? err.message : err);
+        return out;
+    }
+    for (const item of items) {
         const metadata = (item.metadata ?? {});
         const spec = (item.spec ?? {});
+        const status = (item.status ?? {});
         const labels = (metadata.labels ?? {});
-        const topicName = spec.name ?? "unknown";
-        return {
-            topicName,
-            sessionId: labels["operator.metalbear.co/session-id"] ?? "unknown",
-            clientConfig: spec.clientConfig ?? "unknown",
-            topicType: topicName.includes("-fallback-") ? "Fallback" : "Filtered",
-        };
-    });
+        const sessionId = labels["operator.metalbear.co/session-id"] ?? "unknown";
+        const target = (spec.target ?? {});
+        const consumer = target.name ?? "unknown";
+        const namespace = spec.namespace ?? defaultNamespace;
+        const ready = (status.ready ?? {});
+        const tmpResources = (ready.tmpResources ?? []);
+        const envUpdates = (ready.envUpdates ?? {});
+        const envVarNames = [
+            ...new Set(Object.values(envUpdates)
+                .flat()
+                .map((e) => e?.name)
+                .filter((n) => Boolean(n))),
+        ];
+        const queues = (spec.queues ?? []);
+        for (const queue of queues) {
+            const queueId = queue.id ?? "unknown";
+            const nameMappings = {};
+            for (const resource of tmpResources) {
+                if (resource.queueId !== queueId)
+                    continue;
+                for (const field of ["queue", "topic", "subscription", "channel", "taskQueue"]) {
+                    const mapping = (resource[field] ?? {});
+                    for (const [original, ephemeral] of Object.entries(mapping)) {
+                        if (ephemeral)
+                            nameMappings[original] = ephemeral;
+                    }
+                }
+            }
+            const entry = {
+                kind: queue.kind ?? "unknown",
+                queueId,
+                sessionId,
+                consumer,
+                namespace,
+                nameMappings,
+                envVarNames,
+            };
+            const jqFilter = queue.jqFilter;
+            if (jqFilter !== undefined)
+                entry.jqFilter = jqFilter;
+            out.push(entry);
+        }
+    }
+    return out;
+};
+const fetchKafkaFromClusterSplitSessions = async (kubeConfig, splitQueues) => {
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+    const topics = [];
+    for (const queue of splitQueues) {
+        if (queue.kind !== "kafka")
+            continue;
+        const filteredTopicNames = new Set();
+        for (const topicName of Object.values(queue.nameMappings)) {
+            filteredTopicNames.add(topicName);
+            topics.push({
+                topicName,
+                sessionId: queue.sessionId,
+                clientConfig: "shop-kafka-connection",
+                topicType: kafkaTopicTypeFromName(topicName),
+            });
+        }
+        try {
+            const podsResult = await coreApi.listNamespacedPod({
+                namespace: queue.namespace,
+                labelSelector: `app=${queue.consumer}`,
+            });
+            const seenFallback = new Set();
+            for (const pod of podsResult.items ?? []) {
+                const containers = pod.spec?.containers ?? [];
+                const main = containers.find((c) => c.name === "main") ?? containers[0];
+                const env = main?.env ?? [];
+                const kafkaTopic = env.find((e) => e.name === "KAFKA_TOPIC");
+                const topicName = (typeof kafkaTopic?.value === "string" ? kafkaTopic.value : "").trim();
+                if (!topicName.startsWith("mirrord-"))
+                    continue;
+                if (filteredTopicNames.has(topicName))
+                    continue;
+                if (seenFallback.has(topicName))
+                    continue;
+                seenFallback.add(topicName);
+                topics.push({
+                    topicName,
+                    sessionId: queue.sessionId,
+                    clientConfig: "shop-kafka-connection",
+                    topicType: "Fallback",
+                });
+            }
+        }
+        catch (err) {
+            console.warn(`Failed to list pods for Kafka consumer ${queue.consumer} in ${queue.namespace}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    return topics;
 };
 /**
- * Query MirrordSqsSession custom resources from the operator CRD.
- * Returns ephemeral SQS queues linked to active splitting sessions.
+ * Kafka ephemeral topics from active queue-splitting sessions.
+ * Merges legacy MirrordKafkaEphemeralTopic CRs with MirrordClusterSplitSession (MirrordSplitConfig).
  */
-const fetchSqsEphemeralQueues = async (kubeConfig) => {
+const fetchKafkaEphemeralTopics = async (kubeConfig, splitQueues) => {
+    const [legacyTopics, splitSessionTopics] = await Promise.all([
+        fetchLegacyKafkaEphemeralTopics(kubeConfig),
+        fetchKafkaFromClusterSplitSessions(kubeConfig, splitQueues),
+    ]);
+    const seen = new Set();
+    const merged = [];
+    for (const topic of [...legacyTopics, ...splitSessionTopics]) {
+        const key = `${topic.sessionId}:${topic.topicName}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        merged.push(topic);
+    }
+    return merged;
+};
+/**
+ * Query legacy MirrordSqsSession custom resources from the operator CRD.
+ * Only populated by pre-MirrordClusterSplitSession operator versions.
+ */
+const fetchLegacySqsEphemeralQueues = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
     const result = await customApi.listClusterCustomObject({
         group: "queues.mirrord.metalbear.co",
@@ -239,21 +440,268 @@ const fetchSqsEphemeralQueues = async (kubeConfig) => {
     }
     return queues;
 };
+/** SQS name mappings hold full queue URLs; the queue name is the last path segment. */
+const fetchSqsFromClusterSplitSessions = (splitQueues) => {
+    const queues = [];
+    for (const queue of splitQueues) {
+        if (queue.kind !== "sqs")
+            continue;
+        for (const [originalUrl, sessionUrl] of Object.entries(queue.nameMappings)) {
+            const queueName = sessionUrl.split("/").pop() ?? sessionUrl;
+            const originalQueueName = originalUrl.split("/").pop() ?? originalUrl;
+            const entry = {
+                queueName,
+                originalQueueName,
+                sessionId: queue.sessionId,
+                consumer: queue.consumer,
+            };
+            if (queue.jqFilter !== undefined)
+                entry.jqFilter = queue.jqFilter;
+            queues.push(entry);
+        }
+    }
+    return queues;
+};
+/**
+ * Ephemeral SQS queues from active queue-splitting sessions.
+ * Merges legacy MirrordSqsSession CRs with MirrordClusterSplitSession.
+ */
+const fetchSqsEphemeralQueues = async (kubeConfig, splitQueues) => {
+    const legacyQueues = await fetchLegacySqsEphemeralQueues(kubeConfig).catch((err) => {
+        console.warn("Failed to list legacy MirrordSqsSessions:", err instanceof Error ? err.message : err);
+        return [];
+    });
+    const seen = new Set();
+    const merged = [];
+    for (const queue of [...legacyQueues, ...fetchSqsFromClusterSplitSessions(splitQueues)]) {
+        const key = `${queue.sessionId}:${queue.queueName}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        merged.push(queue);
+    }
+    return merged;
+};
+const deriveRmqOriginalQueueName = (mirrordQueue) => {
+    const collapsed = mirrordQueue.replace(/-fallback-/g, "-");
+    const known = "order-notifications";
+    if (collapsed.endsWith(known))
+        return known;
+    const tail = collapsed.replace(/^mirrord-[a-z0-9-]+-/i, "");
+    return tail || known;
+};
+/**
+ * Discover ephemeral mirrord RabbitMQ queues from legacy MirrordRMQSession CRs.
+ * Only populated by pre-MirrordClusterSplitSession operator versions. Emits:
+ *   - Filtered: queue from `status.Ready.envUpdates.<env>.outputName` (consumed by local user).
+ *   - Fallback: queue from the consumer pod's actual env value (consumed by the deployed pod;
+ *     mirrord patches it to a `mirrord-main-<id>-...` queue).
+ */
+const fetchLegacyRmqEphemeralQueues = async (kubeConfig) => {
+    const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+    const out = [];
+    let items = [];
+    try {
+        const result = await customApi.listClusterCustomObject({
+            group: "queues.mirrord.metalbear.co",
+            version: "v1alpha",
+            plural: "mirrordrmqsessions",
+        });
+        const body = result;
+        items = body.items ?? [];
+    }
+    catch (err) {
+        console.warn("Failed to list MirrordRMQSessions:", err instanceof Error ? err.message : err);
+        return out;
+    }
+    for (const item of items) {
+        const metadata = (item.metadata ?? {});
+        const spec = (item.spec ?? {});
+        const status = (item.status ?? {});
+        const labels = (metadata.labels ?? {});
+        const sessionId = labels["operator.metalbear.co/session-id"] ??
+            spec.sessionId ??
+            "unknown";
+        const queueConsumer = (spec.queueConsumer ?? {});
+        const consumer = queueConsumer.name ?? "unknown";
+        const consumerNs = spec.namespace ?? defaultNamespace;
+        const ready = (status["Ready"] ?? {});
+        const envUpdates = (ready.envUpdates ?? {});
+        const filterOutputs = new Set();
+        const envVarOriginals = [];
+        for (const [envVar, mapping] of Object.entries(envUpdates)) {
+            const outputName = (mapping.outputName ?? "").trim();
+            const originalName = (mapping.originalName ?? "").trim();
+            if (!outputName)
+                continue;
+            filterOutputs.add(outputName);
+            envVarOriginals.push({ envVar, originalName });
+            out.push({
+                queueName: outputName,
+                originalQueueName: originalName || deriveRmqOriginalQueueName(outputName),
+                sessionId,
+                consumer,
+                queueType: "Filtered",
+            });
+        }
+        if (envVarOriginals.length === 0 || consumer === "unknown")
+            continue;
+        try {
+            const podsResult = await coreApi.listNamespacedPod({
+                namespace: consumerNs,
+                labelSelector: `app=${consumer}`,
+            });
+            const seen = new Set();
+            for (const pod of podsResult.items ?? []) {
+                const containers = pod.spec?.containers ?? [];
+                const main = containers.find((c) => c.name === "main") ?? containers[0];
+                const env = main?.env ?? [];
+                for (const { envVar, originalName } of envVarOriginals) {
+                    const e = env.find((x) => x.name === envVar);
+                    const raw = (typeof e?.value === "string" ? e.value : "").trim();
+                    if (!raw.startsWith("mirrord-"))
+                        continue;
+                    if (filterOutputs.has(raw))
+                        continue;
+                    if (seen.has(raw))
+                        continue;
+                    seen.add(raw);
+                    out.push({
+                        queueName: raw,
+                        originalQueueName: originalName || deriveRmqOriginalQueueName(raw),
+                        sessionId,
+                        consumer,
+                        queueType: "Fallback",
+                    });
+                }
+            }
+        }
+        catch (err) {
+            console.warn(`Failed to list pods for RMQ consumer ${consumer} in ${consumerNs}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    return out;
+};
+/**
+ * Ephemeral RMQ queues from MirrordClusterSplitSession CRs. Emits:
+ *   - Filtered: the session queue from `status.ready.tmpResources[].queue`
+ *     (consumed by the local user).
+ *   - Fallback: queue from the consumer pod's actual env value (consumed by the
+ *     deployed pod; mirrord patches it to a `mirrord-main-<id>-...` queue).
+ */
+const fetchRmqFromClusterSplitSessions = async (kubeConfig, splitQueues) => {
+    const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+    const out = [];
+    for (const queue of splitQueues) {
+        if (queue.kind !== "rmq")
+            continue;
+        const filterOutputs = new Set();
+        for (const [originalName, sessionQueue] of Object.entries(queue.nameMappings)) {
+            filterOutputs.add(sessionQueue);
+            out.push({
+                queueName: sessionQueue,
+                originalQueueName: originalName,
+                sessionId: queue.sessionId,
+                consumer: queue.consumer,
+                queueType: "Filtered",
+            });
+        }
+        if (queue.envVarNames.length === 0 || queue.consumer === "unknown")
+            continue;
+        try {
+            const podsResult = await coreApi.listNamespacedPod({
+                namespace: queue.namespace,
+                labelSelector: `app=${queue.consumer}`,
+            });
+            const seen = new Set();
+            for (const pod of podsResult.items ?? []) {
+                const containers = pod.spec?.containers ?? [];
+                const main = containers.find((c) => c.name === "main") ?? containers[0];
+                const env = main?.env ?? [];
+                for (const envVarName of queue.envVarNames) {
+                    const e = env.find((x) => x.name === envVarName);
+                    const raw = (typeof e?.value === "string" ? e.value : "").trim();
+                    if (!raw.startsWith("mirrord-"))
+                        continue;
+                    if (filterOutputs.has(raw))
+                        continue;
+                    if (seen.has(raw))
+                        continue;
+                    seen.add(raw);
+                    out.push({
+                        queueName: raw,
+                        originalQueueName: Object.keys(queue.nameMappings)[0] ?? deriveRmqOriginalQueueName(raw),
+                        sessionId: queue.sessionId,
+                        consumer: queue.consumer,
+                        queueType: "Fallback",
+                    });
+                }
+            }
+        }
+        catch (err) {
+            console.warn(`Failed to list pods for RMQ consumer ${queue.consumer} in ${queue.namespace}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    return out;
+};
+/**
+ * Ephemeral RMQ queues from active queue-splitting sessions.
+ * Merges legacy MirrordRMQSession CRs with MirrordClusterSplitSession.
+ */
+const fetchRmqEphemeralQueues = async (kubeConfig, splitQueues) => {
+    const [legacyQueues, splitSessionQueues] = await Promise.all([
+        fetchLegacyRmqEphemeralQueues(kubeConfig),
+        fetchRmqFromClusterSplitSessions(kubeConfig, splitQueues),
+    ]);
+    const seen = new Set();
+    const merged = [];
+    for (const queue of [...legacyQueues, ...splitSessionQueues]) {
+        const key = `${queue.sessionId}:${queue.queueName}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        merged.push(queue);
+    }
+    return merged;
+};
 /**
  * Query PgBranchDatabase custom resources from the operator CRD.
  * Returns branch data including target deployment, phase, and owner info.
  */
 const fetchPgBranchDatabases = async (kubeConfig) => {
     const customApi = kubeConfig.makeApiClient(CustomObjectsApi);
-    const result = await customApi.listNamespacedCustomObject({
-        group: "dbs.mirrord.metalbear.co",
-        version: "v1alpha1",
-        namespace: defaultNamespace,
-        plural: "pgbranchdatabases",
-    });
-    const body = result;
-    const items = body.items ?? [];
-    return items.map((item) => {
+    // Fetch from both the new "branchdatabases" and legacy "pgbranchdatabases" CRDs
+    const [newResult, legacyResult] = await Promise.all([
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "branchdatabases",
+        }).catch((err) => {
+            console.error(`[db-branches] ERROR fetching branchdatabases:`, err instanceof Error ? err.message : err);
+            return { items: [] };
+        }),
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "pgbranchdatabases",
+        }).catch((err) => {
+            console.error(`[db-branches] ERROR fetching pgbranchdatabases:`, err instanceof Error ? err.message : err);
+            return { items: [] };
+        }),
+    ]);
+    const newItems = newResult.items ?? [];
+    const legacyItems = legacyResult.items ?? [];
+    console.log(`[db-branches] CRD query: ${newItems.length} new (branchdatabases), ${legacyItems.length} legacy (pgbranchdatabases), namespace: ${defaultNamespace}`);
+    if (newItems.length > 0)
+        console.log(`[db-branches] new CRD raw items:`, JSON.stringify(newItems.map(i => ({ name: i.metadata?.name, spec: i.spec, status: i.status })), null, 2));
+    if (newItems.length === 0 && legacyItems.length === 0) {
+        console.log(`[db-branches] raw newResult keys:`, Object.keys(newResult));
+        console.log(`[db-branches] raw newResult:`, JSON.stringify(newResult).substring(0, 500));
+    }
+    const mapItem = (item, isNew) => {
         const metadata = (item.metadata ?? {});
         const spec = (item.spec ?? {});
         const status = (item.status ?? {});
@@ -263,25 +711,39 @@ const fetchPgBranchDatabases = async (kubeConfig) => {
             const owner = (session.owner ?? {});
             return {
                 username: owner.username ?? "unknown",
+                k8sUsername: owner.k8sUsername ?? "unknown",
                 hostname: owner.hostname ?? "unknown",
             };
         });
         const connectionUrl = status.connectionUrl ??
             status.connectionString ??
             undefined;
+        const pgOpts = (spec.postgresOptions ?? {});
+        const pgCopy = (pgOpts.copy ?? {});
+        const legacyCopy = (spec.copy ?? {});
         return {
             name: metadata.name ?? "unknown",
             namespace: metadata.namespace ?? defaultNamespace,
             branchId: spec.id ?? "unknown",
-            targetDeployment: target.deployment ?? "unknown",
-            copyMode: spec.copy?.mode ?? "unknown",
-            postgresVersion: spec.postgresVersion ?? "unknown",
+            targetDeployment: isNew
+                ? target.name ?? "unknown"
+                : target.deployment ?? "unknown",
+            copyMode: isNew
+                ? pgCopy.mode ?? "unknown"
+                : legacyCopy.mode ?? "unknown",
+            postgresVersion: isNew
+                ? spec.version ?? "unknown"
+                : spec.postgresVersion ?? "unknown",
             phase: status.phase ?? "unknown",
             expireTime: status.expireTime ?? undefined,
             connectionUrl,
             owners,
         };
-    });
+    };
+    return [
+        ...newItems.map((item) => mapItem(item, true)),
+        ...legacyItems.map((item) => mapItem(item, false)),
+    ];
 };
 /**
  * Query PreviewSession custom resources from the operator CRD.
@@ -326,14 +788,12 @@ const sanitizeHostname = (raw) => raw
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-const refreshDynamicPgConnections = (branches) => {
+const refreshDynamicPgConnections = (_branches) => {
+    // Clear cached connections so the next "View Data" click always goes through
+    // resolvePgBranchConnection(), which discovers the correct database name from
+    // the branch pod instead of relying on the CRD's connectionUrl (which may
+    // omit or default the database name, causing queries to hit the wrong DB).
     dynamicPgConnections.clear();
-    for (const branch of branches) {
-        if (branch.connectionUrl) {
-            const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
-            dynamicPgConnections.set(nodeId, branch.connectionUrl);
-        }
-    }
 };
 /**
  * Return active mirrord operator sessions and Kafka ephemeral topics.
@@ -342,6 +802,16 @@ app.get(operatorStatusPaths, async (req, res) => {
     const requestUseMock = req.query.queueSplittingMock === "true";
     const requestUseDbBranchMock = req.query.dbBranchMock === "true";
     const requestUseMultipleSessionMock = req.query.multipleSessionMock === "true";
+    const requestUseCiRunnerMock = req.query.ciRunnerMock === "true";
+    const requestUseSharableVisualizationMock = req.query.sharableVisualizationMock === "true";
+    if (requestUseCiRunnerMock) {
+        const response = {
+            ...mockCiRunnerOperatorStatus,
+            fetchedAt: new Date().toISOString(),
+        };
+        res.json(response);
+        return;
+    }
     if (requestUseMultipleSessionMock) {
         const response = {
             ...mockMultipleSessionsOperatorStatus,
@@ -353,16 +823,50 @@ app.get(operatorStatusPaths, async (req, res) => {
         return;
     }
     if (requestUseMock) {
+        const sessionsMerged = requestUseDbBranchMock
+            ? [...mockOperatorStatus.sessions, mockDbBranchSession]
+            : mockOperatorStatus.sessions;
+        const sessionsDeduped = [
+            ...new Map(sessionsMerged.map((s) => [s.sessionId, s])).values(),
+        ];
         const response = {
             ...mockOperatorStatus,
             pgBranches: requestUseDbBranchMock ? mockPgBranches : [],
             previewSessions: mockOperatorStatus.previewSessions,
-            sessions: requestUseDbBranchMock
-                ? [...mockOperatorStatus.sessions, mockDbBranchSession]
-                : mockOperatorStatus.sessions,
-            sessionCount: requestUseDbBranchMock
-                ? mockOperatorStatus.sessions.length + 1
-                : mockOperatorStatus.sessions.length,
+            sessions: sessionsDeduped,
+            sessionCount: sessionsDeduped.length,
+            fetchedAt: new Date().toISOString(),
+        };
+        res.json(response);
+        return;
+    }
+    // ?sharable_visualization=true — sharable demo snapshot shape + single Adna / inventory-service session.
+    if (requestUseSharableVisualizationMock) {
+        const s = mockSharableVisualizationOperatorSession;
+        const durationSeconds = Math.floor((Date.now() - new Date(s.createdAt).getTime()) / 1000);
+        const response = {
+            sessions: [{ ...s, durationSeconds }],
+            sessionCount: 1,
+            kafkaTopics: [],
+            sqsQueues: [],
+            rmqQueues: [],
+            pgBranches: [],
+            previewSessions: [],
+            fetchedAt: new Date().toISOString(),
+        };
+        res.json(response);
+        return;
+    }
+    // db_branch=true alone: Ari + branch demo only (no other canned sessions / queue visuals).
+    if (requestUseDbBranchMock) {
+        const response = {
+            sessions: [mockDbBranchSession],
+            sessionCount: 1,
+            kafkaTopics: [],
+            sqsQueues: [],
+            rmqQueues: [],
+            pgBranches: mockPgBranches,
+            previewSessions: [],
             fetchedAt: new Date().toISOString(),
         };
         res.json(response);
@@ -374,40 +878,50 @@ app.get(operatorStatusPaths, async (req, res) => {
         });
         return;
     }
+    const kubeConfig = kubeConfigRef;
     try {
-        const [sessions, kafkaTopics, sqsQueues, pgBranches, previewSessions] = await Promise.all([
-            fetchOperatorSessions(kubeConfigRef).catch((err) => {
+        // Single list of MirrordClusterSplitSessions shared by the kafka/sqs/rmq
+        // fetchers; each derives its kind from the same result.
+        const splitQueuesPromise = fetchClusterSplitQueues(kubeConfig);
+        const [sessions, splitQueues, kafkaTopics, sqsQueues, rmqQueues, pgBranches, previewSessions] = await Promise.all([
+            fetchOperatorSessions(kubeConfig).catch((err) => {
                 console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
                 return [];
             }),
-            fetchKafkaEphemeralTopics(kubeConfigRef).catch((err) => {
+            splitQueuesPromise,
+            splitQueuesPromise.then((sq) => fetchKafkaEphemeralTopics(kubeConfig, sq)).catch((err) => {
                 console.warn("Failed to fetch kafka topics:", err instanceof Error ? err.message : err);
                 return [];
             }),
-            fetchSqsEphemeralQueues(kubeConfigRef).catch((err) => {
+            splitQueuesPromise.then((sq) => fetchSqsEphemeralQueues(kubeConfig, sq)).catch((err) => {
                 console.warn("Failed to fetch SQS sessions:", err instanceof Error ? err.message : err);
                 return [];
             }),
-            requestUseDbBranchMock
-                ? Promise.resolve(mockPgBranches)
-                : fetchPgBranchDatabases(kubeConfigRef).catch((err) => {
-                    console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
-                    return [];
-                }),
-            fetchPreviewSessions(kubeConfigRef).catch((err) => {
+            splitQueuesPromise.then((sq) => fetchRmqEphemeralQueues(kubeConfig, sq)).catch((err) => {
+                console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
+                return [];
+            }),
+            fetchPgBranchDatabases(kubeConfig).catch((err) => {
+                console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
+                return [];
+            }),
+            fetchPreviewSessions(kubeConfig).catch((err) => {
                 console.warn("Failed to fetch preview sessions:", err instanceof Error ? err.message : err);
                 return [];
             }),
         ]);
-        const allSessions = requestUseDbBranchMock
-            ? [...sessions, mockDbBranchSession]
-            : sessions;
+        const allSessions = sessions;
+        const handledKinds = new Set(["kafka", "sqs", "rmq"]);
+        const otherQueueSplits = splitQueues.filter((q) => !handledKinds.has(q.kind));
+        console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
         refreshDynamicPgConnections(pgBranches);
         const response = {
             sessions: allSessions,
             sessionCount: allSessions.length,
             kafkaTopics,
             sqsQueues,
+            rmqQueues,
+            otherQueueSplits,
             pgBranches,
             previewSessions,
             fetchedAt: new Date().toISOString(),
@@ -464,9 +978,111 @@ const knownDeployments = [
         description: "Kafka consumer & delivery tracking",
         deployment: "delivery-service",
     },
+    {
+        id: "notifications-service",
+        name: "notifications-service",
+        description: "RabbitMQ consumer for order notification events",
+        deployment: "notifications-service",
+    },
+    {
+        id: "receipt-service",
+        name: "receipt-service",
+        description: "Receipt generation & delivery",
+        deployment: "receipt-service",
+    },
 ];
+/** Sharable demo: playground-shaped snapshot + single Adna session on inventory-service (?sharableVisualizationMock). */
+const mockSharableVisualizationSnapshot = {
+    clusterName: "playground",
+    updatedAt: "2026-05-03T00:26:10.131Z",
+    services: [
+        {
+            id: "delivery-service",
+            name: "delivery-service",
+            description: "Kafka consumer & delivery tracking",
+            lastUpdated: "2026-05-03T00:26:02.400Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "inventory-service",
+            name: "inventory-service",
+            description: "Product catalog & stock management",
+            lastUpdated: "2026-05-03T00:26:02.401Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "metal-mart-frontend",
+            name: "metal-mart-frontend",
+            description: "Next.js storefront",
+            lastUpdated: "2026-05-03T00:26:02.398Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "mirrord-operator",
+            name: "mirrord operator",
+            description: "Injects mirrord sessions",
+            lastUpdated: "2026-05-03T00:26:02.398Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "notifications-service",
+            name: "notifications-service",
+            description: "RabbitMQ consumer for order notification events",
+            lastUpdated: "2026-05-03T00:26:02.399Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "order-service",
+            name: "order-service",
+            description: "Order orchestration",
+            lastUpdated: "2026-05-03T00:26:02.399Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "payment-service",
+            name: "payment-service",
+            description: "Mock payment processor",
+            lastUpdated: "2026-05-03T00:26:02.400Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+        {
+            id: "receipt-service",
+            name: "receipt-service",
+            description: "Receipt generation & delivery",
+            lastUpdated: "2026-05-03T00:26:02.397Z",
+            status: "available",
+            availableReplicas: 1,
+        },
+    ],
+};
+const mockSharableVisualizationOperatorSession = {
+    sessionId: "838a524f05fe0a8e",
+    target: {
+        kind: "Deployment",
+        name: "inventory-service",
+        container: "main",
+        apiVersion: "apps/v1",
+    },
+    namespace: "shop",
+    owner: {
+        username: "Adna",
+        k8sUsername: "adnal@metalbear.com",
+        hostname: "Adnas-MacBook-Air.local",
+    },
+    branchName: "sharable-visualization",
+    createdAt: "2026-05-03T00:25:29Z",
+    connectedAt: "2026-05-03T00:26:35.032112Z",
+    durationSeconds: 66,
+};
 /**
- * Mock data used when QUEUE_SPLITTING_MOCK_DATA=true, so the backend can run without a real cluster.
+ * Mock deployment snapshot for demo query params (?queueSplittingMock / ?multipleSessionMock / ?dbBranchMock).
  */
 const mockSnapshot = {
     clusterName: "mock-playground",
@@ -549,23 +1165,49 @@ const mockOperatorStatus = {
             connectedAt: "2026-02-18T07:56:15.398127Z",
             durationSeconds: 564,
         },
+        {
+            sessionId: "cafebabe50505050",
+            target: { kind: "Deployment", name: "notifications-service", container: "main", apiVersion: "apps/v1" },
+            namespace: "shop",
+            owner: { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
+            branchName: "shop-visual",
+            createdAt: "2026-02-18T07:50:00Z",
+            connectedAt: "2026-02-18T07:56:10.000000Z",
+            durationSeconds: 400,
+        },
     ],
-    sessionCount: 6,
+    sessionCount: 7,
     kafkaTopics: [
         {
             topicName: "mirrord-tmp-kmhkbbzgki-orders",
             sessionId: "504d016ef5980f1a",
-            clientConfig: "shop-kafka-config",
+            clientConfig: "shop-kafka-connection",
             topicType: "Filtered",
         },
         {
             topicName: "mirrord-tmp-kmhkbbzgki-fallback-orders",
             sessionId: "504d016ef5980f1a",
-            clientConfig: "shop-kafka-config",
+            clientConfig: "shop-kafka-connection",
             topicType: "Fallback",
         },
     ],
     sqsQueues: mockSqsQueues,
+    rmqQueues: [
+        {
+            queueName: "mirrord-main-demoabc-order-notifications",
+            originalQueueName: "order-notifications",
+            sessionId: "cafebabe50505050",
+            consumer: "notifications-service",
+            queueType: "Filtered",
+        },
+        {
+            queueName: "mirrord-main-demoabc-fallback-order-notifications",
+            originalQueueName: "order-notifications",
+            sessionId: "cafebabe50505050",
+            consumer: "notifications-service",
+            queueType: "Fallback",
+        },
+    ],
     pgBranches: [],
     previewSessions: [],
     fetchedAt: new Date().toISOString(),
@@ -581,7 +1223,7 @@ const mockPgBranches = [
         phase: "Ready",
         expireTime: "2026-02-19T08:50:57.701063Z",
         owners: [
-            { username: "Ari Sprung", hostname: "Aris-MacBook-Pro.local" },
+            { username: "Ari Sprung", k8sUsername: "aris@metalbear.com", hostname: "Aris-MacBook-Pro.local" },
         ],
     },
 ];
@@ -669,21 +1311,82 @@ const mockMultipleSessionsOperatorStatus = {
     sessionCount: 8,
     kafkaTopics: [],
     sqsQueues: [],
+    rmqQueues: [],
     pgBranches: [],
     previewSessions: [
         {
-            name: "preview-session-deployment-metal-mart-frontend-11cf356f",
+            name: "preview-session-deployment-metal-mart-frontend-4c0c7e57",
             namespace: "shop",
-            key: "redesign",
+            key: "demo-gh-env",
             target: { kind: "Deployment", name: "metal-mart-frontend", container: "main" },
-            image: "ghcr.io/metalbear-co/metalmart-redesign:latest",
-            ttlSecs: 300,
+            image: "ghcr.io/metalbear-co/playground-metal-mart-frontend:preview-demo-gh-env-42f9da14b055016b0796534c4d320eb95df08dd5",
+            ttlSecs: 7200,
             phase: "Ready",
-            podName: "preview-pod-deployment-metal-mart-frontend-11cf356f",
-            startedAt: "2026-02-25T12:17:31.405462Z",
+            podName: "preview-pod-deployment-metal-mart-frontend-4c0c7e57",
+            startedAt: "2026-03-22T07:55:14.492466Z",
+        },
+        {
+            name: "preview-session-deployment-order-service-53b43acb",
+            namespace: "shop",
+            key: "demo-gh-env",
+            target: { kind: "Deployment", name: "payment-service", container: "main" },
+            image: "ghcr.io/metalbear-co/playground-order-service:preview-demo-gh-env-42f9da14b055016b0796534c4d320eb95df08dd5",
+            ttlSecs: 7200,
+            phase: "Ready",
+            podName: "preview-pod-deployment-order-service-53b43acb",
+            startedAt: "2026-03-22T07:53:46.462729Z",
         },
     ],
     fetchedAt: new Date().toISOString(),
+};
+const mockCiRunnerOperatorStatus = {
+    sessions: [
+        {
+            sessionId: "53d05e61363b6bdb",
+            target: {
+                kind: "Deployment",
+                name: "order-service",
+                container: "main",
+                apiVersion: "apps/v1",
+            },
+            namespace: "shop",
+            owner: {
+                username: "unknown",
+                k8sUsername: "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
+                hostname: "runnervmeorf1",
+            },
+            branchName: "testing-ci",
+            createdAt: "2026-05-13T04:28:36Z",
+            connectedAt: "2026-05-13T04:28:45.010350Z",
+            durationSeconds: 12,
+        },
+        {
+            sessionId: "cc8ec0440518d57a",
+            target: {
+                kind: "Deployment",
+                name: "order-service",
+                container: "main",
+                apiVersion: "apps/v1",
+            },
+            namespace: "shop",
+            owner: {
+                username: "Ari Sprung",
+                k8sUsername: "aris@metalbear.com",
+                hostname: "Aris-MacBook-Pro.local",
+            },
+            branchName: "visual-ci-runner",
+            createdAt: "2026-05-13T04:27:16Z",
+            connectedAt: "2026-05-13T04:27:25.006619Z",
+            durationSeconds: 92,
+        },
+    ],
+    sessionCount: 2,
+    kafkaTopics: [],
+    sqsQueues: [],
+    rmqQueues: [],
+    pgBranches: [],
+    previewSessions: [],
+    fetchedAt: "2026-05-13T04:28:48.139Z",
 };
 const mockDbBranchSession = {
     sessionId: "786f862af51aa05f",
@@ -697,26 +1400,28 @@ const mockDbBranchSession = {
 };
 const defaultNamespace = process.env.WATCH_NAMESPACE || "shop";
 const pollIntervalMs = Number(process.env.WATCH_INTERVAL_MS ?? "10000");
+const K8S_SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 /**
- * Attempt to load Kubernetes credentials (preferring in-cluster config, falling back to local kubeconfig).
+ * In-cluster config only when pod SA exists; otherwise ~/.kube/config.
+ * loadFromCluster() does not throw — without this guard, local runs use https://undefined:undefined.
  */
 const loadKubeConfiguration = () => {
     const kubeConfig = new KubeConfig();
-    try {
+    const inCluster = Boolean(process.env.KUBERNETES_SERVICE_HOST) &&
+        fs.existsSync(K8S_SERVICE_ACCOUNT_TOKEN_PATH);
+    if (inCluster) {
         kubeConfig.loadFromCluster();
         console.log("Loaded in-cluster Kubernetes configuration");
         return kubeConfig;
     }
-    catch (clusterError) {
-        try {
-            kubeConfig.loadFromDefault();
-            console.log("Loaded local kubeconfig");
-            return kubeConfig;
-        }
-        catch (localError) {
-            console.warn("Kubernetes configuration not found; automatic snapshot updates disabled.");
-            return null;
-        }
+    try {
+        kubeConfig.loadFromDefault();
+        console.log("Loaded local kubeconfig");
+        return kubeConfig;
+    }
+    catch {
+        console.warn("Kubernetes configuration not found; automatic snapshot updates disabled.");
+        return null;
     }
 };
 const startDeploymentPoller = (kubeConfig) => {
@@ -807,21 +1512,36 @@ const resolvePgBranchConnection = async (dbId) => {
         return undefined;
     const coreApi = kubeConfigRef.makeApiClient(CoreV1Api);
     const customApi = kubeConfigRef.makeApiClient(CustomObjectsApi);
-    // Find the PgBranchDatabase CR whose sanitized name matches dbId
-    const result = await customApi.listNamespacedCustomObject({
-        group: "dbs.mirrord.metalbear.co",
-        version: "v1alpha1",
-        namespace: defaultNamespace,
-        plural: "pgbranchdatabases",
-    });
-    const body = result;
-    const items = body.items ?? [];
+    // Find the BranchDatabase CR whose sanitized name matches dbId
+    // Query both new "branchdatabases" and legacy "pgbranchdatabases" CRDs
+    const [newResult, legacyResult] = await Promise.all([
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "branchdatabases",
+        }).catch(() => ({ items: [] })),
+        customApi.listNamespacedCustomObject({
+            group: "dbs.mirrord.metalbear.co",
+            version: "v1alpha1",
+            namespace: defaultNamespace,
+            plural: "pgbranchdatabases",
+        }).catch(() => ({ items: [] })),
+    ]);
+    const newItems = newResult.items ?? [];
+    const legacyItems = legacyResult.items ?? [];
+    const items = [...newItems, ...legacyItems];
+    console.log("[db-resolve] looking for dbId=%s, found %d CRD(s):", dbId, items.length, items.map(i => (i.metadata?.name)));
     const branch = items.find((item) => {
         const name = item.metadata?.name ?? "";
-        return `pg-branch-${sanitizeHostname(name)}` === dbId;
+        const sanitized = `pg-branch-${sanitizeHostname(name)}`;
+        console.log(`[db-resolve] comparing: "${sanitized}" === "${dbId}" → ${sanitized === dbId}`);
+        return sanitized === dbId;
     });
-    if (!branch)
+    if (!branch) {
+        console.warn(`[db-resolve] no matching branch found for dbId="${dbId}"`);
         return undefined;
+    }
     const metadata = (branch.metadata ?? {});
     const branchName = metadata.name;
     // Find the branch pod via owner label
@@ -830,39 +1550,89 @@ const resolvePgBranchConnection = async (dbId) => {
         labelSelector: `db-owner-name=${branchName}`,
     });
     const pod = podList.items?.[0];
-    if (!pod?.status?.podIP)
+    if (!pod?.status?.podIP) {
+        console.warn(`[db-resolve] branch pod for "${branchName}" has no IP yet`);
         return undefined;
+    }
     const podIp = pod.status.podIP;
+    console.log(`[db-resolve] found branch pod: ${pod.metadata?.name}, IP: ${podIp}`);
     const container = pod.spec?.containers?.[0];
     const envVars = container?.env ?? [];
     const password = envVars.find((e) => e.name === "POSTGRES_PASSWORD")?.value ??
         "postgres";
     const user = envVars.find((e) => e.name === "POSTGRES_USER")?.value ?? "postgres";
-    // Get the database name from the branch pod's POSTGRES_DB env.
-    // If not set, connect to the default "postgres" database and discover
-    // the actual user database (mirrord copies data using the original DB name).
-    let dbName = envVars.find((e) => e.name === "POSTGRES_DB")?.value ?? undefined;
+    // Discover the actual database name by querying the branch pod.
+    // The schema may be copied into a named database (e.g. "orders") but mirrord
+    // may route app connections to "postgres", so we check which database actually
+    // has data in user tables, falling back to the first with user tables.
+    const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
+    const discoverPool = new pg.Pool({
+        connectionString: discoverUrl,
+        max: 1,
+        connectionTimeoutMillis: 10000,
+    });
+    let dbName;
+    try {
+        const result = await discoverPool.query(`SELECT datname FROM pg_database
+       WHERE datistemplate = false
+       ORDER BY datname`);
+        const candidates = result.rows.map((r) => r.datname);
+        console.log(`[db-resolve] candidate databases: ${candidates.join(", ")}`);
+        // Check each candidate for user tables with actual data.
+        // We query tables directly instead of relying on pg_stat_user_tables
+        // because stats counters (n_tup_ins) may be 0 in branch pods where data
+        // was loaded via file copy rather than INSERT.
+        let foundData = false;
+        for (const candidate of candidates) {
+            const checkPool = new pg.Pool({
+                connectionString: `postgresql://${user}:${password}@${podIp}:5432/${candidate}`,
+                max: 1,
+                connectionTimeoutMillis: 5000,
+            });
+            try {
+                const tablesResult = await checkPool.query(`SELECT table_name FROM information_schema.tables
+           WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+           ORDER BY table_name LIMIT 5`);
+                if (tablesResult.rows.length === 0)
+                    continue;
+                // Track first DB with user tables as fallback
+                if (!dbName) {
+                    dbName = candidate;
+                }
+                // Check if any table actually has rows
+                for (const row of tablesResult.rows) {
+                    const dataCheck = await checkPool.query(`SELECT EXISTS(SELECT 1 FROM "${row.table_name}" LIMIT 1) AS has_rows`);
+                    if (dataCheck.rows[0]?.has_rows) {
+                        dbName = candidate;
+                        foundData = true;
+                        console.log(`[db-resolve] found database with data: "${candidate}" (table: ${row.table_name})`);
+                        break;
+                    }
+                }
+                if (foundData)
+                    break;
+            }
+            finally {
+                checkPool.end().catch(() => { });
+            }
+        }
+        console.log(`[db-resolve] discovered database name: "${dbName}" from branch pod ${podIp}`);
+    }
+    catch (err) {
+        // Pod may still be starting — return undefined so the caller retries
+        // on the next request instead of caching a wrong fallback.
+        console.warn(`[db-resolve] failed to discover db name from ${podIp}:`, err instanceof Error ? err.message : err);
+        return undefined;
+    }
+    finally {
+        discoverPool.end().catch(() => { });
+    }
     if (!dbName) {
-        const discoverUrl = `postgresql://${user}:${password}@${podIp}:5432/postgres`;
-        const discoverPool = new pg.Pool({
-            connectionString: discoverUrl,
-            max: 1,
-            connectionTimeoutMillis: 10000,
-        });
-        try {
-            const result = await discoverPool.query(`SELECT datname FROM pg_database
-         WHERE datistemplate = false AND datname != 'postgres'
-         ORDER BY datname LIMIT 1`);
-            dbName = result.rows[0]?.datname ?? "postgres";
-        }
-        catch {
-            dbName = "postgres";
-        }
-        finally {
-            discoverPool.end().catch(() => { });
-        }
+        // No user database found yet (schema copy may still be in progress)
+        return undefined;
     }
     const connectionUrl = `postgresql://${user}:${password}@${podIp}:5432/${dbName}`;
+    console.log(`[db-resolve] resolved connection for "${dbId}": postgresql://${user}:***@${podIp}:5432/${dbName}`);
     dynamicPgConnections.set(dbId, connectionUrl);
     return connectionUrl;
 };
@@ -1028,6 +1798,38 @@ app.get(dbTableDataPaths, dbRateLimiter, async (req, res) => {
         res.status(500).json({
             error: error instanceof Error ? error.message : "Failed to query table",
         });
+    }
+});
+const dbUpdatePaths = ["/db/:dbId/update-cell", "/visualization-shop/api/db/:dbId/update-cell"];
+app.patch(dbUpdatePaths, dbRateLimiter, async (req, res) => {
+    const dbId = req.params.dbId ?? "";
+    const { tableName, column, value, rowId } = req.body;
+    if (!tableName || !column || value === undefined || rowId === undefined) {
+        res.status(400).json({ error: "Missing tableName, column, value, or rowId" });
+        return;
+    }
+    const connectionString = await resolveDbConnection(dbId);
+    if (!connectionString) {
+        res.status(404).json({ error: "No connection configured for the requested database" });
+        return;
+    }
+    try {
+        const pool = getPool(connectionString);
+        // Validate table and column exist, and use the DB-returned names to avoid SQL injection
+        const colCheck = await pool.query(`SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`, [tableName, column]);
+        if (colCheck.rows.length === 0) {
+            res.status(404).json({ error: "Table or column not found" });
+            return;
+        }
+        const safeTable = colCheck.rows[0].table_name.replace(/"/g, '""');
+        const safeColumn = colCheck.rows[0].column_name.replace(/"/g, '""');
+        await pool.query(`UPDATE "${safeTable}" SET "${safeColumn}" = $1 WHERE id = $2`, [value, rowId]);
+        res.json({ success: true });
+    }
+    catch (error) {
+        console.error("Failed to update cell:", error instanceof Error ? error.message : error);
+        res.status(500).json({ error: error instanceof Error ? error.message : "Update failed" });
     }
 });
 app.listen(port, () => {

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-ev
+  labels:
+    app: gateway-ev
+  annotations:
+    # Container-native load balancing for the GCE ingress (matches base gateway).
+    cloud.google.com/neg: '{"ingress":true}'
+spec:
+  selector:
+    app: gateway-ev
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

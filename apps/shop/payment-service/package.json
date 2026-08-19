@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1006.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.4",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"

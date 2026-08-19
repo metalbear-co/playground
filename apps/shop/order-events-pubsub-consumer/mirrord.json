@@ -1,0 +1,25 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "order-events-pubsub-consumer"
+    }
+  },
+  "feature": {
+    "fs": "local",
+    "env": {
+      "include": "GOOGLE_CLOUD_PROJECT;PUBSUB_SUBSCRIPTION_ID;LOG_LEVEL",
+      "override": {
+        "PORT": "8080"
+      }
+    },
+    "split_queues": {
+      "order-pubsub": {
+        "queue_type": "GCPPubSub",
+        "message_filter": {
+          "tenant": "demo-local.*"
+        }
+      }
+    }
+  }
+}

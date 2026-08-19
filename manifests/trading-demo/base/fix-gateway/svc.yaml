@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fix-gateway
+spec:
+  selector:
+    app: fix-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: fix
+      port: 9876
+      targetPort: 9876

@@ -1,0 +1,8 @@
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: default
+spec:
+  properties:
+    - name: project_id
+      value: playground-383912

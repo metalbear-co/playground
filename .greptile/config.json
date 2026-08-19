@@ -1,0 +1,31 @@
+{
+  "labels": ["greptile-review"],
+  "ignorePatterns": "**/package-lock.json\n**/pnpm-lock.yaml\n**/yarn.lock\n**/go.sum\n**/uv.lock\n\n**/node_modules/**\n**/.next/**\n**/dist/**\n\n**/*.pb.go\n\noverlays/localstack/charts/**\nbase/charts/**\n\n**/.DS_Store",
+  "statusCommentsEnabled": false,
+  "includeAuthors": [
+    "0x00A5",
+    "adnazujolakisic",
+    "aris-cub",
+    "aviramha",
+    "coffeewifi",
+    "cristeigabriela",
+    "DmitryDodzin",
+    "eyalb181",
+    "gememma",
+    "giIuis",
+    "hank-metalbear",
+    "iniw",
+    "itsamegraf",
+    "liron-sel",
+    "lorena-mtz",
+    "meowjesty",
+    "MintSoup",
+    "Razz4780",
+    "RinkiyaKeDad",
+    "skreborn",
+    "t4lz",
+    "tal-mb",
+    "trawler",
+    "vladrbg"
+  ]
+}

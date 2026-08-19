@@ -1,0 +1,15 @@
+
+services:
+  order-service:
+    target:
+      namespace: shop
+      path: deployment/order-service
+    run:
+       command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"] 
+
+  inventory-service:
+    target:
+      namespace: shop
+      path: deployment/inventory-service
+    run:
+       command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"] 

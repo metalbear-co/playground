@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-b-ev
+  labels:
+    app: service-b-ev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-b-ev
+  template:
+    metadata:
+      labels:
+        app: service-b-ev
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-kafka-demo-service-b:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: OTEL_PROPAGATORS
+              value: "tracecontext,baggage"
+            - name: KAFKA_ADDRESS
+              value: "kafka.infra.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "kafka-demo.ev.b"
+            # Event-driven B does not forward to Kafka — it writes DB state instead.
+            - name: NEXT_TOPIC
+              value: ""
+            - name: TRACE_TOPIC
+              value: "kafka-demo.ev.trace"
+            - name: KAFKA_CONSUMER_GROUP
+              value: "service-b-ev"
+            - name: STAGE
+              value: "b"
+            - name: SERVICE_NAME
+              value: "service-b"
+            # event-sink: write a pending row to kafka_demo_events for CronJob Z.
+            - name: DB_MODE
+              value: "event-sink"
+            # Reuses the base demo's DB secret (created out-of-band by deploy.sh).
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-demo-db
+                  key: url
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
