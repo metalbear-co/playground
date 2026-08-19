@@ -8,6 +8,7 @@ export type Product = {
   image_url?: string | null;
   image_urls?: string[] | null;
   is_new?: boolean;
+  discount_percent?: number | null;
 };
 
 /** Primary image for thumbnails (first in array, or legacy image_url). */
@@ -23,4 +24,15 @@ export function getImageUrls(product: Product): string[] {
   if (urls && urls.length > 0) return urls;
   const single = product.image_url;
   return single ? [single] : [];
+}
+
+/** True if product has an active discount. */
+export function hasDiscount(product: Product): boolean {
+  return !!product.discount_percent && product.discount_percent > 0;
+}
+
+/** Price in cents after discount is applied (rounded). */
+export function getDiscountedPriceCents(product: Product): number {
+  if (!hasDiscount(product)) return product.price_cents;
+  return Math.round(product.price_cents * (1 - product.discount_percent! / 100));
 }

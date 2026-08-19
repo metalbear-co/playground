@@ -26,6 +26,7 @@ async function initDb() {
         image_url VARCHAR(512),
         image_urls JSONB DEFAULT '[]'::jsonb,
         is_new BOOLEAN DEFAULT false,
+        discount_percent INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
@@ -44,8 +45,15 @@ async function initDb() {
     } catch (err: unknown) {
       if ((err as { code?: string }).code !== "42701") throw err;
     }
+    try {
+      await client.query("ALTER TABLE products ADD COLUMN discount_percent INTEGER DEFAULT 0");
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== "42701") throw err;
+    }
     // Mark first two products as "new" for existing DBs
     await client.query("UPDATE products SET is_new = true WHERE id IN (1, 2)");
+    // Seed a discount on a couple of products for existing DBs
+    await client.query("UPDATE products SET discount_percent = 20 WHERE id IN (3, 4) AND discount_percent = 0");
     // Migrate image_url to image_urls for existing rows
     await client.query(`
       UPDATE products SET image_urls = jsonb_build_array(image_url)
@@ -72,7 +80,7 @@ app.get("/health", (_req, res) => {
 app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
-    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
+    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new, discount_percent FROM products ORDER BY id");
     res.json(rows);
   } catch (err) {
     console.error("Error fetching products:", err);
@@ -87,7 +95,7 @@ app.get("/products/:id", async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products WHERE id = $1",
+      "SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new, discount_percent FROM products WHERE id = $1",
       [id]
     );
     if (rows.length === 0) {

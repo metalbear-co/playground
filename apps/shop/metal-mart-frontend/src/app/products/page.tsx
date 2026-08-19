@@ -5,8 +5,9 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
+import DiscountBadge from "@/components/DiscountBadge";
 import ProductImage from "@/components/ProductImage";
-import { getPrimaryImageUrl, type Product } from "@/lib/product";
+import { getPrimaryImageUrl, getDiscountedPriceCents, hasDiscount, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -63,6 +64,7 @@ export default function ProductsPage() {
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
                 {p.is_new && <NewBadge size="default" />}
+                {hasDiscount(p) && <DiscountBadge percent={p.discount_percent!} size="default" />}
                 <div className="relative aspect-square overflow-hidden bg-slate-100">
                   {getPrimaryImageUrl(p) ? (
                     <ProductImage
@@ -82,7 +84,16 @@ export default function ProductsPage() {
                   <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
                     {p.name}
                   </h2>
-                  <p className="mt-2 text-lg font-semibold text-[#6a4ff5]">${(p.price_cents / 100).toFixed(2)}</p>
+                  {hasDiscount(p) ? (
+                    <p className="mt-2 flex items-baseline gap-2 text-lg font-semibold text-[#6a4ff5]">
+                      <span>${(getDiscountedPriceCents(p) / 100).toFixed(2)}</span>
+                      <span className="text-sm font-medium text-slate-400 line-through">
+                        ${(p.price_cents / 100).toFixed(2)}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-lg font-semibold text-[#6a4ff5]">${(p.price_cents / 100).toFixed(2)}</p>
+                  )}
                   <p className="mt-auto pt-3 text-xs text-slate-500">In stock: {p.stock}</p>
                 </div>
               </Link>

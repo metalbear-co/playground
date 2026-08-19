@@ -5,8 +5,9 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
+import DiscountBadge from "@/components/DiscountBadge";
 import ProductImage from "@/components/ProductImage";
-import { getPrimaryImageUrl, type Product } from "@/lib/product";
+import { getPrimaryImageUrl, getDiscountedPriceCents, hasDiscount, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -24,6 +25,8 @@ function ProductTile({
 }) {
   const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
+  const discounted = hasDiscount(product);
+  const discountedPrice = `$${(getDiscountedPriceCents(product) / 100).toFixed(2)}`;
 
   const elevatedClass = elevated ? "relative z-30" : "";
 
@@ -35,6 +38,7 @@ function ProductTile({
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
+        {discounted && <DiscountBadge percent={product.discount_percent!} size="default" />}
         <div className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -55,7 +59,14 @@ function ProductTile({
           <h2 className="text-2xl font-bold text-white drop-shadow-sm md:text-3xl">
             {product.name}
           </h2>
-          <p className="mt-1 text-lg font-semibold text-white/90">{price}</p>
+          {discounted ? (
+            <p className="mt-1 flex items-baseline gap-2 text-lg font-semibold text-white/90">
+              <span>{discountedPrice}</span>
+              <span className="text-sm font-medium text-white/60 line-through">{price}</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-lg font-semibold text-white/90">{price}</p>
+          )}
           <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
             Shop now →
           </span>
@@ -72,6 +83,7 @@ function ProductTile({
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
+        {discounted && <DiscountBadge percent={product.discount_percent!} size="default" />}
         <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[4/3] sm:w-64">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -91,7 +103,14 @@ function ProductTile({
           <h2 className="text-xl font-bold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
             {product.name}
           </h2>
-          <p className="mt-1 text-lg font-semibold text-[#6a4ff5]">{price}</p>
+          {discounted ? (
+            <p className="mt-1 flex items-baseline gap-2 text-lg font-semibold text-[#6a4ff5]">
+              <span>{discountedPrice}</span>
+              <span className="text-sm font-medium text-slate-400 line-through">{price}</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-lg font-semibold text-[#6a4ff5]">{price}</p>
+          )}
           {product.description && (
             <p className="mt-2 line-clamp-2 text-sm text-slate-600">
               {product.description}
@@ -110,6 +129,7 @@ function ProductTile({
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
+      {discounted && <DiscountBadge percent={product.discount_percent!} size="default" />}
       <div className="relative aspect-square overflow-hidden bg-slate-100">
         {getPrimaryImageUrl(product) ? (
           <ProductImage
@@ -129,7 +149,14 @@ function ProductTile({
         <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
           {product.name}
         </h2>
-        <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
+        {discounted ? (
+          <p className="mt-1 flex items-baseline gap-1.5 font-semibold text-[#6a4ff5]">
+            <span>{discountedPrice}</span>
+            <span className="text-xs font-medium text-slate-400 line-through">{price}</span>
+          </p>
+        ) : (
+          <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
+        )}
       </div>
     </Link>
   );
