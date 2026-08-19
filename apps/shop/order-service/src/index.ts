@@ -106,6 +106,15 @@ function validateOrderItems(raw: unknown): { items: Array<{ productId: number; q
   return { items };
 }
 
+const DELIVERY_ESTIMATE_DAYS = 5;
+
+/** Estimated delivery date, computed rather than stored: order creation time plus a fixed lead time. */
+function estimatedDeliveryFrom(createdAt: Date): string {
+  const d = new Date(createdAt);
+  d.setDate(d.getDate() + DELIVERY_ESTIMATE_DAYS);
+  return d.toISOString();
+}
+
 /** Thrown by createOrderDirect to preserve HTTP status and response body. */
 class OrderError extends Error {
   constructor(
@@ -121,7 +130,7 @@ class OrderError extends Error {
 /** Create order via direct path: inventory → payment → DB → Kafka. */
 async function createOrderDirect(
   input: OrderInput
-): Promise<{ orderId: number; status: string }> {
+): Promise<{ orderId: number; status: string; estimated_delivery: string }> {
   const { items, total_cents: totalCents, customer_email, baggage } = input;
 
   for (const item of items) {
@@ -168,14 +177,16 @@ async function createOrderDirect(
 
   const client = await pool.connect();
   let orderId: number;
+  let createdAt: Date;
   try {
     const {
       rows: [row],
     } = await client.query(
-      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id",
+      "INSERT INTO orders (items, total_cents, status, customer_email) VALUES ($1, $2, 'confirmed', $3) RETURNING id, created_at",
       [JSON.stringify(items), totalCents, customer_email ?? null]
     );
     orderId = row.id;
+    createdAt = row.created_at;
   } finally {
     client.release();
   }
@@ -225,7 +236,11 @@ async function createOrderDirect(
     baggage,
   });
 
-  return { orderId, status: "confirmed" };
+  return {
+    orderId,
+    status: "confirmed",
+    estimated_delivery: estimatedDeliveryFrom(createdAt),
+  };
 }
 
 app.post("/orders", async (req, res) => {
@@ -275,7 +290,10 @@ app.get("/orders/:id", orderReadLimiter, async (req, res) => {
     );
     if (rows.length === 0)
       return res.status(404).json({ error: "Order not found" });
-    res.json(rows[0]);
+    res.json({
+      ...rows[0],
+      estimated_delivery: estimatedDeliveryFrom(rows[0].created_at),
+    });
   } catch (err) {
     console.error("Error fetching order:", err);
     res.status(500).json({ error: "Internal server error" });
