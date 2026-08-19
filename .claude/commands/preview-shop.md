@@ -76,18 +76,32 @@ Follow these steps in order:
    ```
    Or ask the user to create the PR manually if no auth token is available.
 
+   **Immediately after creating the PR, add the `preview` label — required, not optional.** The repo has several overlapping preview workflows; only `preview-shop-pr-gated.yml` reliably builds for an arbitrary branch, and it only runs when the PR has the `preview` label. Without it, `preview-shop-pr.yml` appears to run but actually no-ops for any branch not prefixed `demo-` — it reports `success` with every job skipped, which looks like a working build but never builds anything.
+
+   Preferred (`gh` CLI):
+   ```bash
+   gh pr edit <PR_NUMBER> --add-label preview
+   ```
+
+   Fallback (WebFetch):
+   ```
+   POST https://api.github.com/repos/metalbear-co/playground/issues/<PR_NUMBER>/labels
+   Headers: Authorization: Bearer <GITHUB_TOKEN>, Accept: application/vnd.github+json
+   Body: {"labels": ["preview"]}
+   ```
+
 6. **Wait for the Preview Workflow to Finish**
 
-   After the PR is created, the **Preview Shop PR** GitHub Action (`preview-shop-pr.yml`) starts building the preview environment. **DO NOT show the preview URL/header to the PM yet** — the environment isn't ready until this workflow succeeds.
+   After the `preview` label is added, the **Preview Shop Gated** GitHub Action (`preview-shop-pr-gated.yml`) starts building the preview environment. **DO NOT show the preview URL/header to the PM yet** — the environment isn't ready until this workflow succeeds.
 
    Tell the PM once: *"mirrord is creating your preview environment — I'll keep you posted and ping you the moment it's ready (~5-10 min)."*
 
    **Step 6a — Find the workflow run.**
 
-   Wait ~15 seconds for GitHub to register the run, then use the **WebFetch** tool (NOT `gh` CLI, which may not be available) to query the GitHub Actions API. The repo is public so no auth is needed for reads:
+   Wait ~15 seconds for GitHub to register the run, then use the **WebFetch** tool (NOT `gh` CLI, which may not be available) to query the GitHub Actions API. The repo is public so no auth is needed for reads. **Query the specific workflow file, not a plain branch filter** — other preview workflows (`preview-shop-pr.yml`, `preview-env-pr.yml`, `preview-shop-pr-idle.yml`) also fire `pull_request` events on the same branch and report a misleading `success` (no-op, everything skipped). Filtering by branch alone can pick up one of those instead of the real build:
 
    ```
-   GET https://api.github.com/repos/metalbear-co/playground/actions/runs?branch=<branch-name>&event=pull_request&per_page=1
+   GET https://api.github.com/repos/metalbear-co/playground/actions/workflows/preview-shop-pr-gated.yml/runs?branch=<branch-name>&event=pull_request&per_page=1
    ```
 
    Parse the JSON response to extract:
