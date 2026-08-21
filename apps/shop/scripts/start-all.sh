@@ -15,6 +15,7 @@ INVENTORY_DIR="${SHOP_DIR}/inventory-service"
 PAYMENT_DIR="${SHOP_DIR}/payment-service"
 DELIVERY_DIR="${SHOP_DIR}/delivery-service"
 NOTIFICATIONS_DIR="${SHOP_DIR}/notifications-service"
+CHAT_DIR="${SHOP_DIR}/chat-service"
 FRONTEND_DIR="${SHOP_DIR}/metal-mart-frontend"
 
 NETWORK="shop-network"
@@ -91,6 +92,11 @@ export RABBITMQ_QUEUE="order-notifications"
 (cd "${NOTIFICATIONS_DIR}" && npm run dev > "${SHOP_DIR}/.notifications.log" 2>&1) &
 NOTIFICATIONS_PID=$!
 
+export PORT=3006
+export KAFKA_ADDRESS=localhost:9092
+(cd "${CHAT_DIR}" && npm run dev > "${SHOP_DIR}/.chat.log" 2>&1) &
+CHAT_PID=$!
+
 export PORT=3001
 export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/orders"
 export INVENTORY_SERVICE_URL="http://localhost:3002"
@@ -105,15 +111,16 @@ export PORT=3000
 export INVENTORY_SERVICE_URL="http://localhost:3002"
 export ORDER_SERVICE_URL="http://localhost:3001"
 export DELIVERY_SERVICE_URL="http://localhost:3004"
+export CHAT_SERVICE_URL="http://localhost:3006"
 (cd "${FRONTEND_DIR}" && npm run dev > "${SHOP_DIR}/.frontend.log" 2>&1) &
 FRONTEND_PID=$!
 
 echo ""
-echo "Shop is starting. PIDs: order=${ORDER_PID} inventory=${INVENTORY_PID} payment=${PAYMENT_PID} delivery=${DELIVERY_PID} notifications=${NOTIFICATIONS_PID} frontend=${FRONTEND_PID}"
-echo "Logs: .order.log .inventory.log .payment.log .delivery.log .notifications.log .frontend.log"
+echo "Shop is starting. PIDs: order=${ORDER_PID} inventory=${INVENTORY_PID} payment=${PAYMENT_PID} delivery=${DELIVERY_PID} notifications=${NOTIFICATIONS_PID} chat=${CHAT_PID} frontend=${FRONTEND_PID}"
+echo "Logs: .order.log .inventory.log .payment.log .delivery.log .notifications.log .chat.log .frontend.log"
 echo ""
 echo "URLs:"
 echo "  Shop:        http://localhost:3000"
 echo ""
-echo "To stop app services: kill ${ORDER_PID} ${INVENTORY_PID} ${PAYMENT_PID} ${DELIVERY_PID} ${NOTIFICATIONS_PID} ${FRONTEND_PID}"
+echo "To stop app services: kill ${ORDER_PID} ${INVENTORY_PID} ${PAYMENT_PID} ${DELIVERY_PID} ${NOTIFICATIONS_PID} ${CHAT_PID} ${FRONTEND_PID}"
 echo "To stop Docker: docker stop ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"

@@ -26,6 +26,8 @@ spec:
               value: "http://order-service:80"
             - name: DELIVERY_SERVICE_URL
               value: "http://delivery-service:80"
+            - name: CHAT_SERVICE_URL
+              value: "http://chat-service:80"
           ports:
             - containerPort: 3000
               protocol: TCP

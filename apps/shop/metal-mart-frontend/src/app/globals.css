@@ -115,3 +115,18 @@ a, button {
   width: 100%;
   height: 32px;
 }
+
+/* Chat widget panel entrance */
+@keyframes chatPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-chat-panel {
+  animation: chatPanelIn 0.2s ease-out forwards;
+}

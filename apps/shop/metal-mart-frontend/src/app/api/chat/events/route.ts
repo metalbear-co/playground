@@ -1,0 +1,16 @@
+const base = process.env.CHAT_SERVICE_URL || "http://localhost:80";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(req: Request) {
+  // req.signal propagates a browser disconnect upstream so the chat service
+  // drops the SSE subscriber instead of leaking it.
+  const upstream = await fetch(`${base}/events`, { signal: req.signal });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache, no-transform",
+    },
+  });
+}

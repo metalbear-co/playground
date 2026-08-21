@@ -10,6 +10,7 @@ import {
   FileText,
   Globe,
   Inbox,
+  MessageCircle,
   MessagesSquare,
   Monitor,
   Package,
@@ -81,6 +82,9 @@ export function ArchitectureGlyph({
   }
   if (id === "notifications-service") {
     return wrap(<Bell {...p} style={{ color: "#CA8A04" }} />);
+  }
+  if (id === "chat-service") {
+    return wrap(<MessageCircle {...p} style={{ color: "#CA8A04" }} />);
   }
   if (
     id.endsWith("-service") ||

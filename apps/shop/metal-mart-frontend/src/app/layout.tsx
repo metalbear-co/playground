@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
+import ChatWidget from "@/components/chat/ChatWidget";
 import Footer from "@/components/Footer";
 import MascotPositioned from "@/components/MascotPositioned";
 import "./globals.css";
@@ -26,6 +27,7 @@ export default function RootLayout({
           <MascotPositioned />
           <div className="flex-1">{children}</div>
           <Footer />
+          <ChatWidget />
         </div>
       </body>
     </html>

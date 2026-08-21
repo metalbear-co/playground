@@ -550,6 +550,9 @@ const SESSION_NODE_IDS = new Set([
   "mirrord-agent",
 ]);
 
+/** Services that consume from Kafka; targets of Kafka split sessions resolve to these nodes. */
+const KAFKA_CONSUMER_TARGETS = new Set(["delivery-service", "chat-service"]);
+
 const initialZoneNodes = buildZoneNodes(adjustedNodes);
 const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
 const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
@@ -1037,6 +1040,8 @@ export default function VisualizationPage() {
   const searchParams = useSearchParams();
   const useQueueSplittingMock =
     searchParams.get("queue_splitting") === "true";
+  const useChatSplittingMock =
+    searchParams.get("chat_splitting") === "true";
   const useDbBranchMock = searchParams.get("db_branch") === "true";
   const useCiRunnerMock = searchParams.get("ci-runner") === "true";
   const useMultipleSessionMock =
@@ -1258,12 +1263,13 @@ export default function VisualizationPage() {
   }, [sortedAgentGroups, dynamicNodePositions]);
 
   // Targets that have a kafka split topic acting as middleman (skip direct agent→target edge).
-  // Note: delivery-service agent node comes from OperatorSession, not KafkaEphemeralTopic.
+  // Note: Kafka-consumer service agent nodes come from OperatorSession, not KafkaEphemeralTopic,
+  // so those targets keep their direct agent edge alongside the split-topic path.
   const kafkaSplitTargets = useMemo(() => {
     const targets = new Set<string>();
     for (const topic of kafkaTopics) {
       const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
-      if (session && session.target.name !== "delivery-service") {
+      if (session && !KAFKA_CONSUMER_TARGETS.has(session.target.name)) {
         targets.add(session.target.name);
       }
     }
@@ -1405,10 +1411,20 @@ export default function VisualizationPage() {
       });
     });
 
-    // Fallback topic nodes – these connect to the target service (deployed app)
-    const deliveryPos = adjustedNodes.find((n) => n.id === "delivery-service")?.position ?? { x: 0, y: 0 };
+    // Fallback topic nodes – these connect to the target service (deployed app).
+    // Anchor each node near its session's target (delivery-service, chat-service, …).
+    const targetPositionFor = (topic: KafkaEphemeralTopic) => {
+      const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
+      const targetId = session?.target.name ?? "delivery-service";
+      return (
+        adjustedNodes.find((n) => n.id === targetId)?.position ??
+        adjustedNodes.find((n) => n.id === "delivery-service")?.position ??
+        { x: 0, y: 0 }
+      );
+    };
     fallbackTopics.forEach((topic, index) => {
       const nodeId = `kafka-deployed-topic-${topic.topicName}`;
+      const targetPos = targetPositionFor(topic);
       nodes.push({
         id: nodeId,
         type: "mirrord",
@@ -1427,8 +1443,8 @@ export default function VisualizationPage() {
           ),
         },
         position: dynamicNodePositions.get(nodeId) ?? {
-          x: deliveryPos.x + nodeWidth - 300 + index * (nodeWidth + 40),
-          y: deliveryPos.y + 500,
+          x: targetPos.x + nodeWidth - 300 + index * (nodeWidth + 40),
+          y: targetPos.y + 500,
         },
         style: sharedStyle,
         sourcePosition: Position.Right,
@@ -1552,13 +1568,19 @@ export default function VisualizationPage() {
       });
     }
 
-    // Fallback topic → delivery-service (consume messages to target)
+    // Fallback topic → its session's target service (consume messages to target)
     for (const topic of fallbackTopics) {
       const nodeId = `kafka-deployed-topic-${topic.topicName}`;
+      const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
+      const targetName = session?.target.name;
+      const targetId =
+        (targetName ? aliasIndex.get(targetName.toLowerCase()) : undefined) ??
+        targetName ??
+        "delivery-service";
       edges.push({
-        id: `${nodeId}-to-delivery`,
+        id: `${nodeId}-to-${targetId}`,
         source: nodeId,
-        target: "delivery-service",
+        target: targetId,
         label: "consume messages",
         type: "bezier",
         sourceHandle: `${nodeId}-source-top`,
@@ -3218,6 +3240,7 @@ export default function VisualizationPage() {
     if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
     else if (useCiRunnerMock) params.set("ciRunnerMock", "true");
     else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+    else if (useChatSplittingMock) params.set("chatSplittingMock", "true");
     else if (useSharableVisualizationMock)
       params.set("sharableVisualizationMock", "true");
     if (useDbBranchMock) params.set("dbBranchMock", "true");
@@ -3225,6 +3248,7 @@ export default function VisualizationPage() {
     return str ? `?${str}` : "";
   }, [
     useQueueSplittingMock,
+    useChatSplittingMock,
     useCiRunnerMock,
     useDbBranchMock,
     useMultipleSessionMock,
@@ -3256,6 +3280,7 @@ export default function VisualizationPage() {
         if (useMultipleSessionMock) params.set("multipleSessionMock", "true");
         else if (useCiRunnerMock) params.set("ciRunnerMock", "true");
         else if (useQueueSplittingMock) params.set("queueSplittingMock", "true");
+        else if (useChatSplittingMock) params.set("chatSplittingMock", "true");
         else if (useSharableVisualizationMock)
           params.set("sharableVisualizationMock", "true");
         if (useDbBranchMock) params.set("dbBranchMock", "true");
@@ -3292,6 +3317,7 @@ export default function VisualizationPage() {
       useMultipleSessionMock,
       useCiRunnerMock,
       useQueueSplittingMock,
+      useChatSplittingMock,
       useSharableVisualizationMock,
       useDbBranchMock,
     ],
