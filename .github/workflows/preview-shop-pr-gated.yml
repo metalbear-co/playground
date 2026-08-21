@@ -1,8 +1,10 @@
 # Shop preview workflow with an inline mirrord-ci gate.
 #
 # This workflow runs directly on pull_request instead of pull_request_target so
-# it can safely check out and execute branch code for same-repo PRs. Preview
-# creation is gated by a `preview` label on same-repo PRs.
+# it can safely check out and execute branch code for same-repo PRs. Two labels
+# control it (matched case-insensitively) on same-repo PRs:
+# - `Preview`  -> start a preview environment only, no mirrord CI E2E gate
+# - `CI+Prev`  -> run the mirrord CI E2E gate first, then start the preview
 name: Preview Environment - Shop (Gated Inline)
 run-name: >-
   Preview Shop Gated -
@@ -32,6 +34,7 @@ jobs:
       pull-requests: read
     outputs:
       should_run: ${{ steps.resolve.outputs.should_run }}
+      run_gate: ${{ steps.resolve.outputs.run_gate }}
       mode: ${{ steps.resolve.outputs.mode }}
       branch: ${{ steps.resolve.outputs.branch }}
       base_ref: ${{ steps.resolve.outputs.base_ref }}
@@ -70,15 +73,25 @@ jobs:
 
             const branch = pr.head.ref;
             const isSameRepo = pr.head.repo.full_name === sameRepoName;
-            const labels = (pr.labels || []).map(label => label.name);
-            const hasPreviewLabel = labels.includes('preview');
-            const changedLabel = context.payload.label?.name || '';
-            const isPreviewLabelEvent = changedLabel === 'preview';
+
+            // Labels are matched case-insensitively:
+            // - "preview" -> preview environment only, no E2E gate
+            // - "ci+prev" -> mirrord CI E2E gate, then preview
+            const PREVIEW_ONLY_LABEL = 'preview';
+            const CI_AND_PREVIEW_LABEL = 'ci+prev';
+            const relevantLabels = [PREVIEW_ONLY_LABEL, CI_AND_PREVIEW_LABEL];
+
+            const labels = (pr.labels || []).map(label => label.name.toLowerCase());
+            const hasPreviewLabel = labels.some(name => relevantLabels.includes(name));
+            const hasCiPrevLabel = labels.includes(CI_AND_PREVIEW_LABEL);
+            const changedLabel = (context.payload.label?.name || '').toLowerCase();
+            const isPreviewLabelEvent = relevantLabels.includes(changedLabel);
             const previewKey = previewKeyFromBranch(branch);
 
             const out = {
               should_run: 'false',
-              mode: (action === 'closed' || (action === 'unlabeled' && isPreviewLabelEvent)) ? 'stop' : 'start',
+              run_gate: hasCiPrevLabel ? 'true' : 'false',
+              mode: (action === 'closed' || (action === 'unlabeled' && isPreviewLabelEvent && !hasPreviewLabel)) ? 'stop' : 'start',
               branch,
               base_ref: pr.base.ref,
               preview_key: previewKey,
@@ -95,12 +108,18 @@ jobs:
               out.should_run = 'true';
               out.services_reason = 'pull_request:closed';
             } else if (action === 'unlabeled' && isPreviewLabelEvent) {
-              out.should_run = 'true';
-              out.services_reason = 'pull_request:preview-label-removed';
+              if (hasPreviewLabel) {
+                // Another relevant label is still on the PR; the running
+                // preview stays up, nothing to do for this event.
+                out.services_reason = 'pull_request:label-removed-other-label-remains';
+              } else {
+                out.should_run = 'true';
+                out.services_reason = 'pull_request:preview-label-removed';
+              }
             } else if (action === 'labeled' && isPreviewLabelEvent) {
               out.should_run = 'true';
               out.should_comment = 'true';
-              out.services_reason = 'pull_request:preview-label-added';
+              out.services_reason = `pull_request:${changedLabel}-label-added`;
             } else if (hasPreviewLabel) {
               out.should_run = 'true';
               out.should_comment = 'true';
@@ -167,7 +186,7 @@ jobs:
   e2e-gate:
     name: E2E Gate (${{ matrix.name }})
     needs: [resolve-context, detect-changes]
-    if: needs.detect-changes.outputs.has_changes == 'true'
+    if: needs.detect-changes.outputs.has_changes == 'true' && needs.resolve-context.outputs.run_gate == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -356,7 +375,13 @@ jobs:
   build-and-preview:
     name: Build & Preview (${{ matrix.name }})
     needs: [resolve-context, detect-changes, e2e-gate]
-    if: needs.detect-changes.outputs.has_changes == 'true' && needs.e2e-gate.result == 'success'
+    # The E2E gate must pass when the CI+Prev label requested it; with the
+    # Preview-only label the gate is skipped and the preview starts directly.
+    if: >-
+      !cancelled() &&
+      needs.detect-changes.outputs.has_changes == 'true' &&
+      (needs.e2e-gate.result == 'success' ||
+       (needs.resolve-context.outputs.run_gate != 'true' && needs.e2e-gate.result == 'skipped'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -503,11 +528,15 @@ jobs:
 
             const gateResults = readJsonDir('/tmp/gate-results');
             const previewResults = readJsonDir('/tmp/preview-results');
+            const gateByName = new Map(gateResults.map(item => [item.name, item.gate_status]));
             const previewByName = new Map(previewResults.map(item => [item.name, item.preview_status]));
-            const services = gateResults.map(item => ({
-              name: item.name,
-              gate: item.gate_status,
-              preview: previewByName.get(item.name) || 'not-started',
+            // With the Preview-only label there are no gate artifacts, so the
+            // service list is the union of gate and preview results.
+            const serviceNames = [...new Set([...gateByName.keys(), ...previewByName.keys()])];
+            const services = serviceNames.map(name => ({
+              name,
+              gate: gateByName.get(name) || 'skipped',
+              preview: previewByName.get(name) || 'not-started',
             }));
 
             const gateBadge = {
@@ -559,7 +588,7 @@ jobs:
                 '',
                 '*Preview is stopped when the PR is merged or closed.*',
               );
-            } else if (gateResult !== 'success') {
+            } else if (gateResult === 'failure' || gateResult === 'cancelled') {
               body.push(
                 '',
                 'Preview creation did not run because the E2E gate did not pass.'
