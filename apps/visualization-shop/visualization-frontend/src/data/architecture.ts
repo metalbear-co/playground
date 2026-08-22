@@ -175,15 +175,8 @@ export const architectureNodes: ArchitectureNode[] = [
     repoPath: "shop/delivery-service/",
     zone: "cluster",
   },
-  {
-    id: "notifications-service",
-    label: "notifications-service",
-    stack: "Node.js / Express",
-    description: "RabbitMQ consumer for order notification messages after checkout.",
-    group: "service",
-    repoPath: "shop/notifications-service/",
-    zone: "cluster",
-  },
+  // chat-service is declared before notifications-service so the dagre layout
+  // places it higher in the diagram, next to its Kafka producer.
   {
     id: "chat-service",
     label: "chat-service",
@@ -191,6 +184,15 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Consumes support-chat messages from Kafka, streams them to browsers over SSE.",
     group: "service",
     repoPath: "shop/chat-service/",
+    zone: "cluster",
+  },
+  {
+    id: "notifications-service",
+    label: "notifications-service",
+    stack: "Node.js / Express",
+    description: "RabbitMQ consumer for order notification messages after checkout.",
+    group: "service",
+    repoPath: "shop/notifications-service/",
     zone: "cluster",
   },
   {
