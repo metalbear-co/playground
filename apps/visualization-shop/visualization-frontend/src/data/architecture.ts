@@ -188,8 +188,7 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "chat-service",
     label: "chat-service",
     stack: "Node.js / Express",
-    description:
-      "Kafka-backed support chat: consumes chat messages from the support-chat topic, produces bot replies, and streams conversations to browsers over SSE.",
+    description: "Consumes support-chat messages from Kafka, streams them to browsers over SSE.",
     group: "service",
     repoPath: "shop/chat-service/",
     zone: "cluster",
