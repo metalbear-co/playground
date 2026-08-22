@@ -351,20 +351,6 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "data",
   },
   {
-    id: "frontend-to-chat",
-    source: "metal-mart-frontend",
-    target: "chat-service",
-    label: "POST /messages · SSE",
-    intent: "request",
-  },
-  {
-    id: "chat-to-kafka",
-    source: "chat-service",
-    target: "kafka",
-    label: "Emit chat message",
-    intent: "data",
-  },
-  {
     id: "kafka-to-chat",
     source: "kafka",
     target: "chat-service",
