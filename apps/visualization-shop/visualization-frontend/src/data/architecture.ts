@@ -124,7 +124,8 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "metal-mart-frontend",
     label: "metal-mart-frontend",
     stack: "Next.js / React",
-    description: "E-commerce storefront with product catalog, cart, and checkout.",
+    description:
+      "E-commerce storefront with product catalog, cart, checkout, and support chat (publishes chat messages to Kafka).",
     group: "service",
     repoPath: "shop/metal-mart-frontend/",
     zone: "cluster",
@@ -188,7 +189,7 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "chat-service",
     stack: "Node.js / Express",
     description:
-      "Kafka-backed support chat: produces and consumes chat messages, streams them to browsers over SSE.",
+      "Kafka-backed support chat: consumes chat messages from the support-chat topic, produces bot replies, and streams conversations to browsers over SSE.",
     group: "service",
     repoPath: "shop/chat-service/",
     zone: "cluster",
@@ -198,7 +199,7 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "Kafka Producer",
     stack: "orders · support-chat",
     description:
-      "Receives order events from the order service and chat messages from the chat service.",
+      "Receives order events from the order service and support-chat messages from the frontend.",
     group: "queue",
     zone: "cluster",
   },
@@ -307,6 +308,13 @@ export const architectureEdges: ArchitectureEdge[] = [
     target: "receipt-service",
     label: "Generate receipt",
     intent: "request",
+  },
+  {
+    id: "frontend-to-kafka",
+    source: "metal-mart-frontend",
+    target: "kafka",
+    label: "Publish chat message",
+    intent: "data",
   },
   {
     id: "order-to-kafka",
