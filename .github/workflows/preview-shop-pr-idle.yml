@@ -384,8 +384,18 @@ jobs:
           location: us-central1-c
           project_id: playground-383912
 
+      - name: Install mirrord
+        run: curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+
+      # The CLI is invoked directly (not via the mirrord-preview action) because
+      # the action's stop path ignores its namespace input, and sessions live in
+      # the shop namespace — not the kubeconfig default the CLI would search.
+      # Best-effort cleanup: the stop errors when no preview session matches the
+      # key (none was ever started for this PR, or the TTL / another stop
+      # workflow already reaped it). Those backstops make a missed stop
+      # harmless, so don't fail the run over it.
       - name: Stop mirrord preview
-        uses: metalbear-co/mirrord-preview@master
-        with:
-          action: stop
-          key: ${{ needs.resolve-context.outputs.preview_key }}
+        continue-on-error: true
+        run: mirrord preview stop --key "$PREVIEW_KEY" --namespace shop
+        env:
+          PREVIEW_KEY: ${{ needs.resolve-context.outputs.preview_key }}
