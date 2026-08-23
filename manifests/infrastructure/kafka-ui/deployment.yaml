@@ -23,20 +23,26 @@ spec:
           ports:
             - containerPort: 8080
               protocol: TCP
+          # Spring Boot startup takes 1-3 minutes under the CPU limit; the
+          # startup probe holds off liveness until the app is actually up.
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 15
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 30
           resources:
             limits:
-              cpu: 500m
+              cpu: "1"
               memory: 768Mi
             requests:
-              cpu: 100m
+              cpu: 200m
               memory: 384Mi
