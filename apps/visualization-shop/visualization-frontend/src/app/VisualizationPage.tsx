@@ -455,8 +455,6 @@ const EXTERNAL_USER_OFFSET_X = 240;
 const INGRESS_LEFT_SHIFT_X = 90;
 const EXTERNAL_USER_SHIFT_Y = 100;
 const INGRESS_SHIFT_Y = 100;
-const MIRRORD_OPERATOR_SHIFT_X = 180;
-const MIRRORD_OPERATOR_SHIFT_Y = 100;
 const MIRRORD_AGENT_SHIFT_X = 380;
 const MIRRORD_AGENT_SHIFT_Y = 100;
 
@@ -483,6 +481,10 @@ const DEFAULT_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   "notifications-service": { x: 2130, y: 1070 },
   "receipt-service": { x: 2640, y: 55 },
   "postgres-deliveries": { x: 2640, y: 305 },
+  // Pinned to the lower-left corner of the cluster zone. Dynamic agent nodes
+  // stack in a column directly above it; CI runner and preview-env nodes stack
+  // in a column to its left.
+  "mirrord-operator": { x: 300, y: 1500 },
 };
 
 /**
@@ -510,14 +512,6 @@ const clusterAdjustedNodes = layoutedNodes.map((node) => {
       ...position,
       x: position.x - INGRESS_LEFT_SHIFT_X,
       y: position.y + INGRESS_SHIFT_Y,
-    };
-  }
-
-  if (node.id === "mirrord-operator") {
-    position = {
-      ...position,
-      x: position.x + MIRRORD_OPERATOR_SHIFT_X,
-      y: position.y + MIRRORD_OPERATOR_SHIFT_Y,
     };
   }
 
@@ -587,9 +581,15 @@ const initialZoneNodes = buildZoneNodes(adjustedNodes);
 const clusterZoneNode = initialZoneNodes.find((node) => node.id === "zone-cluster");
 const localZoneNode = initialZoneNodes.find((node) => node.id === "zone-local");
 
-const dynamicAgentBasePosition =
-  adjustedNodes.find((n) => n.id === "mirrord-agent")?.position ?? { x: 0, y: 0 };
+/** Pinned operator position — anchor for the agent column (above) and CI/preview column (left). */
+const operatorBasePosition =
+  adjustedNodes.find((n) => n.id === "mirrord-operator")?.position ?? { x: 0, y: 0 };
 const DYNAMIC_AGENT_SPACING_Y = 220;
+/** Mid-diagram vertical anchor for SQS/RMQ split-queue nodes (static mirrord-agent row). */
+const QUEUE_SPLIT_BASE_Y =
+  adjustedNodes.find((n) => n.id === "mirrord-agent")?.position.y ?? 0;
+/** X of the CI runner / preview-env column, to the left of the operator. */
+const OPERATOR_LEFT_COLUMN_X = operatorBasePosition.x - nodeWidth - 200;
 
 const localProcessBasePos =
   adjustedNodes.find((n) => n.id === "local-process")?.position ?? { x: 0, y: 0 };
@@ -1279,9 +1279,13 @@ export default function VisualizationPage() {
           cursor: "pointer",
           ...(isCopy ? { animation: "mirrordCopyPulse 2s ease-in-out infinite" } : {}),
         },
+        // Stack agents in a column directly on top of the pinned operator,
+        // last agent closest to the operator.
         position: dynamicNodePositions.get(agentId) ?? {
-          x: dynamicAgentBasePosition.x,
-          y: dynamicAgentBasePosition.y + index * DYNAMIC_AGENT_SPACING_Y,
+          x: operatorBasePosition.x,
+          y:
+            operatorBasePosition.y -
+            (sortedAgentGroups.length - index) * DYNAMIC_AGENT_SPACING_Y,
         },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
@@ -1674,7 +1678,7 @@ export default function VisualizationPage() {
         },
         position: dynamicNodePositions.get(nodeId) ?? {
           x: paymentPos.x,
-          y: dynamicAgentBasePosition.y + (sqsQueues.length + index) * DYNAMIC_AGENT_SPACING_Y,
+          y: QUEUE_SPLIT_BASE_Y + (sqsQueues.length + index) * DYNAMIC_AGENT_SPACING_Y,
         },
         style: sharedStyle,
         sourcePosition: Position.Right,
@@ -1707,7 +1711,7 @@ export default function VisualizationPage() {
         },
         position: dynamicNodePositions.get(nodeId) ?? {
           x: paymentPos.x,
-          y: dynamicAgentBasePosition.y + index * DYNAMIC_AGENT_SPACING_Y,
+          y: QUEUE_SPLIT_BASE_Y + index * DYNAMIC_AGENT_SPACING_Y,
         },
         style: sharedStyle,
         sourcePosition: Position.Right,
@@ -1866,7 +1870,7 @@ export default function VisualizationPage() {
         },
         position: dynamicNodePositions.get(nodeId) ?? {
           x: rabbitPos.x,
-          y: dynamicAgentBasePosition.y + (rmqQueues.length + index) * DYNAMIC_AGENT_SPACING_Y,
+          y: QUEUE_SPLIT_BASE_Y + (rmqQueues.length + index) * DYNAMIC_AGENT_SPACING_Y,
         },
         style: sharedStyle,
         sourcePosition: Position.Right,
@@ -2593,16 +2597,15 @@ export default function VisualizationPage() {
   const ciRunnerNodes = useMemo((): Node<NodeData>[] => {
     if (ciRunnerSessions.length === 0) return [];
     const palette = groupPalette.mirrord;
-    const operatorPos = adjustedNodes.find((n) => n.id === "mirrord-operator")?.position ?? { x: 0, y: 0 };
-    const operatorShiftedY = operatorPos.y + (sortedAgentGroups.length > 0
-      ? (sortedAgentGroups.length - 1) * DYNAMIC_AGENT_SPACING_Y
-      : 0);
 
     return ciRunnerSessions.map((session, index) => {
       const nodeId = `ci-runner-${sanitizeHostname(session.sessionId)}`;
+      // Column to the left of the operator, stacked upward from the operator's row.
       const position = dynamicNodePositions.get(nodeId) ?? {
-        x: operatorPos.x - nodeWidth - 200,
-        y: operatorShiftedY - ((ciRunnerSessions.length - index) * (nodeHeight + 40)),
+        x: OPERATOR_LEFT_COLUMN_X,
+        y:
+          operatorBasePosition.y -
+          (ciRunnerSessions.length - index) * (nodeHeight + 40),
       };
 
       return {
@@ -2645,7 +2648,7 @@ export default function VisualizationPage() {
         selectable: true,
       };
     });
-  }, [ciRunnerSessions, adjustedNodes, sortedAgentGroups, dynamicNodePositions]);
+  }, [ciRunnerSessions, dynamicNodePositions]);
 
   // Build dynamic nodes for PgBranchDatabase resources.
   // Each branch is positioned to the right of its target deployment's postgres data node.
@@ -2658,8 +2661,15 @@ export default function VisualizationPage() {
 
     return pgBranches.map((branch, index) => {
       const nodeId = `pg-branch-${sanitizeHostname(branch.name)}`;
-      // Position near the target deployment's postgres node
-      const postgresNodeId = `postgres-orders`;
+      // Position directly below the postgres node of this branch's target deployment,
+      // resolved through the architecture edges (same lookup as pgBranchEdges).
+      const targetArchId = aliasIndex.get(branch.targetDeployment.toLowerCase());
+      const postgresNodeId =
+        (targetArchId
+          ? architectureEdges.find(
+              (e) => e.source === targetArchId && e.target.startsWith("postgres-"),
+            )?.target
+          : undefined) ?? "postgres-orders";
       const postgresPos = adjustedNodes.find((n) => n.id === postgresNodeId)?.position ?? { x: 0, y: 0 };
 
       // Use blue (preview) styling when branchId matches a preview session key
@@ -2710,8 +2720,8 @@ export default function VisualizationPage() {
           ),
         },
         position: dynamicNodePositions.get(nodeId) ?? {
-          x: postgresPos.x - nodeWidth - 60,
-          y: postgresPos.y + index * (nodeHeight + 40),
+          x: postgresPos.x,
+          y: postgresPos.y + nodeHeight + 80 + index * (nodeHeight + 40),
         },
         style: {
           borderRadius: 18,
@@ -2728,7 +2738,7 @@ export default function VisualizationPage() {
         selectable: true,
       };
     });
-  }, [pgBranches, dynamicNodePositions, previewSessions]);
+  }, [pgBranches, dynamicNodePositions, previewSessions, aliasIndex]);
 
   // Build dynamic edges for PgBranchDatabase nodes.
   // Each branch connects from its target postgres node.
@@ -2800,7 +2810,6 @@ export default function VisualizationPage() {
   const previewSessionNodes = useMemo((): Node<NodeData>[] => {
     if (previewSessions.length === 0) return [];
     const palette = groupPalette.mirrord;
-    const operatorPos = adjustedNodes.find((n) => n.id === "mirrord-operator")?.position ?? { x: 0, y: 0 };
 
     // Group sessions by key
     const keyGroups = new Map<string, typeof previewSessions>();
@@ -2812,11 +2821,6 @@ export default function VisualizationPage() {
 
     const nodes: Node<NodeData>[] = [];
 
-    // Compute the shifted operator Y (operator moves to bottom of agent list)
-    const operatorShiftedY = operatorPos.y + (sortedAgentGroups.length > 0
-      ? (sortedAgentGroups.length - 1) * DYNAMIC_AGENT_SPACING_Y
-      : 0);
-
     // Flatten all sessions across groups and stack them vertically to the left of the operator
     let sessionIndex = 0;
     for (const [, sessions] of keyGroups) {
@@ -2824,12 +2828,10 @@ export default function VisualizationPage() {
         const nodeId = `preview-${sanitizeHostname(session.name)}`;
         const phaseColor = session.phase === "Ready" ? "text-green-600" : session.phase === "Failed" ? "text-red-600" : "text-yellow-600";
 
-        // Position preview pods vertically stacked to the left of the shifted operator
-        const baseX = operatorPos.x - nodeWidth - 200;
-        const baseY = operatorShiftedY + sessionIndex * (nodeHeight + 40);
+        // Column to the left of the operator, stacked downward from the operator's row.
         const position = dynamicNodePositions.get(nodeId) ?? {
-          x: baseX,
-          y: baseY,
+          x: OPERATOR_LEFT_COLUMN_X,
+          y: operatorBasePosition.y + sessionIndex * (nodeHeight + 40),
         };
         sessionIndex++;
 
@@ -3061,18 +3063,9 @@ export default function VisualizationPage() {
     if (!clusterZoneNode) return null;
     if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0 && ciRunnerNodes.length === 0) return clusterZoneNode;
 
-    // Apply operator bottom-shift so cluster zone encompasses the shifted operator position
-    const opBottomShift = sortedAgentGroups.length > 0
-      ? (sortedAgentGroups.length - 1) * DYNAMIC_AGENT_SPACING_Y
-      : 0;
     const clusterStaticNodes = adjustedNodes.filter((n) => {
       const zone = nodeZoneIndex.get(n.id);
       return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
-    }).map((n) => {
-      if (n.id === "mirrord-operator" && opBottomShift > 0) {
-        return { ...n, position: { ...n.position, y: n.position.y + opBottomShift } };
-      }
-      return n;
     });
     const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...pgBranchNodes, ...previewSessionNodes, ...ciRunnerNodes];
     const padding = 48;
@@ -3161,10 +3154,6 @@ export default function VisualizationPage() {
     }
     // Shift local architecture nodes down by the same amount
     // When multiple kafka topics exist, hide static local nodes (replaced by dynamic ones)
-    // Shift operator down to bottom of agent list so agents are above it
-    const operatorBottomShift = sortedAgentGroups.length > 0
-      ? (sortedAgentGroups.length - 1) * DYNAMIC_AGENT_SPACING_Y
-      : 0;
 
     // Resolve owner info for single-session local-process node
     const singleSessionOwner = (() => {
@@ -3204,13 +3193,6 @@ export default function VisualizationPage() {
               description: singleSessionOwner,
               ciRunner: singleSessionIsCiRunner,
             },
-          };
-        }
-        // Push operator to the bottom, aligned with the last agent
-        if (mapped.id === "mirrord-operator" && operatorBottomShift > 0) {
-          mapped = {
-            ...mapped,
-            position: { ...mapped.position, y: mapped.position.y + operatorBottomShift },
           };
         }
         if (zone === "local" && localYShift > 0) {
