@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: kafka-ui-healthcheck
+  namespace: infra
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 5
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /kafka/actuator/health
+        port: 8080
+  targetRef:
+    group: ""
+    kind: Service
+    name: kafka-ui
