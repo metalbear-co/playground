@@ -440,7 +440,12 @@ jobs:
           location: us-central1-c
           project_id: playground-383912
 
+      # Best-effort cleanup: the stop errors when no preview session matches the
+      # key (none was ever started for this PR, or the TTL / idle-stop workflow
+      # already reaped it). Those backstops make a missed stop harmless, so
+      # don't fail the run over it.
       - name: Stop mirrord preview
+        continue-on-error: true
         uses: metalbear-co/mirrord-preview@master
         with:
           action: stop
