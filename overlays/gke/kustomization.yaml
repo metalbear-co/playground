@@ -14,6 +14,7 @@ resources:
   - visualization-shop
   - mirrord-share-ingress-application.yaml
   - mirrord-preview
+  - kafka-ui
   - gateway.yaml
   - namespace.yaml
   - certificate.yaml

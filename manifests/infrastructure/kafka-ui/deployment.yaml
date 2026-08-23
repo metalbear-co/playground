@@ -20,6 +20,10 @@ spec:
               value: "playground"
             - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
               value: "kafka:9092"
+            # Serve under /kafka so the gateway can route
+            # playground.metalbear.dev/kafka without rewriting paths.
+            - name: SERVER_SERVLET_CONTEXT_PATH
+              value: "/kafka"
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -27,17 +31,17 @@ spec:
           # startup probe holds off liveness until the app is actually up.
           startupProbe:
             httpGet:
-              path: /actuator/health
+              path: /kafka/actuator/health
               port: 8080
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /kafka/actuator/health
               port: 8080
           livenessProbe:
             httpGet:
-              path: /actuator/health
+              path: /kafka/actuator/health
               port: 8080
           resources:
             limits:
