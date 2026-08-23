@@ -4,5 +4,6 @@ namespace: infra
 resources:
   - ../redis
   - ../kafka
+  - ../kafka-ui
   - ../rabbitmq
   - ../postgres
