@@ -5,7 +5,7 @@
 # developer to install mirrord, authenticate to the cloud, fetch cluster credentials,
 # and write a mirrord config, they run:
 #
-#   mm run order-service        (or just: mm order-service)
+#   mm run order-service
 #
 # and the wrapper handles everything else (installing mirrord, cloud auth, kube
 # context, config scaffolding, session key, and starting the service).
@@ -30,7 +30,7 @@
 # Sections you are expected to touch are marked with "CUSTOMIZE:".
 #
 # Usage:
-#   mm run <service> [--key NAME] [--namespace NS] [--target NAME] [-- extra args]
+#   mm run <service...> [--key NAME] [--namespace NS] [--target NAME] [-- extra args]
 #   mm list                 List runnable services
 #   mm config               Print the resolved mirrord config (for debugging)
 #   mm setup                Install mirrord + authenticate + fetch cluster creds
@@ -52,7 +52,7 @@ GKE_CLUSTER='playground-cluster-1'
 KUBE_CONTEXT="gke_${GCP_PROJECT}_${GCP_ZONE}_${GKE_CLUSTER}"
 
 # Kubernetes namespace where the workloads are deployed. Each service directory
-# name is assumed to match its Deployment name (override with `mm run --target`).
+# name is assumed to match its Deployment name (override with --target).
 DEFAULT_NAMESPACE='shop'
 
 # Directory that contains one sub-directory per service. The wrapper discovers
@@ -117,7 +117,6 @@ mm — run a MetalMart shop service locally against the shared GKE cluster via m
 Commands:
   run <service...> Start service(s) locally inside mirrord sessions — multiple
                   services run concurrently, sharing one session key
-                  (shortcut: `mm <service...>` works too)
   list            List services this wrapper can run
   config          Print the resolved mirrord config (templates rendered) without running
   setup           Install mirrord, authenticate to Google Cloud, fetch cluster creds
@@ -148,13 +147,12 @@ Examples:
   mm setup
   mm list
   mm run order-service
-  mm order-service
-  mm order-service chat-service
+  mm run order-service chat-service
   mm run order-service --key alice
   mm run order-service --target order-service-v2 --namespace staging
-  mm delivery-service --split-queues kafka
-  mm payment-service --split-queues sqs
-  mm inventory-service --migrate
+  mm run delivery-service --split-queues kafka
+  mm run payment-service --split-queues sqs
+  mm run inventory-service --migrate
   mm config
   mm sessions
   mm cleanup 8DD5CC32EFB3F230
@@ -846,12 +844,12 @@ main() {
     doctor)    cmd_doctor "$@" ;;
     extension) cmd_extension "$@" ;;
     *)
-      # Shortcut: `mm <service>` is the same as `mm run <service>`, so the
-      # everyday developer flow stays a strict one-liner.
+      # `run` is deliberately the only way to start a service — one canonical
+      # form, no shortcut. Redirect anyone who types a bare service name.
       if [[ -d "${SERVICES_DIR}/${cmd}" ]] && is_service_dir "${SERVICES_DIR}/${cmd}"; then
-        cmd_run "$cmd" "$@"
+        die "services are started with run: mm run ${cmd}${*:+ $*}"
       else
-        die "unknown command or service '$cmd' (try: mm --help, or mm list)"
+        die "unknown command '$cmd' (try: mm --help, or mm list)"
       fi
       ;;
   esac
