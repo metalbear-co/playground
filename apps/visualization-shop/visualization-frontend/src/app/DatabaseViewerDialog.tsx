@@ -49,7 +49,15 @@ export default function DatabaseViewerDialog({
       })
       .then((data: TableListResponse) => {
         setTables(data.tables);
-        if (data.tables.length > 0) setSelectedTable(data.tables[0]);
+        if (data.tables.length > 0) {
+          // Open the table named after the database (postgres-orders → orders);
+          // other tables in the same instance (e.g. an empty deliveries table)
+          // stay selectable in the sidebar.
+          const preferred = dbId.replace(/^postgres-/, "");
+          setSelectedTable(
+            data.tables.includes(preferred) ? preferred : data.tables[0],
+          );
+        }
         setTablesLoading(false);
       })
       .catch((err) => {
