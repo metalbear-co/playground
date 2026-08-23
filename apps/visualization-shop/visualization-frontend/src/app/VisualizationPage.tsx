@@ -461,10 +461,40 @@ const MIRRORD_AGENT_SHIFT_X = 380;
 const MIRRORD_AGENT_SHIFT_Y = 100;
 
 /**
+ * Hand-tuned default positions for the static architecture nodes, overriding the
+ * dagre layout. Laid out on a 500-ish column grid: entry → frontend → order
+ * orchestration → queues/data → consumers → downstream. Nodes not listed here
+ * (mirrord operator/agent, local zone) keep their computed positions.
+ */
+const DEFAULT_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
+  user: { x: -600, y: 525 },
+  ingress: { x: 0, y: 525 },
+  "metal-mart-frontend": { x: 600, y: 425 },
+  "order-service": { x: 1110, y: 825 },
+  sqs: { x: 1620, y: 45 },
+  "inventory-service": { x: 1620, y: 295 },
+  kafka: { x: 1620, y: 535 },
+  rabbitmq: { x: 1620, y: 820 },
+  "postgres-orders": { x: 1620, y: 1070 },
+  "payment-service": { x: 2130, y: 50 },
+  "postgres-inventory": { x: 2130, y: 290 },
+  "delivery-service": { x: 2130, y: 530 },
+  "chat-service": { x: 2130, y: 760 },
+  "notifications-service": { x: 2130, y: 1070 },
+  "receipt-service": { x: 2640, y: 55 },
+  "postgres-deliveries": { x: 2640, y: 305 },
+};
+
+/**
  * Apply per-node position shifts to non-local nodes first so that cluster bounds
  * reflect the actual rendered positions (e.g. mirrord-operator / agent shifts).
  */
 const clusterAdjustedNodes = layoutedNodes.map((node) => {
+  const preset = DEFAULT_NODE_POSITIONS[node.id];
+  if (preset) {
+    return { ...node, position: { ...preset } };
+  }
+
   let position = { ...node.position };
 
   if (node.id === "user") {
