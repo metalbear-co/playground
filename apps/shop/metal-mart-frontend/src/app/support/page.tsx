@@ -53,6 +53,16 @@ export default function SupportPage() {
         setMessages((prev) => appendMessage(prev, msg));
       }
     });
+    source.addEventListener("deleted", (e) => {
+      const { conversationId } = JSON.parse((e as MessageEvent).data) as {
+        conversationId: string;
+      };
+      setConversations((prev) => prev.filter((c) => c.conversationId !== conversationId));
+      if (conversationId === selectedIdRef.current) {
+        setSelectedId(null);
+        setMessages([]);
+      }
+    });
     return () => source.close();
   }, []);
 
@@ -83,6 +93,18 @@ export default function SupportPage() {
     });
   }
 
+  async function deleteConversation(conversationId: string) {
+    await fetch(`${basePath}/api/chat/conversations/${conversationId}`, {
+      method: "DELETE",
+    });
+    // The firehose "deleted" event also removes it; this keeps the UI snappy.
+    setConversations((prev) => prev.filter((c) => c.conversationId !== conversationId));
+    if (selectedIdRef.current === conversationId) {
+      setSelectedId(null);
+      setMessages([]);
+    }
+  }
+
   const selected = conversations.find((c) => c.conversationId === selectedId);
 
   return (
@@ -106,7 +128,7 @@ export default function SupportPage() {
             )}
             <ul className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
               {conversations.map((c) => (
-                <li key={c.conversationId}>
+                <li key={c.conversationId} className="group relative">
                   <button
                     type="button"
                     onClick={() => setSelectedId(c.conversationId)}
@@ -122,7 +144,27 @@ export default function SupportPage() {
                         {formatTime(c.lastTimestamp)}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{c.lastMessage}</p>
+                    <p className="mt-0.5 truncate pr-6 text-xs text-slate-500">{c.lastMessage}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteConversation(c.conversationId)}
+                    title="Delete conversation"
+                    aria-label="Delete conversation"
+                    className="absolute bottom-2 right-3 rounded p-1 text-slate-300 opacity-0 transition-opacity hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      className="h-4 w-4"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M8.75 1A2.75 2.75 0 0 0 6 3.75V4H3.5a.75.75 0 0 0 0 1.5h.443l.706 10.585A2.25 2.25 0 0 0 6.894 18.2h6.212a2.25 2.25 0 0 0 2.245-2.115L16.057 5.5h.443a.75.75 0 0 0 0-1.5H14v-.25A2.75 2.75 0 0 0 11.25 1h-2.5ZM12.5 4v-.25c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25V4h5ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
                   </button>
                 </li>
               ))}

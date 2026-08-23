@@ -6,6 +6,8 @@ import {
   addMessage,
   awaitingFirstResponse,
   broadcast,
+  broadcastDeleted,
+  deleteConversation,
   getConversation,
   listConversations,
   sendEvent,
@@ -163,6 +165,14 @@ app.get("/conversations", (_req, res) => {
 app.get("/conversations/:id/messages", (req, res) => {
   const convo = getConversation(req.params.id);
   res.json(convo?.messages ?? []);
+});
+
+app.delete("/conversations/:id", (req, res) => {
+  if (!deleteConversation(req.params.id)) {
+    return res.status(404).json({ error: "conversation not found" });
+  }
+  broadcastDeleted(req.params.id);
+  res.status(204).end();
 });
 
 function openSseStream(res: express.Response): void {
