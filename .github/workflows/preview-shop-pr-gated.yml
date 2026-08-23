@@ -329,7 +329,17 @@ jobs:
         id: gate-run
         if: steps.gate-config.outputs.skip != 'true'
         env:
-          SHOP_URL: https://playground.metalbear.dev
+          # Go through the frontend proxy (/shop/api) rather than the gateway's
+          # direct order-service routes (/orders, /banner). The direct routes hit
+          # the order-service NEG, where the GKE load balancer health-checks pods
+          # itself and also sends traffic to mirrord preview pods that Kubernetes
+          # marks not-ready — so a request can bypass the stolen target pod and
+          # land on a stale preview. The frontend reaches order-service through
+          # the cluster Service (kube-proxy), which only routes to ready pods,
+          # guaranteeing the request arrives at the target pod where the mirrord
+          # ci session's header filter applies. Baggage propagates through the
+          # frontend via OTel instrumentation.
+          SHOP_URL: https://playground.metalbear.dev/shop/api
           BAGGAGE_HEADER: mirrord=${{ env.SERVICE_KEY }}
           E2E_SCRIPT: ${{ matrix.e2e_script }}
         run: |
