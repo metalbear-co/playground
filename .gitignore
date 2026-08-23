@@ -33,3 +33,5 @@ apps/visualization/visualization-backend/dist/
 apps/shop/*/dist/
 
 localstack/
+# Scaffolded per-developer mirrord config written by apps/shop/scripts/mm
+apps/shop/.mirrord/
