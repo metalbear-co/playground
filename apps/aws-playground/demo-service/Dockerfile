@@ -1,15 +1,18 @@
-FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS build
+# The build stage runs on the target platform rather than the builder's, because
+# the binary below needs cgo and cross-compiling it would need an aarch64
+# toolchain in the image. On an amd64 CI runner this means the stage runs under
+# emulation, which for a dependency-free Go program is cheap.
+FROM golang:1.23-bookworm AS build
 
 WORKDIR /app
 COPY go.mod ./
 COPY *.go ./
 
-ARG TARGETARCH
 # The deployed task preloads mirrord's remote bootstrap library, which needs a
 # dynamic loader and glibc. A statically linked binary on a distroless-static
 # base would ignore LD_PRELOAD without reporting anything, so this stays
 # dynamically linked and the runtime below stays glibc-based.
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o /demo-service
+RUN CGO_ENABLED=1 go build -o /demo-service
 
 FROM debian:bookworm-slim
 
