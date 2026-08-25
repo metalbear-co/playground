@@ -1,2 +1,2 @@
-/demo-service
-/aws-playground-demo-service
+node_modules/
+dist/

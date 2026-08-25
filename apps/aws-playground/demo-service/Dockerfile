@@ -1,29 +1,23 @@
-# The build stage runs on the target platform rather than the builder's, because
-# the binary below needs cgo and cross-compiling it would need an aarch64
-# toolchain in the image. On an amd64 CI runner this means the stage runs under
-# emulation, which for a dependency-free Go program is cheap.
-FROM golang:1.23-bookworm AS build
-
+# syntax=docker/dockerfile:1.5
+FROM node:22-bookworm AS builder
 WORKDIR /app
-COPY go.mod ./
-COPY *.go ./
+COPY package*.json ./
+RUN npm ci --omit=optional
+COPY tsconfig.json .
+COPY src src
+RUN npm run build
 
-# The deployed task preloads mirrord's remote bootstrap library, which needs a
-# dynamic loader and glibc. A statically linked binary on a distroless-static
-# base would ignore LD_PRELOAD without reporting anything, so this stays
-# dynamically linked and the runtime below stays glibc-based.
-RUN CGO_ENABLED=1 go build -o /demo-service
+# The deployed task preloads mirrord's remote bootstrap library, which is built
+# against glibc and needs a dynamic loader. An Alpine/musl base would ignore
+# LD_PRELOAD without reporting anything, so this stays on bookworm.
+FROM node:22-bookworm-slim AS runner
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev --omit=optional && npm cache clean --force
+COPY --from=builder /app/dist ./dist
 
-FROM debian:bookworm-slim
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 demo
-
-COPY --from=build /demo-service /usr/local/bin/demo-service
-
-USER demo
+USER node
 EXPOSE 8080
 
-ENTRYPOINT ["/usr/local/bin/demo-service"]
+CMD ["node", "dist/index.js"]
