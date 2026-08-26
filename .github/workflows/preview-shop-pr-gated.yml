@@ -460,8 +460,49 @@ jobs:
           key: ${{ needs.resolve-context.outputs.preview_key }}
           extra_config: ${{ matrix.extra_config }}
 
+      # Share link (no extension needed): from the action's `preview-url`
+      # output, else the PreviewSession's `status.shareHost`. Best-effort.
+      - name: Resolve preview share URL
+        id: share-url
+        if: steps.start-preview.outcome == 'success'
+        continue-on-error: true
+        env:
+          ACTION_PREVIEW_URL: ${{ steps.start-preview.outputs.preview-url }}
+          NAMESPACE: ${{ matrix.namespace }}
+          PREVIEW_KEY: ${{ needs.resolve-context.outputs.preview_key }}
+          IMAGE: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
+          SHARE_PATH: ${{ matrix.share_path }}
+        run: |
+          set -euo pipefail
+          share_url=""
+          if [ -n "$ACTION_PREVIEW_URL" ]; then
+            share_url="${ACTION_PREVIEW_URL%/}${SHARE_PATH}"
+            echo "Share URL from mirrord-preview action output."
+          else
+            echo "Action did not expose preview-url; reading status.shareHost from the PreviewSession."
+            share_host=""
+            for attempt in $(seq 1 10); do
+              share_host=$(kubectl get previewsessions.preview.mirrord.metalbear.co -n "$NAMESPACE" -o json \
+                | jq -r --arg key "$PREVIEW_KEY" --arg image "$IMAGE" \
+                    '[.items[] | select(.spec.key == $key and .spec.image == $image) | .status.shareHost // empty] | first // empty')
+              [ -n "$share_host" ] && break
+              echo "shareHost not set yet (attempt $attempt), retrying..."
+              sleep 3
+            done
+            [ -n "$share_host" ] && share_url="https://${share_host}${SHARE_PATH}"
+          fi
+          if [ -z "$share_url" ]; then
+            echo "::warning::No share URL for key=$PREVIEW_KEY image=$IMAGE; share link will be omitted."
+            echo "share_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "share_url=$share_url" >> "$GITHUB_OUTPUT"
+          echo "::notice::Preview share URL: $share_url"
+
       - name: Write preview result artifact
         if: always()
+        env:
+          SHARE_URL: ${{ steps.share-url.outputs.share_url }}
         run: |
           mkdir -p /tmp/preview-results
           if [ "${{ steps.start-preview.outcome }}" = "success" ]; then
@@ -471,7 +512,9 @@ jobs:
           else
             status="failed"
           fi
-          printf '{"name":"%s","preview_status":"%s"}\n' "${{ matrix.name }}" "$status" > /tmp/preview-results/${{ matrix.name }}.json
+          jq -n -c --arg name "${{ matrix.name }}" --arg status "$status" --arg share_url "${SHARE_URL:-}" \
+            '{name: $name, preview_status: $status, share_url: $share_url}' \
+            > /tmp/preview-results/${{ matrix.name }}.json
 
       - name: Upload preview result artifact
         if: always()
@@ -528,6 +571,22 @@ jobs:
             const previewResult = process.env.PREVIEW_RESULT || 'skipped';
             const url = 'https://playground.metalbear.dev/shop';
             const marker = '<!-- preview-shop-pr-gated -->';
+            const header = `baggage: mirrord-session=${key}`;
+            const shareDocsUrl = 'https://metalbear.com/mirrord/docs/use-cases/preview-environments#sharing-a-preview-via-a-link';
+            const extensionDocsUrl = 'https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/filter-incoming-traffic/debug-from-browser';
+            // metalbear.com/mirrord/extension applies a base64 JSON config payload
+            // from the URL fragment through the mirrord browser extension's
+            // content script (joins the live session when `mirrord ui` is
+            // running, otherwise installs a transient header rule scoped to the
+            // playground host). Without the extension, the page is the install
+            // page. Payload fields: `header_filter` (a literal "name: value"
+            // header) and `inject_scope` (a declarativeNetRequest urlFilter).
+            const extensionScope = '*://playground.metalbear.dev/*';
+            const extensionPayload = Buffer.from(JSON.stringify({
+              header_filter: header,
+              inject_scope: extensionScope,
+            })).toString('base64');
+            const extensionConfigUrl = `https://metalbear.com/mirrord/extension/#config=${extensionPayload}`;
 
             const readJsonDir = dir => {
               if (!fs.existsSync(dir)) return [];
@@ -540,6 +599,9 @@ jobs:
             const previewResults = readJsonDir('/tmp/preview-results');
             const gateByName = new Map(gateResults.map(item => [item.name, item.gate_status]));
             const previewByName = new Map(previewResults.map(item => [item.name, item.preview_status]));
+            const shareUrlByName = new Map(previewResults
+              .filter(item => item.share_url)
+              .map(item => [item.name, item.share_url]));
             // With the Preview-only label there are no gate artifacts, so the
             // service list is the union of gate and preview results.
             const serviceNames = [...new Set([...gateByName.keys(), ...previewByName.keys()])];
@@ -584,17 +646,33 @@ jobs:
             ];
 
             if (previewResult === 'success') {
+              const shareLinks = services
+                .filter(service => shareUrlByName.has(service.name))
+                .map(service => {
+                  const shareUrl = shareUrlByName.get(service.name);
+                  return `- \`${service.name}\` → [${shareUrl}](${shareUrl})`;
+                });
+
               body.push(
                 '',
                 '| | |',
                 '|---|---|',
                 `| **Preview URL** | [${url}](${url}) |`,
-                `| **Header** | \`baggage: mirrord-session=${key}\` |`,
+                `| **Header** | \`${header}\` |`,
                 '| **Sessions** | [all mirrord sessions](http://127.0.0.1:59281/) (or run `mirrord ui` in terminal) |',
                 '',
-                'To send traffic to this preview:',
-                '- Use the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/browser-extension) and set the header for this URL, or',
-                `- \`curl -H "baggage: mirrord-session=${key}" ${url}\``,
+                '### :link: Direct link to see the change',
+                `No extension or header needed — the link injects the session header for you ([how it works](${shareDocsUrl})). Each link opens that service\'s preview directly:`,
+                ...(shareLinks.length > 0
+                  ? shareLinks
+                  : ['_No share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
+                '',
+                '### :jigsaw: Open with the mirrord Browser Extension configured',
+                `1. [Configure the extension for this preview](${extensionConfigUrl}) — sets \`${header}\` on requests to \`playground.metalbear.dev\` (the [extension](${extensionDocsUrl}) must be installed; the page offers it if not).`,
+                `2. Open [${url}](${url}) — your requests now reach the preview.`,
+                '',
+                'Or from the terminal:',
+                `- \`curl -H "${header}" ${url}\``,
                 '',
                 '*Preview is stopped when the PR is merged or closed.*',
               );

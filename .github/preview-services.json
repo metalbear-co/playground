@@ -5,6 +5,7 @@
       "path": "apps/shop/metal-mart-frontend",
       "deployment": "metal-mart-frontend",
       "namespace": "shop",
+      "share_path": "/shop",
       "build_args": "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=dxas4fpir",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600}}}"
     },
