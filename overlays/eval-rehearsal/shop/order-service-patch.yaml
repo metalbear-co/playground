@@ -1,0 +1,26 @@
+# Strips the playground-only GCP wiring. This cluster has no Workload Identity
+# service account and no Pub/Sub topic, and order-service skips both SQS and
+# Pub/Sub when their env vars are empty.
+- op: remove
+  path: /spec/template/spec/serviceAccountName
+- op: replace
+  path: /spec/template/spec/containers/0/env
+  value:
+    - name: PORT
+      value: "80"
+    - name: DATABASE_URL
+      value: "postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/orders"
+    - name: INVENTORY_SERVICE_URL
+      value: "http://inventory-service:80"
+    - name: SQS_QUEUE_URL
+      value: ""
+    - name: KAFKA_ADDRESS
+      value: "kafka.infra.svc.cluster.local:9092"
+    - name: KAFKA_TOPIC
+      value: "orders"
+    - name: RABBITMQ_URL
+      value: "amqp://shop:playground@rabbitmq.infra.svc.cluster.local:5672/"
+    - name: RABBITMQ_QUEUE
+      value: "order-notifications"
+    - name: BANNERFILE
+      value: "/app/banner.txt"

@@ -1,0 +1,20 @@
+{
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "chat-service"
+    }
+  },
+  "ci": {
+    "output_dir": "/tmp/mirrord"
+  },
+  "feature": {
+    "network": {
+      "incoming": "off",
+      "outgoing": true
+    },
+    "fs": {
+      "mode": "read"
+    }
+  }
+}

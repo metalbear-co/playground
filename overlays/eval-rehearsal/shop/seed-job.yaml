@@ -1,0 +1,48 @@
+# Loads the catalogue captured from live playground staging.
+#
+# inventory-service owns the schema (its initDb creates `products` on startup),
+# so this job waits for that table to exist rather than creating it. That keeps
+# one owner for the schema and avoids the two drifting apart.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: catalogue-seed
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: postgres:16-alpine
+          env:
+            - name: PGPASSWORD
+              value: postgres
+            - name: PGHOST
+              value: postgres.infra.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "waiting for inventory-service to create the products table..."
+              for i in $(seq 1 60); do
+                if psql -d inventory -tAc "SELECT to_regclass('public.products')" | grep -q products; then
+                  echo "products table present (attempt $i)"
+                  psql -d inventory -v ON_ERROR_STOP=1 -f /seed/seed-catalogue.sql
+                  echo "seeded $(psql -d inventory -tAc 'SELECT count(*) FROM products') products"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "products table never appeared - is inventory-service running?" >&2
+              exit 1
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+      volumes:
+        - name: seed
+          configMap:
+            name: catalogue-seed

@@ -1,0 +1,288 @@
+# Shopping agent evals: three ways to get the dependencies an agent needs.
+#
+# The agent's tools are HTTP calls to inventory-service and order-service, so it
+# cannot be evaluated without them. There are three ways to supply them, and all
+# three jobs run the SAME eval command on the SAME dataset against the SAME gate:
+#
+#   1. eval-mocked      — no services at all; the agent reads a frozen catalogue
+#   2. eval-selfhosted  — stand a real environment up from scratch in kind
+#   3. eval-mirrord     — connect to the staging cluster that already exists
+#
+# What separates them is setup cost and whether the score is true. Jobs 1 and 2
+# agree with each other, because a self-hosted environment is seeded from the
+# same hand-written assumptions the mocks encode. Job 3 disagrees, and is right.
+#
+# Each job reports setup seconds and eval seconds to the run summary so the
+# comparison is visible without digging through job metadata.
+name: CI Demo - Agent Evals - three ways to get dependencies
+
+on:
+  push:
+    branches:
+      - demo/agent-evals
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Cases to run (0 = whole dataset; subsets are spread evenly across case classes)
+        required: false
+        default: "36"
+        type: string
+
+concurrency:
+  group: ci-agent-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WORKDIR: apps/shop/chat-service
+  EVAL_LIMIT: ${{ github.event.inputs.limit || '36' }}
+
+jobs:
+  # ---------------------------------------------------------------- 1. mocks
+  eval-mocked:
+    name: "1 · Mocked tools"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/shop/chat-service/package-lock.json
+
+      - name: Set up
+        id: setup
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          start=$(date +%s)
+          npm ci
+          echo "seconds=$(( $(date +%s) - start ))" >> "$GITHUB_OUTPUT"
+
+      # No INVENTORY_SERVICE_URL / ORDER_SERVICE_URL, so the agent falls back to
+      # eval/fixtures/catalogue-2026-03-16.json and says so loudly.
+      - name: Run eval
+        id: eval
+        working-directory: ${{ env.WORKDIR }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_CONCURRENCY: "8"
+        run: |
+          start=$(date +%s)
+          set +e
+          npm run eval -- --limit "${EVAL_LIMIT}" --out eval/results/mocked.json
+          code=$?
+          set -e
+          echo "seconds=$(( $(date +%s) - start ))" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Report timings
+        if: always()
+        run: |
+          {
+            echo "### 1 · Mocked tools"
+            echo "| phase | seconds |"
+            echo "| --- | ---: |"
+            echo "| setup | ${{ steps.setup.outputs.seconds }} |"
+            echo "| eval | ${{ steps.eval.outputs.seconds }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-mocked
+          path: ${{ env.WORKDIR }}/eval/results/
+
+  # ------------------------------------------------- 2. self-hosted environment
+  eval-selfhosted:
+    name: "2 · Environment you stand up"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/shop/chat-service/package-lock.json
+
+      # Everything from here to the end of the seed step is what it costs to
+      # obtain dependencies without mirrord. Deliberately not padded: only what
+      # the agent's tools actually reach, plus what those services require to
+      # start. order-service calls producer.connect() before it listens, so
+      # Kafka is not optional. SQS is left unset, which order-service tolerates.
+      - name: Stand up the environment
+        id: setup
+        run: |
+          start=$(date +%s)
+
+          curl -sLo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
+          curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl
+
+          cat <<EOF | kind create cluster --name evals --config=-
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+            - role: control-plane
+              extraPortMappings:
+                - containerPort: 30080
+                  hostPort: 30080
+                - containerPort: 30081
+                  hostPort: 30081
+          EOF
+
+          kubectl create namespace infra
+          kubectl create namespace shop
+
+          kubectl apply -k manifests/infrastructure/postgres -n infra
+          kubectl apply -k manifests/infrastructure/kafka -n infra
+          kubectl rollout status deployment/postgres -n infra --timeout=5m
+          kubectl rollout status statefulset/kafka -n infra --timeout=10m
+
+          docker build -q -t inventory-service:evals apps/shop/inventory-service
+          docker build -q -t order-service:evals apps/shop/order-service
+          kind load docker-image inventory-service:evals order-service:evals --name evals
+
+          kubectl apply -k manifests/shop/base/app/inventory-service -n shop
+          kubectl set image deployment/inventory-service main=inventory-service:evals -n shop
+          kubectl patch deployment inventory-service -n shop --type=json \
+            -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
+          kubectl rollout status deployment/inventory-service -n shop --timeout=5m
+
+          kubectl apply -k manifests/shop/base/app/order-service -n shop
+          kubectl patch deployment order-service -n shop --type=json \
+            -p='[{"op":"remove","path":"/spec/template/spec/serviceAccountName"}]'
+          kubectl set image deployment/order-service main=order-service:evals -n shop
+          kubectl set env deployment/order-service -n shop \
+            DATABASE_URL="postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/orders" \
+            INVENTORY_SERVICE_URL="http://inventory-service.shop.svc.cluster.local:80" \
+            KAFKA_ADDRESS="kafka.infra.svc.cluster.local:9092" \
+            SQS_QUEUE_URL="" GOOGLE_CLOUD_PROJECT="" GCP_ORDER_EVENTS_TOPIC=""
+          kubectl patch deployment order-service -n shop --type=json \
+            -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
+          kubectl rollout status deployment/order-service -n shop --timeout=5m
+
+          # Seed data. Somebody has to write this, and keep writing it.
+          kubectl exec -i -n infra deployment/postgres -- \
+            psql -U postgres -d inventory -v ON_ERROR_STOP=1 \
+            < apps/shop/chat-service/eval/fixtures/catalogue-2026-03-16.sql
+
+          for svc in inventory-service:30081 order-service:30080; do
+            name="${svc%%:*}"; port="${svc##*:}"
+            kubectl patch svc "$name" -n shop --type=json -p="[
+              {\"op\":\"replace\",\"path\":\"/spec/type\",\"value\":\"NodePort\"},
+              {\"op\":\"replace\",\"path\":\"/spec/ports/0/nodePort\",\"value\":${port}}]"
+          done
+
+          cd apps/shop/chat-service && npm ci
+          echo "seconds=$(( $(date +%s) - start ))" >> "$GITHUB_OUTPUT"
+
+      - name: Run eval
+        id: eval
+        working-directory: ${{ env.WORKDIR }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_CONCURRENCY: "8"
+          INVENTORY_SERVICE_URL: http://localhost:30081
+          ORDER_SERVICE_URL: http://localhost:30080
+        run: |
+          start=$(date +%s)
+          set +e
+          npm run eval -- --limit "${EVAL_LIMIT}" --out eval/results/selfhosted.json
+          code=$?
+          set -e
+          echo "seconds=$(( $(date +%s) - start ))" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Report timings
+        if: always()
+        run: |
+          {
+            echo "### 2 · Environment you stand up"
+            echo "| phase | seconds |"
+            echo "| --- | ---: |"
+            echo "| setup | ${{ steps.setup.outputs.seconds }} |"
+            echo "| eval | ${{ steps.eval.outputs.seconds }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tear down
+        if: always()
+        run: kind delete cluster --name evals || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-selfhosted
+          path: ${{ env.WORKDIR }}/eval/results/
+
+  # -------------------------------------------------------------- 3. mirrord
+  eval-mirrord:
+    name: "3 · mirrord to existing staging"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/shop/chat-service/package-lock.json
+
+      - name: Set up
+        id: setup
+        run: |
+          start=$(date +%s)
+
+          curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          cd apps/shop/chat-service && npm ci
+
+          echo "seconds=$(( $(date +%s) - start ))" >> "$GITHUB_OUTPUT"
+
+      # Same command as the other two jobs. The session supplies the target
+      # pod's environment, which is where the service URLs come from.
+      - name: Run eval through mirrord
+        id: eval
+        working-directory: ${{ env.WORKDIR }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+          EVAL_CONCURRENCY: "8"
+        run: |
+          start=$(date +%s)
+          set +e
+          mirrord ci start --config-file ../../../.mirrord/mirrord-ci-agent-evals.json -- \
+            npm run eval -- --limit "${EVAL_LIMIT}" --out eval/results/mirrord.json
+          code=$?
+          set -e
+          echo "seconds=$(( $(date +%s) - start ))" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Stop mirrord session
+        if: always()
+        run: mirrord ci stop || true
+
+      - name: Report timings
+        if: always()
+        run: |
+          {
+            echo "### 3 · mirrord to existing staging"
+            echo "| phase | seconds |"
+            echo "| --- | ---: |"
+            echo "| setup | ${{ steps.setup.outputs.seconds }} |"
+            echo "| eval | ${{ steps.eval.outputs.seconds }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-mirrord
+          path: |
+            ${{ env.WORKDIR }}/eval/results/
+            /tmp/mirrord

@@ -1,0 +1,16 @@
+# Rehearsal cluster for the agent-evals demo.
+#
+# A cut-down Metal Mart: Postgres, Kafka and RabbitMQ in `infra`, plus
+# inventory-service, order-service and chat-service in `shop`. No frontend,
+# gateway, certs, Argo or visualization apps — this cluster exists to be an
+# eval target.
+#
+# Namespaces deliberately match playground (`infra`, `shop`) so every
+# .mirrord/*.json config is portable between the two clusters and only the
+# kube context differs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - infra
+  - shop

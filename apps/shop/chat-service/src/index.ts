@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { Kafka } from "kafkajs";
 import { range } from "./range_assigner.js";
+import { agentEnabled, answerCustomerMessage } from "./agent/index.js";
 import {
   addMessage,
   awaitingFirstResponse,
@@ -94,14 +95,33 @@ async function startConsumer() {
         // Canned greeting on the first customer message. The baggage header is
         // copied from the consumed message so that during a mirrord queue-split
         // session the bot reply routes back to the same (local) instance.
-        if (msg.sender === "customer" && awaitingFirstResponse(msg.conversationId)) {
+        // With the shopping agent on, the bot answers every customer turn — it
+        // cannot complete an order otherwise. With it off, the original
+        // behaviour stands: greet once, then a human takes the conversation.
+        const shouldReply =
+          msg.sender === "customer" &&
+          (agentEnabled() || awaitingFirstResponse(msg.conversationId));
+
+        if (shouldReply) {
           const baggage = message.headers?.["baggage"]?.toString();
+          const text = agentEnabled()
+            ? await answerCustomerMessage({
+                message: msg.text,
+                // The message just added is the one being answered, so it is
+                // dropped from the history handed to the agent.
+                history: (getConversation(msg.conversationId)?.messages ?? [])
+                  .slice(0, -1)
+                  .map((m) => ({ sender: m.sender, text: m.text })),
+                baggage,
+              })
+            : BOT_REPLY;
+
           await produceMessage(
             {
               id: randomUUID(),
               conversationId: msg.conversationId,
               sender: "bot",
-              text: BOT_REPLY,
+              text,
               timestamp: new Date().toISOString(),
             },
             baggage

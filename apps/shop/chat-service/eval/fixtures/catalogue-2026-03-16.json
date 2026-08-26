@@ -1,0 +1,103 @@
+[
+  {
+    "id": 1,
+    "name": "Team Work Makes The Dream Work Sticker",
+    "description": "MetalBear teamwork sticker",
+    "price_cents": 499,
+    "stock": 72,
+    "image_url": null,
+    "image_urls": [
+      "team_work_makes_the_Dream_work_ljp4we"
+    ],
+    "is_new": true
+  },
+  {
+    "id": 2,
+    "name": "Team Work Makes The Dream Work T-Shirt",
+    "description": "MetalBear teamwork tee — front and back designs",
+    "price_cents": 2499,
+    "stock": 43,
+    "image_url": null,
+    "image_urls": [
+      "team_Work_makes_the_Dream_Work_-_front_w5qdnb",
+      "team_work_makes_the_dream_work_-_back_onanux"
+    ],
+    "is_new": true
+  },
+  {
+    "id": 3,
+    "name": "Mind The Gap Sticker",
+    "description": "MetalBear Mind The Gap sticker",
+    "price_cents": 499,
+    "stock": 198,
+    "image_url": null,
+    "image_urls": [
+      "Mind_the_Gap_pkyuc6"
+    ],
+    "is_new": false
+  },
+  {
+    "id": 4,
+    "name": "Mind The Gap T-Shirt",
+    "description": "MetalBear Mind The Gap tee — front and back designs",
+    "price_cents": 2499,
+    "stock": 50,
+    "image_url": null,
+    "image_urls": [
+      "Mind_the_gap_-_Front_anazkh",
+      "Mind_the_gap_-_Back_oh9jyf"
+    ],
+    "is_new": false
+  },
+  {
+    "id": 5,
+    "name": "Increase Velocity Sticker",
+    "description": "MetalBear Increase Velocity sticker",
+    "price_cents": 499,
+    "stock": 199,
+    "image_url": null,
+    "image_urls": [
+      "Increase_velocity_mfsov2"
+    ],
+    "is_new": false
+  },
+  {
+    "id": 6,
+    "name": "Increase Velocity T-Shirt",
+    "description": "MetalBear Increase Velocity tee — front and back designs",
+    "price_cents": 2499,
+    "stock": 41,
+    "image_url": null,
+    "image_urls": [
+      "Increase_Velocity_-_Front_c2dgw6",
+      "Increase_Velocity_-_Back_ywhxi6"
+    ],
+    "is_new": false
+  },
+  {
+    "id": 7,
+    "name": "Cloudboat Willie T-Shirt",
+    "description": "MetalBear Cloudboat Willie tee — front and back designs",
+    "price_cents": 2499,
+    "stock": 50,
+    "image_url": null,
+    "image_urls": [
+      "Cloudboat_Willie_-_Front_wpgqi2",
+      "Cloudboat_Willie_-_Back_z05dna"
+    ],
+    "is_new": false
+  },
+  {
+    "id": 8,
+    "name": "A mirrord Is Born T-Shirt",
+    "description": "MetalBear A mirrord Is Born tee — front and back designs",
+    "price_cents": 2499,
+    "stock": 50,
+    "image_url": null,
+    "image_urls": [
+      "A_mirrord_is_born_-_Front_xy8l8p",
+      "A_mirrord_is_born_-_Back_bytwh2"
+    ],
+    "is_new": false
+  }
+]

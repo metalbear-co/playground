@@ -1,0 +1,9 @@
+# Kafka is not optional: order-service calls producer.connect() before it
+# starts listening, so it will not become ready without a broker.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: infra
+resources:
+  - ../../../manifests/infrastructure/postgres
+  - ../../../manifests/infrastructure/kafka
+  - ../../../manifests/infrastructure/rabbitmq

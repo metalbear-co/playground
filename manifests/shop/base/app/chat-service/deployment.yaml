@@ -24,6 +24,18 @@ spec:
               value: "support-chat"
             - name: KAFKA_CONSUMER_GROUP
               value: "chat-service"
+            # The shopping agent runs inside chat-service and calls these. They
+            # are also what a mirrord session hands to an eval run: with them set
+            # the agent reaches the real services, without them it falls back to
+            # its frozen catalogue fixture.
+            - name: INVENTORY_SERVICE_URL
+              value: "http://inventory-service:80"
+            - name: ORDER_SERVICE_URL
+              value: "http://order-service:80"
+            # Off keeps the canned support-chat greeting. On makes the shopping
+            # agent answer every customer turn.
+            - name: SHOPPING_AGENT_ENABLED
+              value: "false"
           ports:
             - containerPort: 80
               protocol: TCP

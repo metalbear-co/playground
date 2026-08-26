@@ -33,3 +33,5 @@ apps/visualization/visualization-backend/dist/
 apps/shop/*/dist/
 
 localstack/
+# Eval run artifacts
+apps/shop/chat-service/eval/results/
