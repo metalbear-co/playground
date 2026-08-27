@@ -144,6 +144,7 @@ jobs:
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
       services_list: ${{ steps.build-matrix.outputs.services_list }}
       head_sha: ${{ steps.build-matrix.outputs.head_sha }}
+      entry_added: ${{ steps.build-matrix.outputs.entry_added }}
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -166,6 +167,16 @@ jobs:
               CHANGES=$(echo "$CHANGES" | jq -c --arg n "$name" '. + [$n]')
             fi
           done
+          # A backend-only change still gets a storefront preview under the same
+          # key: share-ingress injects the session header on the storefront's
+          # share host and the storefront propagates it to every backend call,
+          # so that share link is the one place a backend change can be seen
+          # without the browser extension.
+          ENTRY_ADDED=false
+          if [ "$(echo "$CHANGES" | jq 'length')" -gt 0 ] && ! echo "$CHANGES" | jq -e 'index("metal-mart-frontend")' >/dev/null; then
+            CHANGES=$(echo "$CHANGES" | jq -c '. + ["metal-mart-frontend"]')
+            ENTRY_ADDED=true
+          fi
           MATRIX=$(jq -c --argjson changes "$CHANGES" \
             '{include: [.services[] | select(.name as $n | $changes | index($n))]}' \
             .github/preview-services.json)
@@ -174,6 +185,7 @@ jobs:
             .github/preview-services.json)
           COUNT=$(echo "$CHANGES" | jq 'length')
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "entry_added=$ENTRY_ADDED" >> "$GITHUB_OUTPUT"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "services_list=$SERVICES_LIST" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -gt 0 ]; then
@@ -557,6 +569,7 @@ jobs:
           PR_NUMBER: ${{ needs.resolve-context.outputs.pr_number }}
           SERVICES_LIST: ${{ needs.detect-changes.outputs.services_list }}
           HAS_CHANGES: ${{ needs.detect-changes.outputs.has_changes }}
+          ENTRY_ADDED: ${{ needs.detect-changes.outputs.entry_added }}
           GATE_RESULT: ${{ needs.e2e-gate.result }}
           PREVIEW_RESULT: ${{ needs.build-and-preview.result }}
         with:
@@ -567,6 +580,7 @@ jobs:
             const issueNumber = Number(process.env.PR_NUMBER);
             const key = process.env.PREVIEW_KEY;
             const hasChanges = process.env.HAS_CHANGES === 'true';
+            const entryAdded = process.env.ENTRY_ADDED === 'true';
             const gateResult = process.env.GATE_RESULT || 'skipped';
             const previewResult = process.env.PREVIEW_RESULT || 'skipped';
             const url = 'https://playground.metalbear.dev/shop';
@@ -626,7 +640,7 @@ jobs:
             }[previewResult] || `:question: ${previewResult}`;
 
             const tableRows = services.length > 0
-              ? services.map(service => `| \`${service.name}\` | \`${service.gate}\` | \`${service.preview}\` |`).join('\n')
+              ? services.map(service => `| \`${service.name}${entryAdded && service.name === 'metal-mart-frontend' ? ' _(storefront, previewed so the share link shows this change)_' : ''}\` | \`${service.gate}\` | \`${service.preview}\` |`).join('\n')
               : '| _(no registered service paths changed)_ | | |';
 
             const body = [
@@ -646,12 +660,15 @@ jobs:
             ];
 
             if (previewResult === 'success') {
-              const shareLinks = services
-                .filter(service => shareUrlByName.has(service.name))
-                .map(service => {
-                  const shareUrl = shareUrlByName.get(service.name);
-                  return `- \`${service.name}\` → [${shareUrl}](${shareUrl})`;
-                });
+              // Share hosts serve one service's preview with the session header
+              // injected by share-ingress. The storefront propagates that header
+              // to every backend call it makes, so its share host is the one link
+              // where a backend change is visible without the browser extension
+              // (a backend-only PR gets a storefront preview for exactly that).
+              const frontendShareUrl = shareUrlByName.get('metal-mart-frontend');
+              const apiBases = services
+                .filter(service => service.name !== 'metal-mart-frontend' && shareUrlByName.has(service.name))
+                .map(service => `- \`${service.name}\` → \`${shareUrlByName.get(service.name)}\``);
 
               body.push(
                 '',
@@ -662,10 +679,12 @@ jobs:
                 '| **Sessions** | [all mirrord sessions](http://127.0.0.1:59281/) (or run `mirrord ui` in terminal) |',
                 '',
                 '### :link: Direct link to see the change',
-                `No extension or header needed — the link injects the session header for you ([how it works](${shareDocsUrl})). Each link opens that service\'s preview directly. The storefront opens the app; API services land on their \`/health\` endpoint — swap the path for any of their routes (e.g. \`/orders/<id>\`):`,
-                ...(shareLinks.length > 0
-                  ? shareLinks
-                  : ['_No share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
+                ...(frontendShareUrl
+                  ? [`**[Open the storefront for this preview](${frontendShareUrl})** — no extension or header needed. The link carries the session ([how](${shareDocsUrl})) and the storefront passes it to every backend call, so whatever you do there — browse, add to cart, place an order — is handled by the previewed services.`]
+                  : ['_No storefront share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
+                ...(apiBases.length > 0
+                  ? ['', 'Previewed API services, for direct calls (session header injected for you, e.g. `curl <base>/orders/<id>`):', ...apiBases]
+                  : []),
                 '',
                 '### :jigsaw: Open with the mirrord Browser Extension configured',
                 `1. [Configure the extension for this preview](${extensionConfigUrl}) — sets \`${header}\` on requests to \`playground.metalbear.dev\` (the [extension](${extensionDocsUrl}) must be installed; the page offers it if not).`,
