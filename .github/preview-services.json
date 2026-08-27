@@ -14,6 +14,7 @@
       "path": "apps/shop/order-service",
       "deployment": "order-service",
       "namespace": "shop",
+      "share_path": "/health",
       "build_args": "",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}},\"db_branches\":[{\"id\":\"{{ key }}\",\"type\":\"pg\",\"ttl_secs\":300,\"version\":\"16.0\",\"connection\":{\"url\":\"DATABASE_URL\"},\"copy\":{\"mode\":\"schema\"}}]}}",
       "e2e_command": "node apps/shop/order-service/dist/index.js",
@@ -24,6 +25,7 @@
       "path": "apps/shop/delivery-service",
       "deployment": "delivery-service",
       "namespace": "shop",
+      "share_path": "/health",
       "build_args": "",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}}}}"
     },
@@ -32,6 +34,7 @@
       "path": "apps/shop/inventory-service",
       "deployment": "inventory-service",
       "namespace": "shop",
+      "share_path": "/health",
       "build_args": "",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}},\"db_branches\":[{\"id\":\"{{ key }}\",\"type\":\"pg\",\"ttl_secs\":300,\"version\":\"16.0\",\"connection\":{\"url\":\"DATABASE_URL\"},\"copy\":{\"mode\":\"all\"}}]}}"
     },
@@ -40,6 +43,7 @@
       "path": "apps/shop/payment-service",
       "deployment": "payment-service",
       "namespace": "shop",
+      "share_path": "/health",
       "build_args": "",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}}}}"
     },
@@ -48,6 +52,7 @@
       "path": "apps/shop/chat-service",
       "deployment": "chat-service",
       "namespace": "shop",
+      "share_path": "/health",
       "build_args": "",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}}}}"
     },
@@ -56,6 +61,7 @@
       "path": "apps/shop/receipt-service",
       "deployment": "receipt-service",
       "namespace": "shop",
+      "share_path": "/health",
       "build_args": "",
       "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}}}}"
     }
