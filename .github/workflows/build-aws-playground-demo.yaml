@@ -71,12 +71,19 @@ jobs:
             ${{ secrets.AWS_S8S_ECR_REPOSITORY }}:latest
             ${{ secrets.AWS_S8S_ECR_REPOSITORY }}:${{ github.sha }}
 
+      # Terraform seeds this family with a placeholder container that runs
+      # busybox httpd to answer the health check. Rendering only swaps the
+      # image, so the placeholder's `command` would survive onto the real image,
+      # which has no httpd and exits 127. Dropping it lets the image's own
+      # entrypoint run.
       - name: Read the running task definition
         run: |
           aws ecs describe-task-definition \
             --task-definition "$ECS_TASK_FAMILY" \
             --query taskDefinition \
-            --output json > task-definition.json
+            --output json \
+          | jq 'del(.containerDefinitions[] | select(.name == env.CONTAINER_NAME) | .command, .entryPoint)' \
+            > task-definition.json
 
       - name: Point the task definition at the new image
         id: render
@@ -94,4 +101,7 @@ jobs:
           task-definition: ${{ steps.render.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          # ECS rolls the service on its own. Blocking here ties up a runner for
+          # the length of a deployment and reports a rollout problem as a CI
+          # failure minutes after the job's own work finished.
+          wait-for-service-stability: false
