@@ -662,7 +662,7 @@ jobs:
                 '| **Sessions** | [all mirrord sessions](http://127.0.0.1:59281/) (or run `mirrord ui` in terminal) |',
                 '',
                 '### :link: Direct link to see the change',
-                `No extension or header needed — the link injects the session header for you ([how it works](${shareDocsUrl})). Each link opens that service\'s preview directly. The storefront opens the app; API services land on their \`/health\` endpoint — swap the path for any of their routes (e.g. \`/orders/<id>\`):`,
+                `No extension or header needed — the link injects the session header for you ([how it works](${shareDocsUrl})). Each link opens that service\'s preview directly:`,
                 ...(shareLinks.length > 0
                   ? shareLinks
                   : ['_No share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
