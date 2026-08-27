@@ -144,6 +144,7 @@ jobs:
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
       services_list: ${{ steps.build-matrix.outputs.services_list }}
       head_sha: ${{ steps.build-matrix.outputs.head_sha }}
+      storefront_added: ${{ steps.build-matrix.outputs.storefront_added }}
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -166,14 +167,29 @@ jobs:
               CHANGES=$(echo "$CHANGES" | jq -c --arg n "$name" '. + [$n]')
             fi
           done
-          MATRIX=$(jq -c --argjson changes "$CHANGES" \
-            '{include: [.services[] | select(.name as $n | $changes | index($n))]}' \
-            .github/preview-services.json)
           SERVICES_LIST=$(jq -r --argjson changes "$CHANGES" \
             '[.services[] | select(.name as $n | $changes | index($n)) | .name] | join(", ")' \
             .github/preview-services.json)
           COUNT=$(echo "$CHANGES" | jq 'length')
+          # A backend-only change still gets a storefront preview under the same
+          # key: share-ingress injects the session header on the storefront's
+          # share host and the storefront propagates it to every backend call,
+          # so that share link is the one place a backend change can be seen
+          # without the browser extension. The storefront itself is unchanged,
+          # so the preview reuses the image the deployment is running instead
+          # of rebuilding it.
+          STOREFRONT_ADDED=false
+          PREVIEW_SET="$CHANGES"
+          if [ "$COUNT" -gt 0 ] && ! echo "$CHANGES" | jq -e 'index("metal-mart-frontend")' >/dev/null; then
+            PREVIEW_SET=$(echo "$CHANGES" | jq -c '. + ["metal-mart-frontend"]')
+            STOREFRONT_ADDED=true
+          fi
+          MATRIX=$(jq -c --argjson set "$PREVIEW_SET" --argjson added "$STOREFRONT_ADDED" \
+            '{include: [.services[] | select(.name as $n | $set | index($n))
+              | if $added and .name == "metal-mart-frontend" then . + {reuse_deployed_image: "true"} else . end]}' \
+            .github/preview-services.json)
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "storefront_added=$STOREFRONT_ADDED" >> "$GITHUB_OUTPUT"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "services_list=$SERVICES_LIST" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -gt 0 ]; then
@@ -407,13 +423,18 @@ jobs:
         with:
           ref: ${{ needs.resolve-context.outputs.branch }}
 
+      # The docker steps are skipped for a service whose matrix entry reuses
+      # the deployed image (the storefront added to a backend-only preview).
       - name: Set up QEMU
+        if: matrix.reuse_deployed_image != 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: matrix.reuse_deployed_image != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
+        if: matrix.reuse_deployed_image != 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -422,6 +443,7 @@ jobs:
 
       - name: Build and push image
         id: build-image
+        if: matrix.reuse_deployed_image != 'true'
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.path }}
@@ -446,6 +468,27 @@ jobs:
           location: us-central1-c
           project_id: playground-383912
 
+      # The preview image is either the one built above from the PR branch, or
+      # for a service that is unchanged in this PR, the image its deployment
+      # currently runs (the `main` container, falling back to the first one).
+      - name: Resolve preview image
+        id: image
+        env:
+          REUSE_DEPLOYED_IMAGE: ${{ matrix.reuse_deployed_image }}
+          BUILT_IMAGE: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
+          NAMESPACE: ${{ matrix.namespace }}
+          DEPLOYMENT: ${{ matrix.deployment }}
+        run: |
+          set -euo pipefail
+          if [ "$REUSE_DEPLOYED_IMAGE" = "true" ]; then
+            image=$(kubectl get deployment -n "$NAMESPACE" "$DEPLOYMENT" -o json \
+              | jq -r '.spec.template.spec.containers | (map(select(.name == "main")) + .) | first | .image')
+            echo "Reusing deployed image for $DEPLOYMENT: $image"
+          else
+            image="$BUILT_IMAGE"
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
       - name: Start mirrord preview
         id: start-preview
         uses: metalbear-co/mirrord-preview@master
@@ -453,7 +496,7 @@ jobs:
           action: start
           target: deployment/${{ matrix.deployment }}
           namespace: ${{ matrix.namespace }}
-          image: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
+          image: ${{ steps.image.outputs.image }}
           mode: steal
           filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
           ttl_mins: '120'
@@ -470,7 +513,7 @@ jobs:
           ACTION_PREVIEW_URL: ${{ steps.start-preview.outputs.preview-url }}
           NAMESPACE: ${{ matrix.namespace }}
           PREVIEW_KEY: ${{ needs.resolve-context.outputs.preview_key }}
-          IMAGE: ghcr.io/metalbear-co/playground-${{ matrix.name }}:preview-${{ needs.resolve-context.outputs.image_tag_key }}-${{ needs.detect-changes.outputs.head_sha }}
+          IMAGE: ${{ steps.image.outputs.image }}
           SHARE_PATH: ${{ matrix.share_path }}
         run: |
           set -euo pipefail
@@ -557,6 +600,7 @@ jobs:
           PR_NUMBER: ${{ needs.resolve-context.outputs.pr_number }}
           SERVICES_LIST: ${{ needs.detect-changes.outputs.services_list }}
           HAS_CHANGES: ${{ needs.detect-changes.outputs.has_changes }}
+          STOREFRONT_ADDED: ${{ needs.detect-changes.outputs.storefront_added }}
           GATE_RESULT: ${{ needs.e2e-gate.result }}
           PREVIEW_RESULT: ${{ needs.build-and-preview.result }}
         with:
@@ -567,6 +611,7 @@ jobs:
             const issueNumber = Number(process.env.PR_NUMBER);
             const key = process.env.PREVIEW_KEY;
             const hasChanges = process.env.HAS_CHANGES === 'true';
+            const storefrontAdded = process.env.STOREFRONT_ADDED === 'true';
             const gateResult = process.env.GATE_RESULT || 'skipped';
             const previewResult = process.env.PREVIEW_RESULT || 'skipped';
             const url = 'https://playground.metalbear.dev/shop';
@@ -625,8 +670,12 @@ jobs:
               skipped: ':white_circle: not started',
             }[previewResult] || `:question: ${previewResult}`;
 
+            const serviceLabel = service =>
+              storefrontAdded && service.name === 'metal-mart-frontend'
+                ? `\`${service.name}\` _(unchanged; previewed so the direct link shows this change)_`
+                : `\`${service.name}\``;
             const tableRows = services.length > 0
-              ? services.map(service => `| \`${service.name}\` | \`${service.gate}\` | \`${service.preview}\` |`).join('\n')
+              ? services.map(service => `| ${serviceLabel(service)} | \`${service.gate}\` | \`${service.preview}\` |`).join('\n')
               : '| _(no registered service paths changed)_ | | |';
 
             const body = [
@@ -646,26 +695,33 @@ jobs:
             ];
 
             if (previewResult === 'success') {
-              const shareLinks = services
-                .filter(service => shareUrlByName.has(service.name))
-                .map(service => {
-                  const shareUrl = shareUrlByName.get(service.name);
-                  return `- \`${service.name}\` → [${shareUrl}](${shareUrl})`;
-                });
+              // Each share host serves one service's preview with the session
+              // header injected by share-ingress. The storefront propagates that
+              // header to every backend call it makes, so its share host is the
+              // one link where a backend change is visible without the browser
+              // extension (a backend-only PR gets a storefront preview for
+              // exactly that). Backend share hosts are API bases with nothing
+              // at `/`, so they are listed for curl rather than as links.
+              const storefrontShareUrl = shareUrlByName.get('metal-mart-frontend');
+              const apiBases = services
+                .filter(service => service.name !== 'metal-mart-frontend' && shareUrlByName.has(service.name))
+                .map(service => `- \`${service.name}\` → \`${shareUrlByName.get(service.name)}\``);
 
               body.push(
+                '',
+                '### :link: Direct link to see the change',
+                ...(storefrontShareUrl
+                  ? [`**[Open the storefront for this preview](${storefrontShareUrl})** — no extension or header needed. The link carries the session ([how it works](${shareDocsUrl})) and the storefront passes it to every backend call, so whatever you do there — browse, add to cart, place an order — is handled by the previewed services.`]
+                  : ['_No storefront share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
+                ...(apiBases.length > 0
+                  ? ['', 'Previewed API services, for direct calls (session header injected for you, e.g. `curl <base>/orders/<id>`):', ...apiBases]
+                  : []),
                 '',
                 '| | |',
                 '|---|---|',
                 `| **Preview URL** | [${url}](${url}) |`,
                 `| **Header** | \`${header}\` |`,
                 '| **Sessions** | [all mirrord sessions](http://127.0.0.1:59281/) (or run `mirrord ui` in terminal) |',
-                '',
-                '### :link: Direct link to see the change',
-                `No extension or header needed — the link injects the session header for you ([how it works](${shareDocsUrl})). Each link opens that service\'s preview directly:`,
-                ...(shareLinks.length > 0
-                  ? shareLinks
-                  : ['_No share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
                 '',
                 '### :jigsaw: Open with the mirrord Browser Extension configured',
                 `1. [Configure the extension for this preview](${extensionConfigUrl}) — sets \`${header}\` on requests to \`playground.metalbear.dev\` (the [extension](${extensionDocsUrl}) must be installed; the page offers it if not).`,
@@ -717,6 +773,25 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
+      - name: Download preview result artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: preview-result-*
+          path: /tmp/preview-results
+          merge-multiple: true
+
+      - name: Resolve storefront share link
+        id: storefront
+        run: |
+          set -euo pipefail
+          share_url=$(jq -r '.share_url // empty' /tmp/preview-results/metal-mart-frontend.json 2>/dev/null || true)
+          if [ -n "$share_url" ]; then
+            echo "text=<${share_url}|Open the storefront> (no extension needed)" >> "$GITHUB_OUTPUT"
+          else
+            echo "text=_not available_" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Post preview link to Slack
         uses: slackapi/slack-github-action@v1.27.0
         with:
@@ -732,6 +807,7 @@ jobs:
                   "fields": [
                     { "type": "mrkdwn", "text": "*PR:*\n<${{ needs.resolve-context.outputs.pr_url }}|#${{ needs.resolve-context.outputs.pr_number }}>" },
                     { "type": "mrkdwn", "text": "*Services:*\n${{ needs.detect-changes.outputs.services_list }}" },
+                    { "type": "mrkdwn", "text": "*Direct link:*\n${{ steps.storefront.outputs.text }}" },
                     { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
                     { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord-session=${{ needs.resolve-context.outputs.preview_key }}`" }
                   ]
