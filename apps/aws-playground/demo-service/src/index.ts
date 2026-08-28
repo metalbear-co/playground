@@ -152,6 +152,17 @@ const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
+// Every response closes its connection. A load balancer keeps persistent
+// connections to its targets, and a request arriving on a connection that was
+// opened before mirrord began intercepting is never diverted — which reads as
+// "steal isn't working" rather than as connection reuse. Forcing a new
+// connection per request costs nothing at this traffic level and removes that
+// ambiguity from the demo.
+app.use((_request, response, next) => {
+  response.set("Connection", "close");
+  next();
+});
+
 app.get("/healthz", (_request, response) => {
   response.type("text/plain").send("ok");
 });
