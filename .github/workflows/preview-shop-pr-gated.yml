@@ -625,11 +625,13 @@ jobs:
             // running, otherwise installs a transient header rule scoped to the
             // playground host). Without the extension, the page is the install
             // page. Payload fields: `header_filter` (a literal "name: value"
-            // header) and `inject_scope` (a declarativeNetRequest urlFilter).
+            // header), `inject_scope` (a declarativeNetRequest urlFilter) and
+            // `open_url` (the result page offers a button to it).
             const extensionScope = '*://playground.metalbear.dev/*';
             const extensionPayload = Buffer.from(JSON.stringify({
               header_filter: header,
               inject_scope: extensionScope,
+              open_url: url,
             })).toString('base64');
             const extensionConfigUrl = `https://metalbear.com/mirrord/extension/#config=${extensionPayload}`;
 
@@ -808,7 +810,7 @@ jobs:
           header="baggage: mirrord-session=${PREVIEW_KEY}"
           docs="https://metalbear.com/mirrord/docs/use-cases/preview-environments#sharing-a-preview-via-a-link"
           # `-j` keeps the trailing newline out of the base64 payload.
-          extension_payload=$(jq -n -c -j --arg h "$header" '{header_filter: $h, inject_scope: "*://playground.metalbear.dev/*"}' | base64 | tr -d '\n')
+          extension_payload=$(jq -n -c -j --arg h "$header" --arg u "$url" '{header_filter: $h, inject_scope: "*://playground.metalbear.dev/*", open_url: $u}' | base64 | tr -d '\n')
           extension_url="https://metalbear.com/mirrord/extension/#config=${extension_payload}"
 
           storefront_url=$(jq -r '.share_url // empty' /tmp/preview-results/metal-mart-frontend.json 2>/dev/null || true)
