@@ -722,7 +722,7 @@ jobs:
                 '**1. :link: Just click** — no setup, share with anyone',
                 ...(storefrontShareUrl
                   ? [
-                      `**[Open the storefront for this preview →](${storefrontShareUrl})**`,
+                      `**${storefrontShareUrl}**`,
                       `Browse, add to cart, place an order — every call is handled by the previewed services. ([how it works](${shareDocsUrl}))`,
                     ]
                   : ['_No storefront share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
@@ -813,7 +813,7 @@ jobs:
 
           storefront_url=$(jq -r '.share_url // empty' /tmp/preview-results/metal-mart-frontend.json 2>/dev/null || true)
           if [ -n "$storefront_url" ]; then
-            just_click="<${storefront_url}|Open the storefront for this preview> — browse, add to cart, place an order; every call hits the previewed services. (<${docs}|how it works>)"
+            just_click="${storefront_url}"$'\n'"Browse, add to cart, place an order — every call hits the previewed services. (<${docs}|how it works>)"
           else
             just_click="_No storefront share link was minted for this preview._"
           fi
