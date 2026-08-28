@@ -4,10 +4,11 @@
     "namespace": "demo-env"
   },
   "feature": {
-    "env": false,
     "network": {
-      "outgoing": true,
-      "incoming": false
+      "incoming": {
+        "mode": "steal",
+        "http_filter": { "header_filter": "^baggage: .*mirrord-session=demo-serverless.*$" }
+      }
     }
   }
 }

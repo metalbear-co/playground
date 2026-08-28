@@ -1,7 +1,7 @@
 # aws-playground demo-service
 
 The public service behind `https://aws-playground.metalbear.dev`. It answers one
-question — which machine handled this request, and what does the ECS task
+question — which process handled this request, and what does the ECS task
 metadata service say about it — and that is the whole demo: hit it and you get
 the AWS task, run it locally under mirrord and the same URL is answered by your
 laptop while still reading the remote metadata service.
@@ -11,7 +11,7 @@ TypeScript on Express, matching the other services in this repo.
 | Route | Returns |
 |---|---|
 | `GET /` | A page that renders `/api/metadata` |
-| `GET /api/metadata` | Hostname, PID, and a narrow projection of ECS task metadata |
+| `GET /api/metadata` | PID and a narrow projection of ECS task metadata |
 | `GET /healthz` | `ok`, used by the load balancer |
 
 Because it is internet-facing it deliberately has no environment dump, no
