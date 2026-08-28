@@ -8,7 +8,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { isIP } from "node:net";
-import { hostname } from "node:os";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const METADATA_TIMEOUT_MS = 2000;
@@ -24,7 +23,6 @@ type EcsFacts = {
 };
 
 type MetadataResponse = {
-  hostname: string;
   pid: number;
   source: "ecs-task-metadata-v4" | "unavailable";
   ecs?: EcsFacts;
@@ -109,17 +107,41 @@ const INDEX_PAGE = `<!doctype html>
   body { font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; margin: 3rem auto; max-width: 40rem; padding: 0 1rem; }
   h1 { font-size: 1.25rem; }
   pre { padding: 1rem; border-radius: .5rem; background: rgba(127,127,127,.15); overflow-x: auto; }
+  button { font: inherit; padding: .4rem .9rem; border-radius: .4rem; cursor: pointer; }
+  .meta { color: rgba(127,127,127,1); font-size: .875rem; }
 </style>
 <h1>aws-playground demo service</h1>
-<p>Whoever answers <code>/api/metadata</code> reports its own hostname and what
-the ECS task metadata service tells it. Run this service locally under mirrord
-and the answer changes.</p>
+<p>Whoever answers <code>/api/metadata</code> reports its own process ID and
+what the ECS task metadata service tells it. Run this service locally under
+mirrord and the answer changes.</p>
+<p>
+  <button id="refresh">Call /api/metadata</button>
+  <span class="meta" id="status"></span>
+</p>
 <pre id="out">loading&hellip;</pre>
 <script>
-  fetch("/api/metadata")
-    .then((response) => response.json())
-    .then((body) => { document.getElementById("out").textContent = JSON.stringify(body, null, 2); })
-    .catch((error) => { document.getElementById("out").textContent = String(error); });
+  let calls = 0;
+  async function call() {
+    const button = document.getElementById("refresh");
+    const status = document.getElementById("status");
+    button.disabled = true;
+    const started = performance.now();
+    try {
+      // cache: "no-store" so a click always hits the service rather than a
+      // cached body, which would hide a change in which process answered.
+      const response = await fetch("/api/metadata", { cache: "no-store" });
+      const body = await response.json();
+      document.getElementById("out").textContent = JSON.stringify(body, null, 2);
+      status.textContent = \`call \${++calls} · \${Math.round(performance.now() - started)}ms · \${new Date().toLocaleTimeString()}\`;
+    } catch (error) {
+      document.getElementById("out").textContent = String(error);
+      status.textContent = "failed";
+    } finally {
+      button.disabled = false;
+    }
+  }
+  document.getElementById("refresh").addEventListener("click", call);
+  call();
 </script>
 `;
 
@@ -139,7 +161,6 @@ app.get(
   rateLimit({ windowMs: 60_000, limit: 120 }),
   async (_request, response) => {
     const body: MetadataResponse = {
-      hostname: hostname(),
       pid: process.pid,
       source: "ecs-task-metadata-v4",
     };
