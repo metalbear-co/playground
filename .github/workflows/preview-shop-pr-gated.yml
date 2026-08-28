@@ -670,24 +670,30 @@ jobs:
               skipped: ':white_circle: not started',
             }[previewResult] || `:question: ${previewResult}`;
 
+            // The storefront that was added only to carry the direct link is
+            // listed after the services that actually changed.
+            const isAddedStorefront = service => storefrontAdded && service.name === 'metal-mart-frontend';
+            services.sort((a, b) => Number(isAddedStorefront(a)) - Number(isAddedStorefront(b)));
             const serviceLabel = service =>
-              storefrontAdded && service.name === 'metal-mart-frontend'
-                ? `\`${service.name}\` _(unchanged; previewed so the direct link shows this change)_`
+              isAddedStorefront(service)
+                ? `\`${service.name}\` _(unchanged, previewed for the direct link)_`
                 : `\`${service.name}\``;
             const tableRows = services.length > 0
-              ? services.map(service => `| ${serviceLabel(service)} | \`${service.gate}\` | \`${service.preview}\` |`).join('\n')
+              ? services.map(service => `| ${serviceLabel(service)} | ${service.gate} | ${service.preview} |`).join('\n')
               : '| _(no registered service paths changed)_ | | |';
+
+            const statusLine = [
+              hasChanges ? `**Changed:** ${process.env.SERVICES_LIST}` : '**Changed:** _no registered service paths_',
+              ...(gateResult !== 'skipped' ? [`**E2E gate:** ${gateBadge}`] : []),
+              `**Preview:** ${previewBadge}`,
+              `**Session:** \`${key}\``,
+            ].join(' · ');
 
             const body = [
               marker,
-              '## mirrord Preview Environment - Metal Mart',
+              '## :bear: mirrord Preview — Metal Mart',
               '',
-              hasChanges
-                ? `**Changed services:** ${process.env.SERVICES_LIST}`
-                : '**No registered service paths changed** — nothing to gate or preview.',
-              '',
-              `**E2E gate:** ${gateBadge}`,
-              `**Preview:** ${previewBadge}`,
+              statusLine,
               '',
               '| Service | E2E gate | Preview |',
               '|---|---|---|',
@@ -701,36 +707,41 @@ jobs:
               // one link where a backend change is visible without the browser
               // extension (a backend-only PR gets a storefront preview for
               // exactly that). Backend share hosts are API bases with nothing
-              // at `/`, so they are listed for curl rather than as links.
+              // at `/`, so they are listed under the terminal option.
               const storefrontShareUrl = shareUrlByName.get('metal-mart-frontend');
               const apiBases = services
-                .filter(service => service.name !== 'metal-mart-frontend' && shareUrlByName.has(service.name))
-                .map(service => `- \`${service.name}\` → \`${shareUrlByName.get(service.name)}\``);
+                .filter(service => service.name !== 'metal-mart-frontend' && shareUrlByName.has(service.name));
+              const apiBaseWidth = Math.max(0, ...apiBases.map(service => service.name.length));
+              const apiBaseLines = apiBases
+                .map(service => `${service.name.padEnd(apiBaseWidth)}  ${shareUrlByName.get(service.name)}`);
 
               body.push(
                 '',
-                '### :link: Direct link to see the change',
+                '### Four ways in — pick yours',
+                '',
+                '**1. :link: Just click** — no setup, share with anyone',
                 ...(storefrontShareUrl
-                  ? [`**[Open the storefront for this preview](${storefrontShareUrl})** — no extension or header needed. The link carries the session ([how it works](${shareDocsUrl})) and the storefront passes it to every backend call, so whatever you do there — browse, add to cart, place an order — is handled by the previewed services.`]
+                  ? [
+                      `**[Open the storefront for this preview →](${storefrontShareUrl})**`,
+                      `Browse, add to cart, place an order — every call is handled by the previewed services. ([how it works](${shareDocsUrl}))`,
+                    ]
                   : ['_No storefront share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
-                ...(apiBases.length > 0
-                  ? ['', 'Previewed API services, for direct calls (session header injected for you, e.g. `curl <base>/orders/<id>`):', ...apiBases]
+                '',
+                '**2. :jigsaw: One-click extension setup** — use the real URL with the mirrord Browser Extension',
+                `[Configure the extension for this preview](${extensionConfigUrl}), then open [playground.metalbear.dev/shop](${url}). (The [extension](${extensionDocsUrl}) must be installed; the page offers it if not.)`,
+                '',
+                '**3. :hammer_and_wrench: Set the header yourself** — any header tool or the extension, configured by hand',
+                `Open [playground.metalbear.dev/shop](${url}) with \`${header}\`.`,
+                '',
+                '**4. :computer: Terminal** — for scripts and API checks',
+                '```',
+                `curl -H "${header}" ${url}/api/products`,
+                '```',
+                ...(apiBaseLines.length > 0
+                  ? ['Previewed services directly (header injected for you):', '```', ...apiBaseLines, '```']
                   : []),
                 '',
-                '| | |',
-                '|---|---|',
-                `| **Preview URL** | [${url}](${url}) |`,
-                `| **Header** | \`${header}\` |`,
-                '| **Sessions** | [all mirrord sessions](http://127.0.0.1:59281/) (or run `mirrord ui` in terminal) |',
-                '',
-                '### :jigsaw: Open with the mirrord Browser Extension configured',
-                `1. [Configure the extension for this preview](${extensionConfigUrl}) — sets \`${header}\` on requests to \`playground.metalbear.dev\` (the [extension](${extensionDocsUrl}) must be installed; the page offers it if not).`,
-                `2. Open [${url}](${url}) — your requests now reach the preview.`,
-                '',
-                'Or from the terminal:',
-                `- \`curl -H "${header}" ${url}\``,
-                '',
-                '*Preview is stopped when the PR is merged or closed.*',
+                '_Preview stops when the PR is merged or closed._',
               );
             } else if (gateResult === 'failure' || gateResult === 'cancelled') {
               body.push(
@@ -747,7 +758,7 @@ jobs:
             });
 
             const existing = comments.find(comment =>
-              comment.body && (comment.body.includes(marker) || comment.body.includes('## mirrord Preview Environment - Metal Mart'))
+              comment.body && (comment.body.includes(marker) || comment.body.includes('mirrord Preview Environment - Metal Mart'))
             );
 
             if (existing) {
@@ -781,39 +792,68 @@ jobs:
           path: /tmp/preview-results
           merge-multiple: true
 
-      - name: Resolve storefront share link
-        id: storefront
+      # The Slack message mirrors the PR comment's four ways in. It is built
+      # with jq into a payload file because the storefront share link, the
+      # extension config link and the per-service API bases all come from the
+      # preview result artifacts rather than from job outputs.
+      - name: Build Slack payload
+        env:
+          PR_URL: ${{ needs.resolve-context.outputs.pr_url }}
+          PR_NUMBER: ${{ needs.resolve-context.outputs.pr_number }}
+          SERVICES_LIST: ${{ needs.detect-changes.outputs.services_list }}
+          PREVIEW_KEY: ${{ needs.resolve-context.outputs.preview_key }}
         run: |
           set -euo pipefail
-          share_url=$(jq -r '.share_url // empty' /tmp/preview-results/metal-mart-frontend.json 2>/dev/null || true)
-          if [ -n "$share_url" ]; then
-            echo "text=<${share_url}|Open the storefront> (no extension needed)" >> "$GITHUB_OUTPUT"
+          url="https://playground.metalbear.dev/shop"
+          header="baggage: mirrord-session=${PREVIEW_KEY}"
+          docs="https://metalbear.com/mirrord/docs/use-cases/preview-environments#sharing-a-preview-via-a-link"
+          # `-j` keeps the trailing newline out of the base64 payload.
+          extension_payload=$(jq -n -c -j --arg h "$header" '{header_filter: $h, inject_scope: "*://playground.metalbear.dev/*"}' | base64 | tr -d '\n')
+          extension_url="https://metalbear.com/mirrord/extension/#config=${extension_payload}"
+
+          storefront_url=$(jq -r '.share_url // empty' /tmp/preview-results/metal-mart-frontend.json 2>/dev/null || true)
+          if [ -n "$storefront_url" ]; then
+            just_click="<${storefront_url}|Open the storefront for this preview> — browse, add to cart, place an order; every call hits the previewed services. (<${docs}|how it works>)"
           else
-            echo "text=_not available_" >> "$GITHUB_OUTPUT"
+            just_click="_No storefront share link was minted for this preview._"
           fi
+
+          api_bases=$(jq -r -s '
+            [.[] | select(.name != "metal-mart-frontend" and (.share_url // "") != "")]
+            | (map(.name | length) | max // 0) as $width
+            | map("\(.name)\(" " * ($width - (.name | length) + 2))\(.share_url)")
+            | join("\n")' /tmp/preview-results/*.json 2>/dev/null || true)
+          terminal="\`\`\`curl -H \"${header}\" ${url}/api/products\`\`\`"
+          if [ -n "$api_bases" ]; then
+            terminal="${terminal}"$'\n'"Previewed services directly (header injected for you):"$'\n'"\`\`\`${api_bases}\`\`\`"
+          fi
+
+          jq -n \
+            --arg pr "<${PR_URL}|#${PR_NUMBER}>" \
+            --arg services "$SERVICES_LIST" \
+            --arg key "$PREVIEW_KEY" \
+            --arg just_click "$just_click" \
+            --arg extension_url "$extension_url" \
+            --arg url "$url" \
+            --arg header "$header" \
+            --arg terminal "$terminal" \
+            '{blocks: [
+              {type: "header", text: {type: "plain_text", text: "🐻 mirrord Preview — Metal Mart"}},
+              {type: "section", text: {type: "mrkdwn", text: "*PR:* \($pr) · *Changed:* \($services) · *Session:* `\($key)`"}},
+              {type: "section", text: {type: "mrkdwn", text: "*Four ways in — pick yours*"}},
+              {type: "section", text: {type: "mrkdwn", text: "*1. 🔗 Just click* — no setup, share with anyone\n\($just_click)"}},
+              {type: "section", text: {type: "mrkdwn", text: "*2. 🧩 One-click extension setup* — use the real URL with the mirrord Browser Extension\n<\($extension_url)|Configure the extension for this preview>, then open <\($url)|playground.metalbear.dev/shop>."}},
+              {type: "section", text: {type: "mrkdwn", text: "*3. 🛠️ Set the header yourself* — any header tool or the extension, configured by hand\nOpen <\($url)|playground.metalbear.dev/shop> with `\($header)`."}},
+              {type: "section", text: {type: "mrkdwn", text: "*4. 💻 Terminal* — for scripts and API checks\n\($terminal)"}},
+              {type: "context", elements: [{type: "mrkdwn", text: "Preview stops when the PR is merged or closed."}]}
+            ]}' > /tmp/slack-payload.json
+          cat /tmp/slack-payload.json
 
       - name: Post preview link to Slack
         uses: slackapi/slack-github-action@v1.27.0
         with:
-          payload: |
-            {
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": { "type": "plain_text", "text": "mirrord Preview Environment - Metal Mart" }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    { "type": "mrkdwn", "text": "*PR:*\n<${{ needs.resolve-context.outputs.pr_url }}|#${{ needs.resolve-context.outputs.pr_number }}>" },
-                    { "type": "mrkdwn", "text": "*Services:*\n${{ needs.detect-changes.outputs.services_list }}" },
-                    { "type": "mrkdwn", "text": "*Direct link:*\n${{ steps.storefront.outputs.text }}" },
-                    { "type": "mrkdwn", "text": "*Preview URL:*\n<https://playground.metalbear.dev/shop|Open Preview>" },
-                    { "type": "mrkdwn", "text": "*Header:*\n`baggage: mirrord-session=${{ needs.resolve-context.outputs.preview_key }}`" }
-                  ]
-                }
-              ]
-            }
+          payload-file-path: /tmp/slack-payload.json
+          payload-file-path-parsed: false
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
