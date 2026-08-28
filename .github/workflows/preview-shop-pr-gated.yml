@@ -722,7 +722,7 @@ jobs:
                 '**1. :link: Just click** — no setup, share with anyone',
                 ...(storefrontShareUrl
                   ? [
-                      `**[Open the storefront for this preview →](${storefrontShareUrl})**`,
+                      `**${storefrontShareUrl}**`,
                       `Browse, add to cart, place an order — every call is handled by the previewed services. ([how it works](${shareDocsUrl}))`,
                     ]
                   : ['_No storefront share link was minted for this preview (share-ingress unavailable or the session had no share host)._']),
