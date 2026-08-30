@@ -30,6 +30,7 @@
 - **`apps/ip-visit/`** – IP visit counter demo: ip-info, ip-info-grpc, ip-visit-counter, ip-visit-frontend, ip-visit-consumer (Kafka), ip-visit-sqs-consumer. Uses Redis, optional SQS/Kafka.
 - **`apps/shop/`** – **MetalMart** ecommerce demo: metal-mart-frontend (Next.js), inventory-service, order-service, payment-service, delivery-service. Uses Postgres + Kafka. See `apps/shop/README.md`.
 - **`apps/visualization/`** – visualization-frontend + visualization-backend.
+- **`apps/aws-playground/`**, **`apps/gcp-playground/`** – the serverless mirrord demo, one per cloud: a single service that reports which process answered and what its instance metadata says. Deployed to ECS Fargate and Cloud Run respectively, **not** through `manifests/`/`overlays/` — infrastructure lives in `metalbear-co/infra` (`environments/s8s-aws`, `environments/s8s-gcp`) and CI deploys them directly.
 
 Manifests that deploy these live under **`manifests/`** (e.g. `manifests/shop`, `manifests/ip-visit`, `manifests/visualization`).
 
