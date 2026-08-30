@@ -152,6 +152,26 @@ const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
+// Log both sides of every request. Under mirrord the interesting question is
+// which process answered a given call, so each line carries the pid alongside
+// the usual method, path, status and duration.
+app.use((request, response, next) => {
+  const started = process.hrtime.bigint();
+
+  console.log(
+    `--> pid=${process.pid} ${request.method} ${request.originalUrl} from=${request.ip ?? "unknown"}`,
+  );
+
+  response.on("finish", () => {
+    const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
+    console.log(
+      `<-- pid=${process.pid} ${request.method} ${request.originalUrl} ${response.statusCode} ${durationMs.toFixed(1)}ms ${response.get("content-length") ?? "-"}b`,
+    );
+  });
+
+  next();
+});
+
 // Every response closes its connection. A load balancer keeps persistent
 // connections to its targets, and a request arriving on a connection that was
 // opened before mirrord began intercepting is never diverted — which reads as
