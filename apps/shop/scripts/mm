@@ -18,15 +18,18 @@
 # queue splitting, DB branching) belongs in the embedded template, so every
 # developer gets it automatically.
 #
-# ─── USING THIS AS A TEMPLATE ────────────────────────────────────────────────
-# This script is intentionally generic. To adapt it to your own repo/cluster:
-#   1. Edit the CONFIGURATION block below (cluster coordinates, namespace, paths).
-#   2. Edit the config template in `scaffold_config` — this is where your
-#      company-specific mirrord features go.
-#   3. Edit `service_run_command` if your services don't start with `npm run dev`.
-#   4. Swap the GKE auth functions (`ensure_gcloud_auth`, `ensure_kube_context`)
-#      for your provider's equivalent (EKS: aws sso login + update-kubeconfig,
-#      AKS: az login + az aks get-credentials, etc.). Everything else is portable.
+# ─── WHAT THIS IS ────────────────────────────────────────────────────────────
+# An example wrapper, not part of mirrord. MetalBear does not maintain it, and it
+# carries no support or compatibility commitment.
+#
+# Verified against mirrord v3.251.0. Later mirrord releases may change the config
+# schema and CLI output this script depends on, and it isn't guaranteed to keep up.
+#
+# To adapt it:
+#   1. CONFIGURATION block below (cluster coordinates, namespace, paths).
+#   2. The config template in `scaffold_config` — where mirrord features go.
+#   3. `service_run_command` if your services don't start with `npm run dev`.
+#   4. The GKE auth functions for your provider (EKS, AKS, on-prem).
 # Sections you are expected to touch are marked with "CUSTOMIZE:".
 #
 # Usage:
@@ -35,7 +38,7 @@
 #   mm config               Print the resolved mirrord config (for debugging)
 #   mm setup                Install mirrord + authenticate + fetch cluster creds
 #   mm sessions             Show active mirrord operator sessions
-#   mm cleanup <id|--all>   Kill one operator session (or all of them)
+#   mm cleanup <id|--mine>  Kill one operator session (or every session you own)
 #   mm doctor               Check every prerequisite and report OK/FAIL
 #   mm extension            Open the mirrord browser-extension install page
 #
@@ -121,7 +124,7 @@ Commands:
   config          Print the resolved mirrord config (templates rendered) without running
   setup           Install mirrord, authenticate to Google Cloud, fetch cluster creds
   sessions        List active mirrord operator sessions on the cluster
-  cleanup <id>    Kill one operator session by ID (or --all for every session)
+  cleanup <id>    Kill one operator session by ID (or --mine for all of yours)
   doctor          Verify every prerequisite (gcloud, kubectl, mirrord, cluster, config)
   extension       Open the mirrord browser extension install page
 
@@ -129,13 +132,15 @@ Options for `run`:
   --key <name>        Session key used in the traffic filter (default: your username)
   --namespace <ns>    Kubernetes namespace of the target (default: shop)
   --target <name>     Target deployment name (default: same as the service directory)
-  --split-queues <type>  Also split message queues for this run, filtered by the
+  --split-queues <types>  Also split message queues for this run, filtered by the
                       same session key. Applies to every queue registered for
-                      the target ("*"). Type is required: kafka | sqs | rmq | pubsub
+                      the target ("*"). One or more comma-separated types:
+                      kafka | sqs | rmq | pubsub (e.g. kafka,sqs)
   --migrate           Run against an isolated database branch instead of the
                       shared database — safe for schema changes and migrations.
                       The service starts normally with DATABASE_URL pointing at
-                      the branch. Single service only.
+                      the branch; the branch's local address is printed once
+                      it is ready. Single service only.
   --config <file>     Use an alternate mirrord config file instead of the scaffolded one
   -- <args...>        Everything after -- is passed to the service's run command
 
@@ -151,7 +156,7 @@ Examples:
   mm run order-service --key alice
   mm run order-service --target order-service-v2 --namespace staging
   mm run delivery-service --split-queues kafka
-  mm run payment-service --split-queues sqs
+  mm run payment-service --split-queues kafka,sqs
   mm run inventory-service --migrate
   mm config
   mm sessions
@@ -292,30 +297,58 @@ queue_type_of() {
   esac
 }
 
-# Merge a wildcard queue-splitting section into a temp copy of the config for
-# this run (`--split-queues`). The "*" entry applies the split to every queue
-# registered for the target, and the message filter matches the same session
-# key as the HTTP steal filter — so HTTP requests and queue messages follow
-# one routing rule: tagged with your key → your laptop, everything else →
-# the deployed pod. The scaffolded config file itself is never modified.
+# Fold a comma-separated user spelling of queue types ("kafka,sqs") into an
+# accumulated comma-separated list of mirrord identifiers, validating each and
+# skipping duplicates. A service can consume several broker types at once, so
+# `--split-queues` takes a list (and may also be repeated).
+add_queue_types() {
+  local acc="$1" spec="$2" t qt
+  for t in ${spec//,/ }; do
+    qt="$(queue_type_of "$t")" || die "unknown queue type '$t' (use: kafka | sqs | rmq | pubsub)"
+    case ",${acc}," in
+      *",${qt},"*) ;;
+      *) acc="${acc:+${acc},}${qt}" ;;
+    esac
+  done
+  printf '%s' "$acc"
+}
+
+# Merge wildcard queue-splitting entries into a temp copy of the config for
+# this run (`--split-queues`). One entry is added per queue type; each uses
+# queue id "*", which applies the split to every queue of that type registered
+# for the target. The message filter matches the same session key as the HTTP
+# steal filter — so HTTP requests and queue messages follow one routing rule:
+# tagged with your key → your laptop, everything else → the deployed pod.
+# The list form of `split_queues` is used because it allows the same queue id
+# ("*") once per queue type; a map-form section already present in the config
+# is converted to the list form before appending. The scaffolded config file
+# itself is never modified.
 # CUSTOMIZE: the filter matches a `baggage` header/attribute on the messages;
 # change the name if your producers propagate the session key differently.
 with_split_queues() {
-  local config="$1" queue_type="$2"
+  local config="$1" queue_types="$2"   # comma-separated mirrord queue types
   local out="${TMPDIR:-/tmp}/mm-config-splitq-$$.json"
   local filter='.*mirrord-session={{key}}.*'
   if have jq; then
-    jq --arg qt "$queue_type" --arg f "$filter" \
-      '.feature.split_queues["*"] = {queue_type: $qt, message_filter: {baggage: $f}}' \
-      "$config" >"$out"
+    jq --arg types "$queue_types" --arg f "$filter" '
+      .feature.split_queues =
+        ((.feature.split_queues // [])
+         | if type == "array" then . else to_entries | map({queue_id: .key} + .value) end)
+        + [($types | split(","))[] | {queue_id: "*", queue_type: ., message_filter: {baggage: $f}}]
+    ' "$config" >"$out"
   elif have python3; then
-    python3 - "$config" "$out" "$queue_type" "$filter" <<'PY'
+    python3 - "$config" "$out" "$queue_types" "$filter" <<'PY'
 import json, sys
 cfg = json.load(open(sys.argv[1]))
-cfg.setdefault("feature", {}).setdefault("split_queues", {})["*"] = {
-    "queue_type": sys.argv[3],
-    "message_filter": {"baggage": sys.argv[4]},
-}
+feature = cfg.setdefault("feature", {})
+splits = feature.get("split_queues", [])
+if isinstance(splits, dict):
+    splits = [{"queue_id": qid, **entry} for qid, entry in splits.items()]
+splits.extend(
+    {"queue_id": "*", "queue_type": qt, "message_filter": {"baggage": sys.argv[4]}}
+    for qt in sys.argv[3].split(",")
+)
+feature["split_queues"] = splits
 json.dump(cfg, open(sys.argv[2], "w"), indent=2)
 PY
   else
@@ -364,6 +397,48 @@ PY
     die '--migrate needs jq or python3 to merge the config'
   fi
   printf '%s' "$out"
+}
+
+# Report the database branch created for this session (`--migrate`). The
+# connection data comes from `mirrord db-branches connections --format json`,
+# which only lists a branch once the session's portforward is up — so this
+# runs in the background, polling while mirrord starts (copying the shared
+# database can take a while), and prints one line per branch when ready.
+# Entries are matched on the session key, so only this session's branch is
+# reported even when other sessions have branches open on this machine.
+# Needs a mirrord with JSON output on `db-branches connections` (newer than
+# 3.251.0); on older versions this silently reports nothing.
+report_db_branch() {
+  local session_key="$1" deadline=$((SECONDS + 300)) json rows
+  mirrord db-branches connections --help 2>/dev/null | grep -q -- '--format' || return 0
+  while (( SECONDS < deadline )); do
+    json="$(mirrord db-branches connections --format json 2>/dev/null)" || json=''
+    rows=''
+    if [[ -n "$json" && "$json" != '[]' ]]; then
+      if have jq; then
+        rows="$(jq -r --arg k "$session_key" \
+          '.[] | select(.key == $k) | "\(.db_id) at \(.connection_string)"' \
+          <<<"$json" 2>/dev/null)" || rows=''
+      elif have python3; then
+        rows="$(python3 -c '
+import json, sys
+for c in json.loads(sys.argv[1]):
+    if c.get("key") == sys.argv[2]:
+        print(c["db_id"] + " at " + c["connection_string"])
+' "$json" "$session_key" 2>/dev/null)" || rows=''
+      fi
+    fi
+    if [[ -n "$rows" ]]; then
+      local line
+      while IFS= read -r line; do
+        note "database branch ready: ${line}"
+      done <<<"$rows"
+      note "→ ${DB_BRANCH_CONNECTION_ENV} inside the service points at the branch"
+      return 0
+    fi
+    sleep 2
+  done
+  return 0
 }
 
 # Print the config exactly as mirrord will use it: templates rendered (session
@@ -511,7 +586,7 @@ cmd_list() {
 # time, so they are not part of this file.
 cmd_config() {
   local key='' config_file="$MM_CONFIG_FILE" target='' namespace="$DEFAULT_NAMESPACE"
-  local split_queues='' qt migrate=0
+  local split_queues='' migrate=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --key)       [[ $# -ge 2 ]] || die '--key requires a value';       key="$2"; shift 2 ;;
@@ -519,13 +594,12 @@ cmd_config() {
       --target)    [[ $# -ge 2 ]] || die '--target requires a value';    target="$2"; shift 2 ;;
       --namespace) [[ $# -ge 2 ]] || die '--namespace requires a value'; namespace="$2"; shift 2 ;;
       --split-queues)
-        [[ $# -ge 2 ]] || die '--split-queues requires a queue type: kafka | sqs | rmq | pubsub'
-        qt="$(queue_type_of "$2")" || die "unknown queue type '$2' (use: kafka | sqs | rmq | pubsub)"
-        split_queues="$qt"
+        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub (comma-separated for several)'
+        split_queues="$(add_queue_types "$split_queues" "$2")"
         shift 2 ;;
       --migrate) migrate=1; shift ;;
       -h|--help)
-        echo 'usage: mm config [--key NAME] [--target NAME] [--namespace NS] [--split-queues TYPE] [--migrate] [--config FILE]'
+        echo 'usage: mm config [--key NAME] [--target NAME] [--namespace NS] [--split-queues TYPES] [--migrate] [--config FILE]'
         echo 'Prints the fully resolved mirrord config (templates rendered, defaults filled).'
         return 0 ;;
       *) die "unknown config option: $1" ;;
@@ -560,7 +634,7 @@ cmd_setup() {
 
 cmd_run() {
   local namespace="$DEFAULT_NAMESPACE" target='' key='' config_file="$MM_CONFIG_FILE"
-  local split_queues='' qt migrate=0
+  local split_queues='' migrate=0
   local -a services=() extra_args=() RUN_ARGV=()
 
   while [[ $# -gt 0 ]]; do
@@ -570,9 +644,8 @@ cmd_run() {
       --target)    [[ $# -ge 2 ]] || die '--target requires a value';    target="$2"; shift 2 ;;
       --config)    [[ $# -ge 2 ]] || die '--config requires a value';    config_file="$2"; shift 2 ;;
       --split-queues)
-        [[ $# -ge 2 ]] || die '--split-queues requires a queue type: kafka | sqs | rmq | pubsub'
-        qt="$(queue_type_of "$2")" || die "unknown queue type '$2' (use: kafka | sqs | rmq | pubsub)"
-        split_queues="$qt"
+        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub (comma-separated for several)'
+        split_queues="$(add_queue_types "$split_queues" "$2")"
         shift 2 ;;
       --migrate)   migrate=1; shift ;;
       -h|--help)   usage; return 0 ;;
@@ -605,7 +678,7 @@ cmd_run() {
   # registered queue by the same session key.
   if [[ -n "$split_queues" ]]; then
     config_file="$(with_split_queues "$config_file" "$split_queues")"
-    note "queue splitting enabled (type=${split_queues}, all queues, filtered by the session key)"
+    note "queue splitting enabled (types=${split_queues}, all queues, filtered by the session key)"
   fi
 
   # --migrate: run against an isolated database branch instead of the shared DB.
@@ -638,6 +711,14 @@ cmd_run() {
     # Show exactly what mirrord is about to do (and fail fast on a bad config).
     print_resolved_config "$config_file" "$target" "$namespace" "$svc"
     note "service=${svc} target=deployment/${target} namespace=${namespace} context=${KUBE_CONTEXT}"
+
+    # --migrate: the exec below replaces this shell, so the branch watcher must
+    # be launched first. It shares the terminal and prints its report amid the
+    # service logs once the branch is ready; on Ctrl-C it dies with the session
+    # (same process group), and its polling is time-bounded either way.
+    if (( migrate )); then
+      report_db_branch "$key" &
+    fi
 
     cd "$dir"
     exec mirrord exec \
@@ -701,12 +782,13 @@ cmd_sessions() {
 }
 
 cmd_cleanup() {
-  local session_id='' kill_all=0
+  local session_id='' kill_mine=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --all) kill_all=1; shift ;;
+      --mine) kill_mine=1; shift ;;
+      --all) die 'the cluster is shared — mm only kills your own sessions (use --mine)' ;;
       -h|--help)
-        echo 'usage: mm cleanup <session-id> | mm cleanup --all'
+        echo 'usage: mm cleanup <session-id> | mm cleanup --mine'
         echo 'Session IDs come from: mm sessions'
         return 0 ;;
       -*) die "unknown cleanup option: $1" ;;
@@ -721,14 +803,36 @@ cmd_cleanup() {
   local op_cfg="${TMPDIR:-/tmp}/mm-operator-$$.json"
   printf '{"kube_context":"%s","operator":true}\n' "$KUBE_CONTEXT" >"$op_cfg"
 
-  if (( kill_all )); then
-    # The cluster is shared — killing every session affects other developers,
-    # so ask before doing it.
-    read -r -p 'mm: kill ALL mirrord sessions on the cluster? [y/N] ' answer
+  if (( kill_mine )); then
+    # Deliberately no kill-all: the cluster is shared, and tearing down other
+    # developers' sessions from a convenience wrapper is too easy to do by
+    # accident. "Mine" means sessions opened from this OS username — the
+    # operator attributes every session to <os-user>/<k8s-user>@<hostname>
+    # in the User column of `mirrord operator status`.
+    local me my_rows ids
+    me="${USER:-$(id -un)}"
+    my_rows="$(mirrord operator status -f "$op_cfg" | awk -F'|' -v me="$me" '
+      NF >= 7 {
+        id = $2; gsub(/ /, "", id)
+        user = $5; gsub(/^ +| +$/, "", user)
+        if (id ~ /^[0-9a-fA-F]+$/ && index(user, me "/") == 1) print
+      }' | sort -u)"
+    if [[ -z "$my_rows" ]]; then
+      rm -f "$op_cfg"
+      note "no active sessions belong to ${me}"
+      return 0
+    fi
+    echo "mm: active sessions belonging to ${me}:"
+    echo "$my_rows"
+    read -r -p 'mm: kill all of YOUR sessions listed above? [y/N] ' answer
     [[ "$answer" =~ ^[Yy]$ ]] || { rm -f "$op_cfg"; die 'aborted'; }
-    mirrord operator session kill-all -f "$op_cfg"
+    ids="$(awk -F'|' '{ id = $2; gsub(/ /, "", id); print id }' <<<"$my_rows" | sort -u)"
+    local id
+    for id in $ids; do
+      mirrord operator session kill --id "$id" -f "$op_cfg"
+    done
   else
-    [[ -n "$session_id" ]] || { rm -f "$op_cfg"; die 'session ID required (see: mm sessions), or pass --all'; }
+    [[ -n "$session_id" ]] || { rm -f "$op_cfg"; die 'session ID required (see: mm sessions), or pass --mine'; }
     [[ "$session_id" =~ ^[[:xdigit:]]+$ ]] || { rm -f "$op_cfg"; die "invalid session ID: $session_id"; }
     mirrord operator session kill --id "$session_id" -f "$op_cfg"
   fi
