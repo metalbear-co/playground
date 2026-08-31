@@ -1,0 +1,107 @@
+name: Release aws-playground demo service
+# Requires repo secrets, both of which embed the AWS account and so are kept out
+# of this public repository:
+#   AWS_S8S_DEPLOY_ROLE_ARN  - the s8s-github-deploy role, assumed via OIDC
+#   AWS_S8S_ECR_REPOSITORY   - the demo service's ECR repository URL
+# Both are Terraform outputs of environments/s8s-aws in metalbear-co/infra.
+#
+# Actions are pinned to a commit rather than a tag: a tag can be repointed at
+# new code, and these run with a token that can reach AWS.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/aws-playground/demo-service/**"
+      - ".github/workflows/build-aws-playground-demo.yaml"
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: s8s
+  ECS_SERVICE: s8s-demo
+  ECS_TASK_FAMILY: s8s-demo
+  CONTAINER_NAME: demo
+
+# One deployment at a time, so two quick merges cannot race each other into
+# UpdateService in the wrong order.
+concurrency:
+  group: aws-playground-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        # actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up QEMU
+        # docker/setup-qemu-action@v4.2.0
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
+
+      - name: Set up Docker Buildx
+        # docker/setup-buildx-action@v4.3.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+
+      - name: Configure AWS credentials
+        # aws-actions/configure-aws-credentials@v6.2.3
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_S8S_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        # aws-actions/amazon-ecr-login@v2.1.7
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd
+
+      - name: Build and push
+        # docker/build-push-action@v7.3.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./apps/aws-playground/demo-service
+          file: ./apps/aws-playground/demo-service/Dockerfile
+          # The ECS task definition runs on ARM64 Fargate.
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.AWS_S8S_ECR_REPOSITORY }}:latest
+            ${{ secrets.AWS_S8S_ECR_REPOSITORY }}:${{ github.sha }}
+
+      # Terraform seeds this family with a placeholder container that runs
+      # busybox httpd to answer the health check. Rendering only swaps the
+      # image, so the placeholder's `command` would survive onto the real image,
+      # which has no httpd and exits 127. Dropping it lets the image's own
+      # entrypoint run.
+      - name: Read the running task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_FAMILY" \
+            --query taskDefinition \
+            --output json \
+          | jq 'del(.containerDefinitions[] | select(.name == env.CONTAINER_NAME) | .command, .entryPoint)' \
+            > task-definition.json
+
+      - name: Point the task definition at the new image
+        id: render
+        # aws-actions/amazon-ecs-render-task-definition@v1.9.0
+        uses: aws-actions/amazon-ecs-render-task-definition@138c24f321fdbdf7edee4a685519d253cae2cdea
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ secrets.AWS_S8S_ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Deploy
+        # aws-actions/amazon-ecs-deploy-task-definition@v2.6.3
+        uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          # ECS rolls the service on its own. Blocking here ties up a runner for
+          # the length of a deployment and reports a rollout problem as a CI
+          # failure minutes after the job's own work finished.
+          wait-for-service-stability: false
