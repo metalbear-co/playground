@@ -1,15 +1,5 @@
 name: Release gcp-playground demo service
-# Requires repo variables and secrets, which embed the GCP project and so are
-# kept out of this public repository:
-#   GCP_S8S_WORKLOAD_IDENTITY_PROVIDER - Workload Identity Provider, used via OIDC
-#   GCP_S8S_DEPLOY_SERVICE_ACCOUNT     - service account the workflow impersonates
-#   GCP_S8S_ARTIFACT_REGISTRY          - <region>-docker.pkg.dev/<project> prefix
-#   GCP_S8S_BOOTSTRAP_IMAGE            - bootstrap library image the sidecar builds on
-# All four are Terraform outputs of environments/s8s-gcp in metalbear-co/infra,
-# except the bootstrap image tag, which is chosen when that image is published.
-#
-# Actions are pinned to a commit rather than a tag: a tag can be repointed at
-# new code, and these run with a token that can reach GCP.
+# Secrets and their provenance: apps/gcp-playground/demo-service/README.md
 on:
   push:
     branches: [main]
@@ -29,7 +19,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The deploy secrets are Terraform outputs of the s8s-gcp root, so they only
+  # exist once that environment is applied. Skip rather than fail until then.
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_S8S_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          if [ -n "$WORKLOAD_IDENTITY_PROVIDER" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GCP deploy secrets are not set; skipping deploy."
+          fi
+
   deploy:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.configured == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
