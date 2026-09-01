@@ -99,17 +99,44 @@ jobs:
       # Terraform owns everything about the service except which images its
       # containers run, so the deploy only swaps those two and leaves the
       # probes, volume, dependency order and environment untouched.
+      # Swaps the two images and leaves the rest of the spec exactly as it was.
+      # `gcloud run services update --container` cannot do this: see the PR.
       - name: Deploy
         run: |
-          # gcloud requires every flag that is not container-specific to come
-          # before the first --container; each --container scopes the flags
-          # after it to that one container.
-          gcloud run services update "$CLOUD_RUN_SERVICE" \
-            --region "$GCP_REGION" \
-            --quiet \
-            --container demo \
-            --image "${ARTIFACT_REGISTRY}/s8s-demo/demo-service:${GITHUB_SHA}" \
-            --container mirrord-bootstrap \
-            --image "${ARTIFACT_REGISTRY}/s8s-bootstrap-sidecar/bootstrap-sidecar:${GITHUB_SHA}"
+          gcloud run services describe "$CLOUD_RUN_SERVICE" \
+            --region "$GCP_REGION" --format export > service.yaml
+
+          python3 - <<'PATCH'
+          import os, yaml
+
+          images = {
+              "demo": f"{os.environ['ARTIFACT_REGISTRY']}/s8s-demo/demo-service:{os.environ['GITHUB_SHA']}",
+              "mirrord-bootstrap": f"{os.environ['ARTIFACT_REGISTRY']}/s8s-bootstrap-sidecar/bootstrap-sidecar:{os.environ['GITHUB_SHA']}",
+          }
+
+          with open("service.yaml") as handle:
+              service = yaml.safe_load(handle)
+
+          # Server-populated, and rejected on the way back in.
+          for annotation in ("run.googleapis.com/urls", "run.googleapis.com/ingress-status"):
+              service["metadata"].get("annotations", {}).pop(annotation, None)
+
+          containers = service["spec"]["template"]["spec"]["containers"]
+          named = {container.get("name") for container in containers}
+          missing = set(images) - named
+          if missing:
+              raise SystemExit(f"service has no container named {sorted(missing)}; found {sorted(named)}")
+
+          for container in containers:
+              container["image"] = images[container["name"]]
+
+          # A revision name carried over from the running revision collides.
+          service["spec"]["template"].get("metadata", {}).pop("name", None)
+
+          with open("service.yaml", "w") as handle:
+              yaml.safe_dump(service, handle, sort_keys=False)
+          PATCH
+
+          gcloud run services replace service.yaml --region "$GCP_REGION" --quiet
         env:
           ARTIFACT_REGISTRY: ${{ secrets.GCP_S8S_ARTIFACT_REGISTRY }}
