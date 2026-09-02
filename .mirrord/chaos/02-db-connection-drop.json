@@ -1,0 +1,14 @@
+{
+  "name": "postgres connection reset (complete drop)",
+  "priority": 20,
+  "selector": {
+    "upstream": "postgres.infra.svc.cluster.local:5432",
+    "percentage": 100
+  },
+  "effect": {
+    "connection_error": {
+      "type": "reset",
+      "after_ms": 0
+    }
+  }
+}

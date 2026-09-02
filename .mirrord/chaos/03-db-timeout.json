@@ -1,0 +1,14 @@
+{
+  "name": "postgres connection timed out",
+  "priority": 20,
+  "selector": {
+    "upstream": "postgres.infra.svc.cluster.local:5432",
+    "percentage": 100
+  },
+  "effect": {
+    "connection_error": {
+      "type": "timed_out",
+      "after_ms": 0
+    }
+  }
+}
