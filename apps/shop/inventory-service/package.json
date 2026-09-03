@@ -7,8 +7,7 @@
     "inventory-service-dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "lint": "tsc --noEmit",
-    "seed:demo": "tsx scripts/seed-demo-products.ts"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "express": "^5.1.0",
