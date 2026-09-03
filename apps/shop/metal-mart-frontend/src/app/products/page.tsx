@@ -59,7 +59,7 @@ export default function ProductsPage() {
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
-                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal"
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#3A342C]/30 hover:shadow-xl hover:shadow-[#3A342C]/10 animate-card-reveal"
                 style={{ animationDelay: `${i * 0.06}s` }}
               >
                 {p.is_new && <NewBadge size="default" />}
@@ -79,10 +79,10 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className="flex flex-1 flex-col p-5">
-                  <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
+                  <h2 className="font-semibold text-slate-900 group-hover:text-[#3A342C] transition-colors">
                     {p.name}
                   </h2>
-                  <p className="mt-2 text-lg font-semibold text-[#6a4ff5]">${(p.price_cents / 100).toFixed(2)}</p>
+                  <p className="mt-2 text-lg font-semibold text-[#3A342C]">${(p.price_cents / 100).toFixed(2)}</p>
                   <p className="mt-auto pt-3 text-xs text-slate-500">In stock: {p.stock}</p>
                 </div>
               </Link>

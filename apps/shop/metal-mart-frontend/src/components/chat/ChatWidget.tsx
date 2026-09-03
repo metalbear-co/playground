@@ -94,9 +94,9 @@ export default function ChatWidget() {
           role="dialog"
           aria-label="Support chat"
         >
-          <div className="flex items-center justify-between bg-[#6a4ff5] px-4 py-3 text-white">
+          <div className="flex items-center justify-between bg-[#3A342C] px-4 py-3 text-white">
             <div>
-              <p className="text-sm font-semibold">MetalMart Support</p>
+              <p className="text-sm font-semibold">Larkwell Support</p>
               <p className="text-xs text-white/80">We usually reply in a few minutes</p>
             </div>
             <button
@@ -125,7 +125,7 @@ export default function ChatWidget() {
                 <div
                   className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                     msg.sender === "customer"
-                      ? "rounded-br-sm bg-[#6a4ff5] text-white"
+                      ? "rounded-br-sm bg-[#3A342C] text-white"
                       : "rounded-bl-sm bg-slate-100 text-slate-800"
                   }`}
                 >
@@ -146,7 +146,7 @@ export default function ChatWidget() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Type a message…"
-              className="min-w-0 flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#6a4ff5]"
+              className="min-w-0 flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#3A342C]"
             />
             <button
               type="submit"
@@ -166,7 +166,7 @@ export default function ChatWidget() {
         aria-label={open ? "Close support chat" : "Open support chat"}
       >
         {unread > 0 && !open && (
-          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#f59e0b] text-xs font-bold text-[#1a1a2e]">
+          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#2F4A3C] text-xs font-bold text-[#1a1a2e]">
             {unread}
           </span>
         )}

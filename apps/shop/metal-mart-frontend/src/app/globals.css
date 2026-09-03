@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* MetalBear-inspired palette */
+/* Earth-tone palette: warm neutrals + emerald accent */
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a2e;
-  --muted: #64748b;
-  --purple: #6a4ff5;
-  --purple-hover: #5a3fe5;
-  --purple-light: #e8e4fc;
-  --orange: #f59e0b;
-  --orange-hover: #fbbf24;
+  --background: #FAF7F2;
+  --foreground: #241F1A;
+  --muted: #7A7266;
+  --purple: #3A342C;
+  --purple-hover: #2C2720;
+  --purple-light: #EAE4D8;
+  --orange: #2F4A3C;
+  --orange-hover: #3D6350;
 }
 
 @theme inline {

@@ -133,7 +133,7 @@ export default function SupportPage() {
                     type="button"
                     onClick={() => setSelectedId(c.conversationId)}
                     className={`w-full px-4 py-3 text-left hover:bg-slate-50 ${
-                      c.conversationId === selectedId ? "bg-[#e8e4fc]" : ""
+                      c.conversationId === selectedId ? "bg-[#EAE4D8]" : ""
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -193,7 +193,7 @@ export default function SupportPage() {
                       <div
                         className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${
                           msg.sender === "agent"
-                            ? "rounded-br-sm bg-[#6a4ff5] text-white"
+                            ? "rounded-br-sm bg-[#3A342C] text-white"
                             : msg.sender === "bot"
                               ? "rounded-bl-sm bg-[#fef3c7] text-slate-700"
                               : "rounded-bl-sm bg-slate-100 text-slate-800"
@@ -222,7 +222,7 @@ export default function SupportPage() {
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
                     placeholder="Reply as support…"
-                    className="min-w-0 flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#6a4ff5]"
+                    className="min-w-0 flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#3A342C]"
                   />
                   <button
                     type="submit"

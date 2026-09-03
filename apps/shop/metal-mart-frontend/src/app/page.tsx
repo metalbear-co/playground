@@ -31,7 +31,7 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
+        className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#3A342C]/15 hover:border-[#3A342C]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
@@ -68,7 +68,7 @@ function ProductTile({
     return (
       <Link
         href={href}
-        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
+        className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#3A342C]/30 hover:shadow-xl hover:shadow-[#3A342C]/10 animate-card-reveal sm:flex-row ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
@@ -88,10 +88,10 @@ function ProductTile({
           )}
         </div>
         <div className="flex flex-1 flex-col justify-center p-6">
-          <h2 className="text-xl font-bold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
+          <h2 className="text-xl font-bold text-slate-900 group-hover:text-[#3A342C] transition-colors">
             {product.name}
           </h2>
-          <p className="mt-1 text-lg font-semibold text-[#6a4ff5]">{price}</p>
+          <p className="mt-1 text-lg font-semibold text-[#3A342C]">{price}</p>
           {product.description && (
             <p className="mt-2 line-clamp-2 text-sm text-slate-600">
               {product.description}
@@ -106,7 +106,7 @@ function ProductTile({
   return (
     <Link
       href={href}
-      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#3A342C]/30 hover:shadow-xl hover:shadow-[#3A342C]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
@@ -126,10 +126,10 @@ function ProductTile({
         )}
       </div>
       <div className="flex flex-1 flex-col p-4">
-        <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
+        <h2 className="font-semibold text-slate-900 group-hover:text-[#3A342C] transition-colors">
           {product.name}
         </h2>
-        <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
+        <p className="mt-1 font-semibold text-[#3A342C]">{price}</p>
       </div>
     </Link>
   );
@@ -248,7 +248,7 @@ export default function Home() {
                 <div className="mt-10 flex justify-center">
                   <Link
                     href="/products"
-                    className="text-sm font-medium text-[#6a4ff5] hover:text-[#5a3fe5] hover:underline"
+                    className="text-sm font-medium text-[#3A342C] hover:text-[#2C2720] hover:underline"
                   >
                     View all products →
                   </Link>

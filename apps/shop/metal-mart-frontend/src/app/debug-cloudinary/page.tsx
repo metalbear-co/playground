@@ -24,7 +24,7 @@ export default function DebugCloudinaryPage() {
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
             <strong>NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</strong> is not set. Add it to .env.local and restart the dev server.
           </p>
-          <Link href={basePath || "/"} className="text-[#6a4ff5] hover:underline">
+          <Link href={basePath || "/"} className="text-[#3A342C] hover:underline">
             ← Back
           </Link>
         </div>
@@ -76,7 +76,7 @@ export default function DebugCloudinaryPage() {
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block break-all text-sm text-[#6a4ff5] hover:underline"
+                  className="block break-all text-sm text-[#3A342C] hover:underline"
                 >
                   {url}
                 </a>
@@ -110,7 +110,7 @@ export default function DebugCloudinaryPage() {
           </ul>
         </div>
 
-        <Link href={basePath || "/"} className="inline-block text-[#6a4ff5] hover:underline">
+        <Link href={basePath || "/"} className="inline-block text-[#3A342C] hover:underline">
           ← Back to shop
         </Link>
       </div>
