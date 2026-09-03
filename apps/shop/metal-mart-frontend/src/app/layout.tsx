@@ -10,7 +10,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Larkwell",
+  title: "Quince-esque MetalBear Playground",
   description: "High-quality basics, honestly priced",
 };
 

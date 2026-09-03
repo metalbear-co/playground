@@ -96,7 +96,7 @@ export default function ChatWidget() {
         >
           <div className="flex items-center justify-between bg-[#3A342C] px-4 py-3 text-white">
             <div>
-              <p className="text-sm font-semibold">Larkwell Support</p>
+              <p className="text-sm font-semibold">Quince-esque MetalBear Playground Support</p>
               <p className="text-xs text-white/80">We usually reply in a few minutes</p>
             </div>
             <button

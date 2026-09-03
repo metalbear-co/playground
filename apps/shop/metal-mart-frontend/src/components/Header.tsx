@@ -7,6 +7,24 @@ type HeaderProps = {
   showSubtitle?: boolean;
 };
 
+// ponytail: redrawn serif "Q" mark, not a copy of any real brand's asset
+function QLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} aria-hidden="true">
+      <text
+        x="50"
+        y="72"
+        textAnchor="middle"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontSize="80"
+        fill="currentColor"
+      >
+        Q
+      </text>
+    </svg>
+  );
+}
+
 const CATEGORY_NAV = [
   "Women",
   "Men",
@@ -26,7 +44,8 @@ export default function Header({ showSubtitle = false }: HeaderProps) {
           href="/"
           className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2 rounded"
         >
-          Larkwell
+          <QLogo className="h-6 w-6 shrink-0" />
+          Quince-esque MetalBear Playground
         </Link>
         <div className="flex items-center gap-8">
           {showSubtitle && (
