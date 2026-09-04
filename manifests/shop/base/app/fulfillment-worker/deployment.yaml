@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fulfillment-worker
+spec:
+  selector:
+    matchLabels:
+      app: fulfillment-worker
+  template:
+    metadata:
+      labels:
+        app: fulfillment-worker
+    spec:
+      containers:
+        - name: main
+          image: ghcr.io/metalbear-co/playground-fulfillment-worker:latest
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "80"
+            - name: TEMPORAL_ADDRESS
+              value: "temporal.infra.svc.cluster.local:7233"
+            - name: TEMPORAL_NAMESPACE
+              value: "default"
+            - name: TEMPORAL_TASK_QUEUE
+              value: "order-fulfillment"
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+              scheme: HTTP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi

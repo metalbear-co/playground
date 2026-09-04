@@ -54,11 +54,13 @@ export const architectureZones: ArchitectureZone[] = [
       "payment-service",
       "receipt-service",
       "delivery-service",
+      "fulfillment-worker",
       "notifications-service",
       "chat-service",
       "kafka",
       "sqs",
       "rabbitmq",
+      "temporal",
       "postgres-inventory",
       "postgres-orders",
       "postgres-deliveries",
@@ -143,7 +145,7 @@ export const architectureNodes: ArchitectureNode[] = [
     id: "order-service",
     label: "order-service",
     stack: "Node.js / Express",
-    description: "Order orchestration: stock check, payment, Kafka emit, notifications.",
+    description: "Order orchestration: stock check, payment, Kafka emit, notifications, Temporal fulfillment.",
     group: "service",
     repoPath: "shop/order-service/",
     zone: "cluster",
@@ -173,6 +175,15 @@ export const architectureNodes: ArchitectureNode[] = [
     description: "Kafka consumer that creates delivery records.",
     group: "service",
     repoPath: "shop/delivery-service/",
+    zone: "cluster",
+  },
+  {
+    id: "fulfillment-worker",
+    label: "fulfillment-worker",
+    stack: "Node.js / Temporal",
+    description: "Temporal worker that packs and marks orders ready after checkout.",
+    group: "service",
+    repoPath: "shop/fulfillment-worker/",
     zone: "cluster",
   },
   // chat-service is declared before notifications-service so the dagre layout
@@ -217,6 +228,14 @@ export const architectureNodes: ArchitectureNode[] = [
     label: "RabbitMQ",
     stack: "order-notifications",
     description: "Delivers order notifications to notifications-service.",
+    group: "queue",
+    zone: "cluster",
+  },
+  {
+    id: "temporal",
+    label: "Temporal",
+    stack: "order-fulfillment",
+    description: "Task queue for OrderFulfillment workflows started after checkout.",
     group: "queue",
     zone: "cluster",
   },
@@ -332,6 +351,20 @@ export const architectureEdges: ArchitectureEdge[] = [
     intent: "data",
   },
   {
+    id: "order-to-temporal",
+    source: "order-service",
+    target: "temporal",
+    label: "Start fulfillment workflow",
+    intent: "data",
+  },
+  {
+    id: "temporal-to-fulfillment",
+    source: "temporal",
+    target: "fulfillment-worker",
+    label: "Poll task queue",
+    intent: "data",
+  },
+  {
     id: "rabbitmq-to-notifications",
     source: "rabbitmq",
     target: "notifications-service",
@@ -411,7 +444,7 @@ export const groupPalette: Record<
   /** Core services — amber/yellow border (same hue as the former “Queues & Streams” accent). */
   service: { background: "#FFFBEB", border: "#CA8A04", text: "#111827" },
   data: { background: "#FFFFFF", border: "#DC2626", text: "#111827" },
-  /** Kafka, SQS, RabbitMQ — same as `infra` (no separate “Queues & Streams” legend). */
+  /** Kafka, SQS, RabbitMQ, Temporal — same as `infra` (no separate “Queues & Streams” legend). */
   queue: { background: "#FFFFFF", border: "#6B7280", text: "#111827" },
   mirrord: { background: "#EEF2FF", border: "#4F46E5", text: "#111827" },
 };

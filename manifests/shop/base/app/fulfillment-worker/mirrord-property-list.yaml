@@ -1,0 +1,11 @@
+# Temporal frontend connection for mirrord queue splitting on fulfillment-worker.
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: shop-temporal-connection
+spec:
+  properties:
+    - name: address
+      value: temporal.infra.svc.cluster.local:7233
+    - name: namespace
+      value: default

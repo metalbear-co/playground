@@ -23,6 +23,7 @@ export default function OrderPage() {
   const id = params?.id as string;
   const [order, setOrder] = useState<Order | null>(null);
   const [delivery, setDelivery] = useState<{ status: string } | null>(null);
+  const [fulfillment, setFulfillment] = useState<{ status: string } | null>(null);
   const [lineItems, setLineItems] = useState<{ product: Product; quantity: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,18 +33,31 @@ export default function OrderPage() {
     const load = async () => {
       setError(null);
       try {
-        const [orderRes, deliveryRes] = await Promise.all([
+        const [orderRes, deliveryRes, fulfillmentRes] = await Promise.all([
           fetch(`${basePath}/api/orders/${id}`),
           fetch(`${basePath}/api/deliveries/order/${id}`),
+          fetch(`${basePath}/api/fulfillments/order/${id}`),
         ]);
         const ord = orderRes.ok ? await orderRes.json() : null;
         const del = deliveryRes.ok ? await deliveryRes.json() : null;
+        const ful = fulfillmentRes.ok ? await fulfillmentRes.json() : null;
         if (orderRes.ok) setOrder(ord);
         else {
           const body = await orderRes.json().catch(() => ({}));
           setError((body as { error?: string })?.error || `Order API returned ${orderRes.status}`);
         }
         if (deliveryRes.ok) setDelivery(del);
+        if (fulfillmentRes.ok) setFulfillment(ful);
+        else {
+          for (let i = 0; i < 4 && !ful; i++) {
+            await new Promise((r) => setTimeout(r, 800));
+            const retry = await fetch(`${basePath}/api/fulfillments/order/${id}`);
+            if (retry.ok) {
+              setFulfillment(await retry.json());
+              break;
+            }
+          }
+        }
         if (ord?.items?.length) {
           const products = await Promise.all(
             ord.items.map(async (item: OrderItem) => {
@@ -101,6 +115,11 @@ export default function OrderPage() {
                 </p>
                 {delivery && (
                   <p className="text-slate-600">Delivery: {delivery.status}</p>
+                )}
+                {fulfillment && (
+                  <p className="text-slate-600" data-testid="fulfillment-status">
+                    Fulfillment: {fulfillment.status}
+                  </p>
                 )}
               </div>
               {lineItems.length > 0 && (

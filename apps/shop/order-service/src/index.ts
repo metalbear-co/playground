@@ -9,6 +9,7 @@ import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { sendOrderToKafka } from "./kafka.js";
 import { publishOrderNotification } from "./rabbit.js";
 import { publishOrderEventToPubSub } from "./pubsub.js";
+import { startOrderFulfillment } from "./temporal.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "demo-secret-key";
 
@@ -224,6 +225,8 @@ async function createOrderDirect(
     event: "order_confirmed",
     baggage,
   });
+
+  await startOrderFulfillment({ orderId, baggage });
 
   return { orderId, status: "confirmed" };
 }

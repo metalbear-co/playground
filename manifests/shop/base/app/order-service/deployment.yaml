@@ -41,6 +41,12 @@ spec:
               value: playground-383912
             - name: GCP_ORDER_EVENTS_TOPIC
               value: metal-mart-order-events
+            - name: TEMPORAL_ADDRESS
+              value: "temporal.infra.svc.cluster.local:7233"
+            - name: TEMPORAL_NAMESPACE
+              value: "default"
+            - name: TEMPORAL_TASK_QUEUE
+              value: "order-fulfillment"
           ports:
             - containerPort: 80
               protocol: TCP

@@ -262,6 +262,15 @@ type RmqEphemeralQueue = {
   queueType: "Filtered" | "Fallback";
 };
 
+/** Ephemeral Temporal task queues from mirrord Temporal splitting. */
+type TemporalEphemeralQueue = {
+  queueName: string;
+  originalQueueName: string;
+  sessionId: string;
+  consumer: string;
+  queueType: "Filtered" | "Fallback";
+};
+
 /**
  * One split queue parsed from a MirrordClusterSplitSession CR
  * (queues.mirrord.metalbear.co/v1). The operator records every queue-splitting
@@ -320,8 +329,9 @@ type OperatorStatusResponse = {
   kafkaTopics: KafkaEphemeralTopic[];
   sqsQueues: SqsEphemeralQueue[];
   rmqQueues: RmqEphemeralQueue[];
+  temporalQueues?: TemporalEphemeralQueue[];
   /** Split queues of broker kinds the UI has no dedicated section for yet
-   * (googlePubSub, azureServiceBus, redisPubSub, temporal, bullMq). */
+   * (googlePubSub, azureServiceBus, redisPubSub, bullMq). */
   otherQueueSplits?: SplitSessionQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
@@ -901,6 +911,66 @@ const fetchRmqFromClusterSplitSessions = async (
   return out;
 };
 
+const temporalQueueTypeFromName = (queueName: string): TemporalEphemeralQueue["queueType"] =>
+  queueName.includes("-fallback-") ? "Fallback" : "Filtered";
+
+const fetchTemporalFromClusterSplitSessions = async (
+  kubeConfig: KubeConfig,
+  splitQueues: SplitSessionQueue[],
+): Promise<TemporalEphemeralQueue[]> => {
+  const coreApi = kubeConfig.makeApiClient(CoreV1Api);
+  const out: TemporalEphemeralQueue[] = [];
+
+  for (const queue of splitQueues) {
+    if (queue.kind !== "temporal") continue;
+    const filteredNames = new Set<string>();
+    const originalName = Object.keys(queue.nameMappings)[0] ?? queue.queueId;
+    for (const [original, ephemeral] of Object.entries(queue.nameMappings)) {
+      filteredNames.add(ephemeral);
+      out.push({
+        queueName: ephemeral,
+        originalQueueName: original,
+        sessionId: queue.sessionId,
+        consumer: queue.consumer,
+        queueType: temporalQueueTypeFromName(ephemeral),
+      });
+    }
+
+    try {
+      const podsResult = await coreApi.listNamespacedPod({
+        namespace: queue.namespace,
+        labelSelector: `app=${queue.consumer}`,
+      });
+      const seenFallback = new Set<string>();
+      for (const pod of podsResult.items ?? []) {
+        const containers = pod.spec?.containers ?? [];
+        const main = containers.find((c) => c.name === "main") ?? containers[0];
+        const env = main?.env ?? [];
+        const taskQueue = env.find((e) => e.name === "TEMPORAL_TASK_QUEUE");
+        const queueName = (typeof taskQueue?.value === "string" ? taskQueue.value : "").trim();
+        if (!queueName.startsWith("mirrord-")) continue;
+        if (filteredNames.has(queueName)) continue;
+        if (seenFallback.has(queueName)) continue;
+        seenFallback.add(queueName);
+        out.push({
+          queueName,
+          originalQueueName: originalName,
+          sessionId: queue.sessionId,
+          consumer: queue.consumer,
+          queueType: "Fallback",
+        });
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to list pods for Temporal consumer ${queue.consumer} in ${queue.namespace}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return out;
+};
+
 /**
  * Ephemeral RMQ queues from active queue-splitting sessions.
  * Merges legacy MirrordRMQSession CRs with MirrordClusterSplitSession.
@@ -1176,7 +1246,7 @@ app.get(operatorStatusPaths, async (req, res) => {
     // Single list of MirrordClusterSplitSessions shared by the kafka/sqs/rmq
     // fetchers; each derives its kind from the same result.
     const splitQueuesPromise = fetchClusterSplitQueues(kubeConfig);
-    const [sessions, splitQueues, kafkaTopics, sqsQueues, rmqQueues, pgBranches, previewSessions] = await Promise.all([
+    const [sessions, splitQueues, kafkaTopics, sqsQueues, rmqQueues, temporalQueues, pgBranches, previewSessions] = await Promise.all([
       fetchOperatorSessions(kubeConfig).catch((err) => {
         console.warn("Failed to fetch operator sessions:", err instanceof Error ? err.message : err);
         return [] as OperatorSession[];
@@ -1194,6 +1264,10 @@ app.get(operatorStatusPaths, async (req, res) => {
         console.warn("Failed to fetch RMQ ephemeral queues:", err instanceof Error ? err.message : err);
         return [] as RmqEphemeralQueue[];
       }),
+      splitQueuesPromise.then((sq) => fetchTemporalFromClusterSplitSessions(kubeConfig, sq)).catch((err) => {
+        console.warn("Failed to fetch Temporal task queues:", err instanceof Error ? err.message : err);
+        return [] as TemporalEphemeralQueue[];
+      }),
       fetchPgBranchDatabases(kubeConfig).catch((err) => {
         console.warn("Failed to fetch pg branches:", err instanceof Error ? err.message : err);
         return [] as PgBranchDatabase[];
@@ -1204,7 +1278,7 @@ app.get(operatorStatusPaths, async (req, res) => {
       }),
     ]);
     const allSessions = sessions;
-    const handledKinds = new Set(["kafka", "sqs", "rmq"]);
+    const handledKinds = new Set(["kafka", "sqs", "rmq", "temporal"]);
     const otherQueueSplits = splitQueues.filter((q) => !handledKinds.has(q.kind));
     console.log(`[db-branches] fetched ${pgBranches.length} branch(es):`, JSON.stringify(pgBranches, null, 2));
     refreshDynamicPgConnections(pgBranches);
@@ -1214,6 +1288,7 @@ app.get(operatorStatusPaths, async (req, res) => {
       kafkaTopics,
       sqsQueues,
       rmqQueues,
+      temporalQueues,
       otherQueueSplits,
       pgBranches,
       previewSessions,
@@ -1282,6 +1357,12 @@ const knownDeployments: KnownDeployment[] = [
     name: "delivery-service",
     description: "Kafka consumer & delivery tracking",
     deployment: "delivery-service",
+  },
+  {
+    id: "fulfillment-worker",
+    name: "fulfillment-worker",
+    description: "Temporal worker for order fulfillment",
+    deployment: "fulfillment-worker",
   },
   {
     id: "notifications-service",

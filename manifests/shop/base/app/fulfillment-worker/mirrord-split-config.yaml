@@ -1,0 +1,32 @@
+# Temporal task-queue splitting for fulfillment-worker (mirrord operator >= 3.170.0).
+# Queue id must match feature.split_queues in apps/shop/fulfillment-worker/mirrord.json
+# ("order-fulfillment"). Requires operator.temporalSplitting=true on the operator Helm release.
+apiVersion: queues.mirrord.metalbear.co/v1
+kind: MirrordSplitConfig
+metadata:
+  name: fulfillment-worker-split
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fulfillment-worker
+  clientConfigs:
+    temporal: shop-temporal-connection
+  restart:
+    timeout: 180
+  queues:
+    - id: order-fulfillment
+      kind: temporal
+      appConfig:
+        taskQueue:
+          - env: TEMPORAL_TASK_QUEUE
+            containers:
+              - main
+        temporalAddress:
+          - env: TEMPORAL_ADDRESS
+            containers:
+              - main
+        temporalNamespace:
+          - env: TEMPORAL_NAMESPACE
+            containers:
+              - main

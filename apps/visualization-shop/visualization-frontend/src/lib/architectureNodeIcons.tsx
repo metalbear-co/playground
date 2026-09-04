@@ -16,8 +16,10 @@ import {
   Package,
   Radio,
   ShoppingCart,
+  Timer,
   Truck,
   User,
+  Workflow,
 } from "lucide-react";
 
 const SZ = 22;
@@ -62,6 +64,9 @@ export function ArchitectureGlyph({
   if (id === "rabbitmq") {
     return wrap(<MessagesSquare {...p} style={{ color: INFRA_ICON_STROKE }} />);
   }
+  if (id === "temporal") {
+    return wrap(<Timer {...p} style={{ color: INFRA_ICON_STROKE }} />);
+  }
   if (id === "metal-mart-frontend") {
     return wrap(<Monitor {...p} style={{ color: "#CA8A04" }} />);
   }
@@ -79,6 +84,9 @@ export function ArchitectureGlyph({
   }
   if (id === "delivery-service") {
     return wrap(<Truck {...p} style={{ color: "#CA8A04" }} />);
+  }
+  if (id === "fulfillment-worker") {
+    return wrap(<Workflow {...p} style={{ color: "#CA8A04" }} />);
   }
   if (id === "notifications-service") {
     return wrap(<Bell {...p} style={{ color: "#CA8A04" }} />);
