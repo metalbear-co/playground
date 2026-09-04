@@ -73,7 +73,9 @@ spec:
             - name: BIND_ON_IP
               value: "0.0.0.0"
             - name: TEMPORAL_BROADCAST_ADDRESS
-              value: temporal.infra.svc.cluster.local
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           readinessProbe:
             tcpSocket:
               port: 7233
