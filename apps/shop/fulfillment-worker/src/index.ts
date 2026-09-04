@@ -35,12 +35,14 @@ async function startWorker(): Promise<void> {
     address: temporalAddress,
     grpcCompression: { codec: "none" },
   });
-  const workflowsFile = process.env.NODE_ENV === "production" ? "./workflows.js" : "./workflows.ts";
+  // Don't use NODE_ENV: mirrord copies production from the cluster, which
+  // would look for workflows.js next to this .ts file.
+  const workflowsExt = import.meta.url.endsWith(".ts") ? "ts" : "js";
   const worker = await Worker.create({
     connection,
     namespace: temporalNamespace,
     taskQueue,
-    workflowsPath: fileURLToPath(new URL(workflowsFile, import.meta.url)),
+    workflowsPath: fileURLToPath(new URL(`./workflows.${workflowsExt}`, import.meta.url)),
     activities,
   });
   console.log(
