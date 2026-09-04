@@ -30,7 +30,11 @@ app.get("/fulfillments/order/:id", (req, res) => {
 });
 
 async function startWorker(): Promise<void> {
-  const connection = await NativeConnection.connect({ address: temporalAddress });
+  // Operator Temporal proxy (mirrord split) rejects gzip; real frontend accepts none.
+  const connection = await NativeConnection.connect({
+    address: temporalAddress,
+    grpcCompression: { codec: "none" },
+  });
   const workflowsFile = process.env.NODE_ENV === "production" ? "./workflows.js" : "./workflows.ts";
   const worker = await Worker.create({
     connection,
