@@ -6,9 +6,12 @@ const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
 let dbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory";
-// mirrord branch DB URLs may omit the database name — ensure we connect to "inventory"
-if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
-  dbUrl += "/inventory";
+// mirrord branch DB URLs may omit the database name — ensure we connect to
+// "inventory" without corrupting an existing query string (e.g. ?sslmode=disable)
+const parsedDbUrl = new URL(dbUrl);
+if (!parsedDbUrl.pathname || parsedDbUrl.pathname === "/") {
+  parsedDbUrl.pathname = "/inventory";
+  dbUrl = parsedDbUrl.toString();
 }
 
 const pool = new Pool({ connectionString: dbUrl });
