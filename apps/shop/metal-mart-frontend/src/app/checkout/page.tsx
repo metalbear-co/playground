@@ -92,7 +92,7 @@ export default function CheckoutPage() {
           <p className="text-slate-600">Order ID: {orderId}</p>
           <Link
             href={`/orders/${orderId}`}
-            className="btn-primary rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+            className="btn-primary rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2"
           >
             Track order
           </Link>
@@ -110,7 +110,7 @@ export default function CheckoutPage() {
             <p className="text-lg text-slate-600">Cart is empty. Add items first.</p>
             <Link
               href="/products"
-              className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+              className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2"
             >
               Browse products
             </Link>
@@ -134,7 +134,7 @@ export default function CheckoutPage() {
                 <span className="text-slate-700">
                   {i.product?.name ?? `Product ${i.productId}`} × {i.quantity}
                 </span>
-                <span className="font-semibold text-[#6a4ff5]">
+                <span className="font-semibold text-[#3A342C]">
                   ${(((i.product?.price_cents ?? 0) * i.quantity) / 100).toFixed(2)}
                 </span>
               </li>
@@ -153,7 +153,7 @@ export default function CheckoutPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:border-[#6a4ff5] focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/20"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:border-[#3A342C] focus:outline-none focus:ring-2 focus:ring-[#3A342C]/20"
             />
           </div>
           {error && (
@@ -167,7 +167,7 @@ export default function CheckoutPage() {
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="btn-primary w-full rounded-xl px-8 py-3.5 font-semibold disabled:opacity-50 disabled:transform-none disabled:shadow-none sm:w-fit focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+            className="btn-primary w-full rounded-xl px-8 py-3.5 font-semibold disabled:opacity-50 disabled:transform-none disabled:shadow-none sm:w-fit focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2"
           >
             {submitting ? "Placing order..." : "Place order"}
           </button>

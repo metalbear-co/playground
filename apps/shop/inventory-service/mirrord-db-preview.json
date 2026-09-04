@@ -21,7 +21,7 @@
       {
         "id": "{{key}}",
         "type": "pg",
-        "ttl_secs": 30,
+        "ttl_secs": 900,
         "version": "16.0",
         "connection": {
           "url": {

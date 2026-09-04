@@ -55,7 +55,7 @@ export default function ProductDetailPage() {
           </p>
           <Link
             href="/products"
-            className="mt-4 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"
+            className="mt-4 inline-block text-[#3A342C] hover:text-[#2C2720]"
           >
             ← Back to products
           </Link>
@@ -99,7 +99,7 @@ export default function ProductDetailPage() {
                       onClick={() => setSelectedIndex(i)}
                       className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
                         selectedIndex === i
-                          ? "border-[#6a4ff5] ring-2 ring-[#6a4ff5]/30"
+                          ? "border-[#3A342C] ring-2 ring-[#3A342C]/30"
                           : "border-slate-200 hover:border-slate-300"
                       }`}
                       aria-label={labels ? labels[i] : `Image ${i + 1}`}
@@ -118,7 +118,7 @@ export default function ProductDetailPage() {
             </div>
             <div className="flex flex-col">
               <h1 className="text-3xl font-bold tracking-tight text-slate-900">{product.name}</h1>
-              <p className="mt-3 text-2xl font-semibold text-[#6a4ff5]">
+              <p className="mt-3 text-2xl font-semibold text-[#3A342C]">
                 ${(product.price_cents / 100).toFixed(2)}
               </p>
               {product.description && (
@@ -128,7 +128,7 @@ export default function ProductDetailPage() {
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link
                   href={`/cart?add=${product.id}`}
-                  className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3.5 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+                  className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3.5 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2"
                 >
                   Add to cart
                 </Link>

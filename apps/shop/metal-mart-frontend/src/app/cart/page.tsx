@@ -74,7 +74,7 @@ export default function CartPage() {
               <p className="text-lg text-slate-600">Your cart is empty.</p>
               <Link
                 href="/products"
-                className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+                className="btn-primary mt-6 inline-block rounded-xl px-6 py-2.5 font-medium focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2"
               >
                 Browse products
               </Link>
@@ -85,7 +85,7 @@ export default function CartPage() {
                 {cart.map((i) => (
                   <li
                     key={i.productId}
-                    className="flex items-center gap-5 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#6a4ff5]/20"
+                    className="flex items-center gap-5 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-[#3A342C]/20"
                   >
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100">
                       {i.product && getPrimaryImageUrl(i.product) ? (
@@ -107,20 +107,20 @@ export default function CartPage() {
                         {i.product?.name ?? `Product ${i.productId}`}
                       </span>
                     </div>
-                    <span className="shrink-0 font-semibold text-[#6a4ff5]">
+                    <span className="shrink-0 font-semibold text-[#3A342C]">
                       ${(((i.product?.price_cents ?? 0) * i.quantity) / 100).toFixed(2)}
                     </span>
                     <div className="flex shrink-0 items-center gap-2">
                       <button
                         onClick={() => updateQty(i.productId, -1)}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 hover:border-[#6a4ff5]/30 focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 hover:border-[#3A342C]/30 focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40"
                       >
                         −
                       </button>
                       <span className="min-w-[1.5rem] text-center font-medium text-slate-900">{i.quantity}</span>
                       <button
                         onClick={() => updateQty(i.productId, 1)}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 hover:border-[#6a4ff5]/30 focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 hover:border-[#3A342C]/30 focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40"
                       >
                         +
                       </button>
@@ -134,7 +134,7 @@ export default function CartPage() {
                 </p>
                 <Link
                   href="/checkout"
-                  className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]/40 focus:ring-offset-2"
+                  className="btn-primary inline-flex w-fit items-center justify-center rounded-xl px-8 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3A342C]/40 focus:ring-offset-2"
                 >
                   Checkout
                 </Link>

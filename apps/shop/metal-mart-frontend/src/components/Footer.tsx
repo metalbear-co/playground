@@ -8,7 +8,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export default function Footer() {
   const [bannerText, setBannerText] = useState(
-    "Official MetalBear swag — gear up for faster development"
+    "High-quality basics, honestly priced"
   );
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export default function Footer() {
   }, []);
 
   return (
-    <footer className="bg-[#6a4ff5] px-6 py-8">
+    <footer className="bg-[#3A342C] px-6 py-8">
       {/* Decorative wave divider - soft transition into footer */}
       <svg className="footer-wave" viewBox="0 0 1200 32" preserveAspectRatio="none" aria-hidden>
         <path d="M0 32 L0 12 Q150 0 300 12 T600 12 T900 12 T1200 12 L1200 32 Z" fill="white" fillOpacity="0.08" />

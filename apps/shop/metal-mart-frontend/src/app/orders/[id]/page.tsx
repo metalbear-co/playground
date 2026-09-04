@@ -94,7 +94,7 @@ export default function OrderPage() {
             <div className="space-y-8">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-2">
                 <p>
-                  Status: <span className="font-medium text-[#6a4ff5]">{order.status}</span>
+                  Status: <span className="font-medium text-[#3A342C]">{order.status}</span>
                 </p>
                 <p className="text-slate-600">
                   Placed: {new Date(order.created_at).toLocaleString()}
@@ -113,7 +113,7 @@ export default function OrderPage() {
                         className="flex justify-between text-slate-700"
                       >
                         <span>{product.name} × {quantity}</span>
-                        <span className="font-semibold text-[#6a4ff5]">
+                        <span className="font-semibold text-[#3A342C]">
                           ${((product.price_cents * quantity) / 100).toFixed(2)}
                         </span>
                       </li>
@@ -130,7 +130,7 @@ export default function OrderPage() {
               <p className="text-slate-600">Order not found</p>
               <Link
                 href="/products"
-                className="mt-6 inline-block text-[#6a4ff5] hover:text-[#5a3fe5]"
+                className="mt-6 inline-block text-[#3A342C] hover:text-[#2C2720]"
               >
                 ← Back to products
               </Link>
