@@ -1,0 +1,15 @@
+{
+  "name": "slow postgres (planned maintenance window)",
+  "priority": 10,
+  "selector": {
+    "upstream": "postgres.infra.svc.cluster.local:5432",
+    "percentage": 100
+  },
+  "effect": {
+    "latency": {
+      "read_ms": 800,
+      "write_ms": 200,
+      "jitter_ms": 100
+    }
+  }
+}

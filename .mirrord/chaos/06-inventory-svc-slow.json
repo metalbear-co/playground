@@ -1,5 +1,5 @@
 {
-  "name": "latency to inventory-service",
+  "name": "slow inventory-service dependency",
   "priority": 10,
   "selector": {
     "upstream": "inventory-service",

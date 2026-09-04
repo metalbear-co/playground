@@ -1,0 +1,14 @@
+{
+  "name": "rabbitmq connection reset (broker unavailable)",
+  "priority": 20,
+  "selector": {
+    "upstream": "rabbitmq.infra.svc.cluster.local:5672",
+    "percentage": 100
+  },
+  "effect": {
+    "connection_error": {
+      "type": "reset",
+      "after_ms": 0
+    }
+  }
+}

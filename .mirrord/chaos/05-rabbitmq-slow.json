@@ -1,0 +1,15 @@
+{
+  "name": "slow rabbitmq publish/consume",
+  "priority": 10,
+  "selector": {
+    "upstream": "rabbitmq.infra.svc.cluster.local:5672",
+    "percentage": 100
+  },
+  "effect": {
+    "latency": {
+      "read_ms": 600,
+      "write_ms": 400,
+      "jitter_ms": 80
+    }
+  }
+}
