@@ -338,12 +338,21 @@ type RmqEphemeralQueue = {
   queueType: "Filtered" | "Fallback";
 };
 
+type TemporalEphemeralQueue = {
+  queueName: string;
+  originalQueueName: string;
+  sessionId: string;
+  consumer: string;
+  queueType: "Filtered" | "Fallback";
+};
+
 type OperatorStatusResponse = {
   sessions: OperatorSession[];
   sessionCount: number;
   kafkaTopics: KafkaEphemeralTopic[];
   sqsQueues: SqsEphemeralQueue[];
   rmqQueues: RmqEphemeralQueue[];
+  temporalQueues?: TemporalEphemeralQueue[];
   pgBranches: PgBranchDatabase[];
   previewSessions: PreviewSession[];
   fetchedAt: string;
@@ -473,12 +482,14 @@ const DEFAULT_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   "inventory-service": { x: 1620, y: 295 },
   kafka: { x: 1620, y: 535 },
   rabbitmq: { x: 1620, y: 820 },
+  temporal: { x: 1620, y: 1310 },
   "postgres-orders": { x: 1620, y: 1070 },
   "payment-service": { x: 2130, y: 50 },
   "postgres-inventory": { x: 2130, y: 290 },
   "delivery-service": { x: 2130, y: 530 },
   "chat-service": { x: 2130, y: 760 },
   "notifications-service": { x: 2130, y: 1070 },
+  "fulfillment-worker": { x: 2130, y: 1310 },
   "receipt-service": { x: 2640, y: 55 },
   "postgres-deliveries": { x: 2640, y: 305 },
   // Pinned to the lower-left corner of the cluster zone. Dynamic agent nodes
@@ -1098,6 +1109,7 @@ export default function VisualizationPage() {
   const [kafkaTopics, setKafkaTopics] = useState<KafkaEphemeralTopic[]>([]);
   const [sqsQueues, setSqsQueues] = useState<SqsEphemeralQueue[]>([]);
   const [rmqQueues, setRmqQueues] = useState<RmqEphemeralQueue[]>([]);
+  const [temporalQueues, setTemporalQueues] = useState<TemporalEphemeralQueue[]>([]);
   const [pgBranchesRaw, setPgBranches] = useState<PgBranchDatabase[]>([]);
   const pgBranches = useMemo(() => {
     const seen = new Set<string>();
@@ -2035,6 +2047,200 @@ export default function VisualizationPage() {
     return replaced;
   }, [rmqQueues]);
 
+  const temporalQueueNodes = useMemo((): Node<NodeData>[] => {
+    if (temporalQueues.length === 0) return [];
+    const palette = groupPalette.mirrord;
+    const nodes: Node<NodeData>[] = [];
+    const sharedStyle = {
+      borderRadius: 18,
+      backgroundColor: "transparent",
+      color: palette.text,
+      boxShadow: "0px 30px 60px rgba(13,148,136,0.35)",
+      width: nodeWidth,
+      zIndex: 10,
+    };
+    const filteredQueues = temporalQueues.filter((q) => q.queueType === "Filtered");
+    const fallbackQueues = temporalQueues.filter((q) => q.queueType === "Fallback");
+    const temporalPos = adjustedNodes.find((n) => n.id === "temporal")?.position ?? { x: 0, y: 0 };
+
+    filteredQueues.forEach((queue, index) => {
+      const nodeId = `temporal-queue-${queue.queueName}`;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{queue.queueName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                ephemeral · filtered
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                session: {queue.sessionId}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: temporalPos.x,
+          y: QUEUE_SPLIT_BASE_Y + (temporalQueues.length + index) * DYNAMIC_AGENT_SPACING_Y,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
+    });
+
+    fallbackQueues.forEach((queue, index) => {
+      const nodeId = `temporal-deployed-queue-${queue.queueName}`;
+      const consumerArchId = aliasIndex.get(queue.consumer.toLowerCase()) ?? queue.consumer;
+      const consumerPos = adjustedNodes.find((n) => n.id === consumerArchId)?.position ?? temporalPos;
+      nodes.push({
+        id: nodeId,
+        type: "mirrord",
+        data: {
+          group: "mirrord" as const,
+          label: (
+            <div className="flex flex-col gap-1 text-left">
+              <span className="text-sm font-semibold text-slate-900">{queue.queueName}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                ephemeral · fallback
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                session: {queue.sessionId}
+              </span>
+            </div>
+          ),
+        },
+        position: dynamicNodePositions.get(nodeId) ?? {
+          x: consumerPos.x + nodeWidth - 280 + index * (nodeWidth + 40),
+          y: consumerPos.y + 420,
+        },
+        style: sharedStyle,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        connectable: false,
+        draggable: true,
+        selectable: true,
+      });
+    });
+
+    return nodes;
+  }, [temporalQueues, dynamicNodePositions, adjustedNodes, aliasIndex]);
+
+  const temporalQueueEdges = useMemo((): Edge[] => {
+    if (temporalQueues.length === 0) return [];
+    const edges: Edge[] = [];
+    const mirroredStyle = intentStyles.mirrored;
+    const edgeLabelDefaults = {
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 10,
+      labelShowBg: true,
+      labelBgStyle: { fill: "#FFFFFF" },
+      labelStyle: { fontSize: 12, fontWeight: 600, fill: "#0F172A" },
+    };
+    const filteredQueues = temporalQueues.filter((q) => q.queueType === "Filtered");
+    const fallbackQueues = temporalQueues.filter((q) => q.queueType === "Fallback");
+
+    edges.push({
+      id: "temporal-to-operator",
+      source: "temporal",
+      target: "mirrord-operator",
+      label: "poll task queue",
+      type: "bezier",
+      sourceHandle: "source-bottom",
+      targetHandle: "operator-target-top",
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+      style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+      ...edgeLabelDefaults,
+    });
+
+    for (const queue of filteredQueues) {
+      const nodeId = `temporal-queue-${queue.queueName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "matching filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-top`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    filteredQueues.forEach((queue, index) => {
+      const nodeId = `temporal-queue-${queue.queueName}`;
+      const usesDynamicLocal = filteredQueues.length > 1;
+      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
+      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      edges.push({
+        id: `${nodeId}-to-layer`,
+        source: nodeId,
+        target: targetLayer,
+        label: "run matching workflows",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-bottom`,
+        targetHandle,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    });
+
+    for (const queue of fallbackQueues) {
+      const nodeId = `temporal-deployed-queue-${queue.queueName}`;
+      edges.push({
+        id: `operator-to-${nodeId}`,
+        source: "mirrord-operator",
+        target: nodeId,
+        label: "send tasks not matching any filter",
+        type: "bezier",
+        sourceHandle: "operator-source-bottom",
+        targetHandle: `${nodeId}-target-left`,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    for (const queue of fallbackQueues) {
+      const nodeId = `temporal-deployed-queue-${queue.queueName}`;
+      const consumerArchId = aliasIndex.get(queue.consumer.toLowerCase()) ?? queue.consumer;
+      edges.push({
+        id: `${nodeId}-to-${consumerArchId}`,
+        source: nodeId,
+        target: consumerArchId,
+        label: "run remaining workflows",
+        type: "bezier",
+        sourceHandle: `${nodeId}-source-top`,
+        targetHandle: "target-bottom",
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 24, height: 24 },
+        style: { stroke: mirroredStyle.color, strokeWidth: 2.75, strokeDasharray: mirroredStyle.dash },
+        ...edgeLabelDefaults,
+      });
+    }
+
+    return edges;
+  }, [temporalQueues, aliasIndex]);
+
+  const temporalReplacedEdges = useMemo(() => {
+    const replaced = new Set<string>();
+    if (temporalQueues.length > 0) replaced.add("temporal-to-fulfillment");
+    return replaced;
+  }, [temporalQueues]);
+
   const hasShopSessions = shopOperatorSessions.length > 0;
   const hasLocalShopSessions = localOperatorSessions.length > 0;
 
@@ -2181,7 +2387,7 @@ export default function VisualizationPage() {
     );
 
     type ActiveQueueSplit = {
-      kind: "kafka" | "sqs" | "rmq";
+      kind: "kafka" | "sqs" | "rmq" | "temporal";
       producerId: string;       // architecture node id of the producer (e.g. "kafka", "sqs", "rabbitmq")
       filteredId: string;       // dynamic node id of the filtered/ephemeral split
       fallbackId: string;       // dynamic node id of the fallback/original split
@@ -2247,6 +2453,26 @@ export default function VisualizationPage() {
       });
     }
 
+    const temporalBySession = new Map<string, { filtered?: TemporalEphemeralQueue; fallback?: TemporalEphemeralQueue }>();
+    for (const q of temporalQueues) {
+      if (!matchingSessionIds.has(q.sessionId)) continue;
+      const entry = temporalBySession.get(q.sessionId) ?? {};
+      if (q.queueType === "Filtered") entry.filtered = q;
+      else if (q.queueType === "Fallback") entry.fallback = q;
+      temporalBySession.set(q.sessionId, entry);
+    }
+    for (const [sessionId, { filtered, fallback }] of temporalBySession) {
+      if (!filtered || !fallback) continue;
+      activeQueueSplits.push({
+        kind: "temporal",
+        producerId: "temporal",
+        filteredId: `temporal-queue-${filtered.queueName}`,
+        fallbackId: `temporal-deployed-queue-${fallback.queueName}`,
+        label: filtered.queueName,
+        sessionId,
+      });
+    }
+
     const hasQueueSplit = activeQueueSplits.length > 0;
     const queueSplitNodeIds = activeQueueSplits.flatMap((s) => [s.filteredId, s.fallbackId]);
 
@@ -2278,7 +2504,7 @@ export default function VisualizationPage() {
       activeQueueSplits,
       hasQueueSplit,
     };
-  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches, operatorSessions, kafkaTopics, sqsQueues, rmqQueues]);
+  }, [focusedSession, aliasIndex, hasDynamicLocalMachines, localMachineEntries, pgBranches, operatorSessions, kafkaTopics, sqsQueues, rmqQueues, temporalQueues]);
 
   /**
    * Enter focused view when the user clicks an agent node or a local process node.
@@ -2321,7 +2547,8 @@ export default function VisualizationPage() {
           const hasQueueSplit =
             kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
             sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
-            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
+            temporalQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
           setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
         }
         return;
@@ -2374,12 +2601,13 @@ export default function VisualizationPage() {
           const hasQueueSplit =
             kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
             sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
-            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
+            temporalQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
           setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
         }
       }
     },
-    [agentGroups, localMachineEntries, pgBranches, aliasIndex, operatorSessions, kafkaTopics, sqsQueues, rmqQueues],
+    [agentGroups, localMachineEntries, pgBranches, aliasIndex, operatorSessions, kafkaTopics, sqsQueues, rmqQueues, temporalQueues],
   );
 
   const dynamicLocalMachineNodes = useMemo((): Node<NodeData>[] => {
@@ -3026,6 +3254,7 @@ export default function VisualizationPage() {
       if (kafkaReplacedEdges.has(edge.id)) continue;
       if (sqsReplacedEdges.has(edge.id)) continue;
       if (rmqReplacedEdges.has(edge.id)) continue;
+      if (temporalReplacedEdges.has(edge.id)) continue;
       // Hide static local edges when dynamic local machines replace them
       if (hasDynamicLocalMachines && (edge.id === "local-to-layer" || edge.id === "layer-to-agent")) continue;
       if (edge.id === "local-to-layer" || edge.id === "layer-to-agent") {
@@ -3055,19 +3284,19 @@ export default function VisualizationPage() {
       if (scaleDownTargets.has(edge.source)) continue;
       staticEdges.push(edge);
     }
-    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...rmqQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges, ...ciRunnerEdges];
-  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, rmqQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, ciRunnerEdges, hasLocalShopSessions, kafkaReplacedEdges, sqsReplacedEdges, rmqReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
+    return [...staticEdges, ...dynamicEdges, ...kafkaTopicEdges, ...sqsQueueEdges, ...rmqQueueEdges, ...temporalQueueEdges, ...dynamicLocalEdges, ...pgBranchEdges, ...previewSessionEdges, ...ciRunnerEdges];
+  }, [baseEdges, dynamicEdges, kafkaTopicEdges, sqsQueueEdges, rmqQueueEdges, temporalQueueEdges, dynamicLocalEdges, pgBranchEdges, previewSessionEdges, ciRunnerEdges, hasLocalShopSessions, kafkaReplacedEdges, sqsReplacedEdges, rmqReplacedEdges, temporalReplacedEdges, hasDynamicLocalMachines, scaleDownTargets]);
 
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
     if (!clusterZoneNode) return null;
-    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0 && ciRunnerNodes.length === 0) return clusterZoneNode;
+    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && temporalQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0 && ciRunnerNodes.length === 0) return clusterZoneNode;
 
     const clusterStaticNodes = adjustedNodes.filter((n) => {
       const zone = nodeZoneIndex.get(n.id);
       return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
     });
-    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...pgBranchNodes, ...previewSessionNodes, ...ciRunnerNodes];
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...temporalQueueNodes, ...pgBranchNodes, ...previewSessionNodes, ...ciRunnerNodes];
     const padding = 48;
     const xs = allClusterNodes.map((n) => n.position.x);
     const ys = allClusterNodes.map((n) => n.position.y);
@@ -3101,7 +3330,7 @@ export default function VisualizationPage() {
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, ciRunnerNodes, previewSessionZoneNodes, sortedAgentGroups]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, temporalQueueNodes, pgBranchNodes, previewSessionNodes, ciRunnerNodes, previewSessionZoneNodes, sortedAgentGroups]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -3224,6 +3453,7 @@ export default function VisualizationPage() {
     nodes.push(...kafkaTopicNodes);
     nodes.push(...sqsQueueNodes);
     nodes.push(...rmqQueueNodes);
+    nodes.push(...temporalQueueNodes);
     nodes.push(...pgBranchNodes);
     nodes.push(...previewSessionNodes);
     // Add dynamic local machine nodes with localYShift applied
@@ -3239,7 +3469,7 @@ export default function VisualizationPage() {
     }
     nodes.push(...ciRunnerNodes);
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasLocalShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, localOperatorSessions, ciRunnerNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, temporalQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasLocalShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, localOperatorSessions, ciRunnerNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
@@ -3375,6 +3605,7 @@ export default function VisualizationPage() {
         setKafkaTopics(body.kafkaTopics ?? []);
         setSqsQueues(body.sqsQueues ?? []);
         setRmqQueues(body.rmqQueues ?? []);
+        setTemporalQueues(body.temporalQueues ?? []);
         setPgBranches(body.pgBranches ?? []);
         setPreviewSessions(body.previewSessions ?? []);
       }

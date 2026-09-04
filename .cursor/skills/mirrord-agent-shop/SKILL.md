@@ -21,6 +21,7 @@ Read `docs/AI_ROOT_CONTEXT.md` first for repo and deployment context.
   - `order-service`
   - `payment-service`
   - `delivery-service`
+  - `fulfillment-worker`
   - `receipt-service`
 - Classify each touched service as:
   - `shared DB` if it uses playground Postgres or another shared backing store

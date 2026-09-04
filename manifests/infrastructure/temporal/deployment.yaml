@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  labels:
+    app: temporal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+    spec:
+      initContainers:
+        - name: create-temporal-dbs
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGHOST
+              value: postgres.infra.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready; do sleep 2; done
+              psql -tc "SELECT 1 FROM pg_database WHERE datname='temporal'" | grep -q 1 \
+                || psql -c "CREATE DATABASE temporal"
+              psql -tc "SELECT 1 FROM pg_database WHERE datname='temporal_visibility'" | grep -q 1 \
+                || psql -c "CREATE DATABASE temporal_visibility"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 25m
+              memory: 32Mi
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.27.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 7233
+              name: frontend
+              protocol: TCP
+          env:
+            - name: DB
+              value: postgres12
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: POSTGRES_SEEDS
+              value: postgres.infra.svc.cluster.local
+            - name: DBNAME
+              value: temporal
+            - name: VISIBILITY_DBNAME
+              value: temporal_visibility
+            - name: BIND_ON_IP
+              value: "0.0.0.0"
+            - name: TEMPORAL_BROADCAST_ADDRESS
+              value: temporal.infra.svc.cluster.local
+          readinessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi

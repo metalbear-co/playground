@@ -9,11 +9,12 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 - **order-service** – Orders, orchestrates checkout (PostgreSQL, Kafka producer). Optionally publishes **GCP Pub/Sub** order events when `GOOGLE_CLOUD_PROJECT` and `GCP_ORDER_EVENTS_TOPIC` are set (see `order-service/src/pubsub.ts`).
 - **payment-service** – Mock payment (no external API)
 - **delivery-service** – Kafka consumer, creates deliveries
+- **fulfillment-worker** – Temporal worker that runs `OrderFulfillment` after checkout (task-queue splitting)
 - **order-events-pubsub-consumer** – Optional Python subscriber for order events on GCP Pub/Sub (mirrord queue splitting); see `manifests/shop/base/app/order-events-pubsub-consumer/`
 
 ## Mirrord Demo Features
 1. **HTTP Filtering** – Order service uses `baggage: mirrord-session=<key>` header to route traffic (see `order-service/mirrord.json`)
-2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord-session=<key>` (see `delivery-service/mirrord.json`)
+2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord-session=<key>` (see `delivery-service/mirrord.json`). Fulfillment-worker splits Temporal task queue `order-fulfillment` the same way (see `fulfillment-worker/mirrord.json`). Playground operator currently has `OPERATOR_TEMPORAL_SPLITTING=false`; enable `operator.temporalSplitting=true` on the `mirrord-operator` Helm release in namespace `default` before cluster splits work.
 3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart)
 
 ## Local Development
@@ -26,7 +27,7 @@ From repo root or `apps/shop`:
 ./apps/shop/scripts/start-all.sh
 ```
 
-Starts: Shop Postgres (5432), Kafka (9092), RabbitMQ (5672), order-service (3001), inventory-service (3002), payment-service (3003), delivery-service (3004), notifications-service (3005), frontend (3000). Shop: http://localhost:3000
+Starts: Shop Postgres (5432), Kafka (9092), RabbitMQ (5672), Temporal (7233), order-service (3001), inventory-service (3002), payment-service (3003), delivery-service (3004), notifications-service (3005), fulfillment-worker (3007), frontend (3000). Shop: http://localhost:3000
 
 **Start using Dockerfiles (same pattern as inventory-service/Dockerfile):**
 
@@ -58,7 +59,7 @@ cd apps/shop/metal-mart-frontend && NEXT_BASE_PATH= npm run dev
 
 ## Kubernetes (GKE / Docker Desktop)
 
-Shop services expect **Postgres** and **Kafka** in the `infra` namespace (`postgres.infra.svc.cluster.local`, `kafka.infra.svc.cluster.local`). Deploy infrastructure first:
+Shop services expect **Postgres**, **Kafka**, **RabbitMQ**, and **Temporal** in the `infra` namespace (`postgres.infra.svc.cluster.local`, `kafka.infra.svc.cluster.local`, `temporal.infra.svc.cluster.local`). Deploy infrastructure first:
 
 ```bash
 kubectl apply -k manifests/infrastructure

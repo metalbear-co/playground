@@ -19,8 +19,15 @@ That skill also uses local mirrord; it must not use the preview workflow.
 - order, order-service: `apps/shop/order-service`
 - payment, payment-service: `apps/shop/payment-service`
 - delivery, delivery-service: `apps/shop/delivery-service`
+- fulfillment, fulfillment-worker: `apps/shop/fulfillment-worker`
 - receipt, receipt-service: `apps/shop/receipt-service`
 - frontend, shop, metal-mart-frontend: `apps/shop/metal-mart-frontend`
+
+`fulfillment-worker` splits Temporal task queue `order-fulfillment` via
+`header.baggage`. Cluster splits require `operator.temporalSplitting=true` on
+the playground `mirrord-operator` Helm release (currently off). Until that is
+enabled, verify the worker locally (Temporal on `:7233` + `npm run dev`); do
+not call playground shop APIs without mirrord.
 
 ## Checks Before Start
 

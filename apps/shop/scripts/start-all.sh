@@ -15,6 +15,7 @@ INVENTORY_DIR="${SHOP_DIR}/inventory-service"
 PAYMENT_DIR="${SHOP_DIR}/payment-service"
 DELIVERY_DIR="${SHOP_DIR}/delivery-service"
 NOTIFICATIONS_DIR="${SHOP_DIR}/notifications-service"
+FULFILLMENT_DIR="${SHOP_DIR}/fulfillment-worker"
 CHAT_DIR="${SHOP_DIR}/chat-service"
 FRONTEND_DIR="${SHOP_DIR}/metal-mart-frontend"
 
@@ -22,6 +23,7 @@ NETWORK="shop-network"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
 RABBIT_CONTAINER="shop-rabbitmq"
+TEMPORAL_CONTAINER="shop-temporal"
 
 # --- Docker: network ---
 echo "Creating network ${NETWORK}..."
@@ -40,6 +42,8 @@ echo "Creating shop databases..."
 docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE orders;" 2>/dev/null || true
 docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE inventory;" 2>/dev/null || true
 docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE deliveries;" 2>/dev/null || true
+docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE temporal;" 2>/dev/null || true
+docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE temporal_visibility;" 2>/dev/null || true
 
 # --- Docker: Kafka (Redpanda is Kafka API compatible, single container) ---
 echo "Starting Kafka (port 9092)..."
@@ -68,6 +72,25 @@ fi
 echo "Waiting for RabbitMQ (8s)..."
 sleep 8
 
+# --- Docker: Temporal (task queues for fulfillment-worker) ---
+echo "Starting Temporal (port 7233)..."
+if docker ps -a --format '{{.Names}}' | grep -q "^${TEMPORAL_CONTAINER}$"; then
+  docker start "${TEMPORAL_CONTAINER}"
+else
+  docker run -d --name "${TEMPORAL_CONTAINER}" --network "${NETWORK}" -p 7233:7233 \
+    -e DB=postgres12 \
+    -e DB_PORT=5432 \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PWD=postgres \
+    -e POSTGRES_SEEDS="${SHOP_PG}" \
+    -e DBNAME=temporal \
+    -e VISIBILITY_DBNAME=temporal_visibility \
+    -e BIND_ON_IP=0.0.0.0 \
+    temporalio/auto-setup:1.27.2
+fi
+echo "Waiting for Temporal (15s)..."
+sleep 15
+
 # --- Shop app services (background) ---
 echo "Starting shop app services..."
 
@@ -92,6 +115,13 @@ export RABBITMQ_QUEUE="order-notifications"
 (cd "${NOTIFICATIONS_DIR}" && npm run dev > "${SHOP_DIR}/.notifications.log" 2>&1) &
 NOTIFICATIONS_PID=$!
 
+export PORT=3007
+export TEMPORAL_ADDRESS=localhost:7233
+export TEMPORAL_NAMESPACE=default
+export TEMPORAL_TASK_QUEUE=order-fulfillment
+(cd "${FULFILLMENT_DIR}" && npm run dev > "${SHOP_DIR}/.fulfillment.log" 2>&1) &
+FULFILLMENT_PID=$!
+
 export PORT=3006
 export KAFKA_ADDRESS=localhost:9092
 (cd "${CHAT_DIR}" && npm run dev > "${SHOP_DIR}/.chat.log" 2>&1) &
@@ -104,6 +134,9 @@ export PAYMENT_SERVICE_URL="http://localhost:3003"
 export KAFKA_ADDRESS=localhost:9092
 export RABBITMQ_URL="amqp://shop:playground@localhost:5672/"
 export RABBITMQ_QUEUE="order-notifications"
+export TEMPORAL_ADDRESS=localhost:7233
+export TEMPORAL_NAMESPACE=default
+export TEMPORAL_TASK_QUEUE=order-fulfillment
 (cd "${ORDER_DIR}" && npm run dev > "${SHOP_DIR}/.order.log" 2>&1) &
 ORDER_PID=$!
 
@@ -111,16 +144,17 @@ export PORT=3000
 export INVENTORY_SERVICE_URL="http://localhost:3002"
 export ORDER_SERVICE_URL="http://localhost:3001"
 export DELIVERY_SERVICE_URL="http://localhost:3004"
+export FULFILLMENT_SERVICE_URL="http://localhost:3007"
 export CHAT_SERVICE_URL="http://localhost:3006"
 (cd "${FRONTEND_DIR}" && npm run dev > "${SHOP_DIR}/.frontend.log" 2>&1) &
 FRONTEND_PID=$!
 
 echo ""
-echo "Shop is starting. PIDs: order=${ORDER_PID} inventory=${INVENTORY_PID} payment=${PAYMENT_PID} delivery=${DELIVERY_PID} notifications=${NOTIFICATIONS_PID} chat=${CHAT_PID} frontend=${FRONTEND_PID}"
-echo "Logs: .order.log .inventory.log .payment.log .delivery.log .notifications.log .chat.log .frontend.log"
+echo "Shop is starting. PIDs: order=${ORDER_PID} inventory=${INVENTORY_PID} payment=${PAYMENT_PID} delivery=${DELIVERY_PID} notifications=${NOTIFICATIONS_PID} fulfillment=${FULFILLMENT_PID} chat=${CHAT_PID} frontend=${FRONTEND_PID}"
+echo "Logs: .order.log .inventory.log .payment.log .delivery.log .notifications.log .fulfillment.log .chat.log .frontend.log"
 echo ""
 echo "URLs:"
 echo "  Shop:        http://localhost:3000"
 echo ""
-echo "To stop app services: kill ${ORDER_PID} ${INVENTORY_PID} ${PAYMENT_PID} ${DELIVERY_PID} ${NOTIFICATIONS_PID} ${CHAT_PID} ${FRONTEND_PID}"
-echo "To stop Docker: docker stop ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"
+echo "To stop app services: kill ${ORDER_PID} ${INVENTORY_PID} ${PAYMENT_PID} ${DELIVERY_PID} ${NOTIFICATIONS_PID} ${FULFILLMENT_PID} ${CHAT_PID} ${FRONTEND_PID}"
+echo "To stop Docker: docker stop ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER} ${TEMPORAL_CONTAINER}"

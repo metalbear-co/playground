@@ -57,6 +57,7 @@ Helper functions: `getPrimaryImageUrl(product)` returns first image, `getImageUr
 | `POST /api/orders` | `ORDER_SERVICE_URL` | `POST /orders` (forwards `baggage` header for mirrord) |
 | `GET /api/orders/[id]` | `ORDER_SERVICE_URL` | `GET /orders/:id` |
 | `GET /api/deliveries/order/[orderId]` | — | Delivery status |
+| `GET /api/fulfillments/order/[orderId]` | `FULFILLMENT_SERVICE_URL` | Fulfillment status (Temporal worker) |
 | `GET /api/banner` | — | Banner data |
 
 ### Styling notes
@@ -74,4 +75,5 @@ Helper functions: `getPrimaryImageUrl(product)` returns first image, `getImageUr
 | `order-service` | `apps/shop/order-service/` | Order processing |
 | `payment-service` | `apps/shop/payment-service/` | Payment processing |
 | `delivery-service` | `apps/shop/delivery-service/` | Delivery management |
+| `fulfillment-worker` | `apps/shop/fulfillment-worker/` | Temporal OrderFulfillment worker |
 | `receipt-service` | `apps/shop/receipt-service/` | Receipt generation |

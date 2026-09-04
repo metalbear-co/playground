@@ -9,6 +9,7 @@ resources:
   - ./base/app/order-events-pubsub-consumer
   - ./base/app/payment-service
   - ./base/app/delivery-service
+  - ./base/app/fulfillment-worker
   - ./base/app/receipt-service
   - ./base/app/notifications-service
   - ./base/app/chat-service

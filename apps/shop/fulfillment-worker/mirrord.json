@@ -1,0 +1,28 @@
+{
+  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "target": {
+    "namespace": "shop",
+    "path": {
+      "deployment": "fulfillment-worker"
+    }
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
+        }
+      },
+      "outgoing": true
+    },
+    "split_queues": {
+      "order-fulfillment": {
+        "queue_type": "Temporal",
+        "message_filter": {
+          "header.baggage": ".*mirrord-session={{key}}.*"
+        }
+      }
+    }
+  }
+}

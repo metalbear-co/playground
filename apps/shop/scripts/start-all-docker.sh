@@ -14,6 +14,7 @@ NETWORK="shop-network"
 SHOP_PG="shop-postgres"
 KAFKA_CONTAINER="shop-kafka"
 RABBIT_CONTAINER="shop-rabbitmq"
+TEMPORAL_CONTAINER="shop-temporal"
 
 # --- Docker: network ---
 echo "Creating network ${NETWORK}..."
@@ -32,6 +33,8 @@ echo "Creating shop databases..."
 docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE orders;" 2>/dev/null || true
 docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE inventory;" 2>/dev/null || true
 docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE deliveries;" 2>/dev/null || true
+docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE temporal;" 2>/dev/null || true
+docker exec "${SHOP_PG}" psql -U postgres -c "CREATE DATABASE temporal_visibility;" 2>/dev/null || true
 
 # --- Docker: Kafka ---
 echo "Starting Kafka (port 9092)..."
@@ -69,6 +72,24 @@ fi
 echo "Waiting for RabbitMQ (8s)..."
 sleep 8
 
+echo "Starting Temporal..."
+if docker ps -a --format '{{.Names}}' | grep -q "^${TEMPORAL_CONTAINER}$"; then
+  docker start "${TEMPORAL_CONTAINER}"
+else
+  docker run -d --name "${TEMPORAL_CONTAINER}" --network "${NETWORK}" -p 7233:7233 \
+    -e DB=postgres12 \
+    -e DB_PORT=5432 \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PWD=postgres \
+    -e POSTGRES_SEEDS="${SHOP_PG}" \
+    -e DBNAME=temporal \
+    -e VISIBILITY_DBNAME=temporal_visibility \
+    -e BIND_ON_IP=0.0.0.0 \
+    temporalio/auto-setup:1.27.2
+fi
+echo "Waiting for Temporal (15s)..."
+sleep 15
+
 # --- Build shop app images (Dockerfile same pattern as inventory-service) ---
 echo "Building shop app images..."
 
@@ -77,6 +98,7 @@ docker build -t shop-payment-service -f "${SHOP_DIR}/payment-service/Dockerfile"
 docker build -t shop-delivery-service -f "${SHOP_DIR}/delivery-service/Dockerfile" "${SHOP_DIR}/delivery-service"
 docker build -t shop-order-service -f "${SHOP_DIR}/order-service/Dockerfile" "${SHOP_DIR}/order-service"
 docker build -t shop-notifications-service -f "${SHOP_DIR}/notifications-service/Dockerfile" "${SHOP_DIR}/notifications-service"
+docker build -t shop-fulfillment-worker -f "${SHOP_DIR}/fulfillment-worker/Dockerfile" "${SHOP_DIR}/fulfillment-worker"
 docker build -t shop-metal-mart-frontend -f "${SHOP_DIR}/metal-mart-frontend/Dockerfile" "${SHOP_DIR}/metal-mart-frontend"
 
 # --- Run shop app containers (service names for internal DNS) ---
@@ -103,6 +125,13 @@ docker run -d --name notifications-service --network "${NETWORK}" \
   -e RABBITMQ_QUEUE="order-notifications" \
   shop-notifications-service 2>/dev/null || docker start notifications-service
 
+docker run -d --name fulfillment-worker --network "${NETWORK}" \
+  -e PORT=80 \
+  -e TEMPORAL_ADDRESS="${TEMPORAL_CONTAINER}:7233" \
+  -e TEMPORAL_NAMESPACE=default \
+  -e TEMPORAL_TASK_QUEUE=order-fulfillment \
+  shop-fulfillment-worker 2>/dev/null || docker start fulfillment-worker
+
 docker run -d --name order-service --network "${NETWORK}" \
   -e PORT=80 \
   -e DATABASE_URL="postgresql://postgres:postgres@${SHOP_PG}:5432/orders" \
@@ -111,6 +140,9 @@ docker run -d --name order-service --network "${NETWORK}" \
   -e KAFKA_ADDRESS="${KAFKA_CONTAINER}:9092" \
   -e RABBITMQ_URL="amqp://shop:playground@${RABBIT_CONTAINER}:5672/" \
   -e RABBITMQ_QUEUE="order-notifications" \
+  -e TEMPORAL_ADDRESS="${TEMPORAL_CONTAINER}:7233" \
+  -e TEMPORAL_NAMESPACE=default \
+  -e TEMPORAL_TASK_QUEUE=order-fulfillment \
   shop-order-service 2>/dev/null || docker start order-service
 
 docker run -d --name metal-mart-frontend --network "${NETWORK}" -p 3000:3000 \
@@ -118,11 +150,12 @@ docker run -d --name metal-mart-frontend --network "${NETWORK}" -p 3000:3000 \
   -e INVENTORY_SERVICE_URL="http://inventory-service:80" \
   -e ORDER_SERVICE_URL="http://order-service:80" \
   -e DELIVERY_SERVICE_URL="http://delivery-service:80" \
+  -e FULFILLMENT_SERVICE_URL="http://fulfillment-worker:80" \
   shop-metal-mart-frontend 2>/dev/null || docker start metal-mart-frontend
 
 echo ""
 echo "Shop is up (all from Dockerfiles)."
 echo "  Shop:        http://localhost:3000/shop"
 echo ""
-echo "To stop: docker stop metal-mart-frontend order-service notifications-service delivery-service inventory-service payment-service ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER}"
+echo "To stop: docker stop metal-mart-frontend order-service notifications-service fulfillment-worker delivery-service inventory-service payment-service ${SHOP_PG} ${KAFKA_CONTAINER} ${RABBIT_CONTAINER} ${TEMPORAL_CONTAINER}"
 echo "Or run: ./apps/shop/scripts/clean-all.sh"
