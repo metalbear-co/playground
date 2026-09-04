@@ -1,4 +1,5 @@
 {
+  "key": "{{ get_env(name='USER', default='changeme') }}",
   "target": {
     "namespace": "shop",
     "path": {
@@ -14,6 +15,12 @@
     },
     "network": {
       "dns": true,
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session={{key}}\\b"
+        }
+      },
       "outgoing": {
         "ignore_localhost": true
       }
