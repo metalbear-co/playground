@@ -17,6 +17,7 @@
     "db_branches": [
       {
         "id": "{{key}}01-branch-db",
+        "name": "inventory",
         "type": "pg",
         "ttl_secs": 30,
         "version": "16.0",
