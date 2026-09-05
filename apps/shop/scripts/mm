@@ -135,7 +135,7 @@ Options for `run`:
   --split-queues <types>  Also split message queues for this run, filtered by the
                       same session key. Applies to every queue registered for
                       the target ("*"). One or more comma-separated types:
-                      kafka | sqs | rmq | pubsub | temporal (e.g. kafka,sqs)
+                      kafka | sqs | rmq | pubsub (e.g. kafka,sqs)
   --migrate           Run against an isolated database branch instead of the
                       shared database — safe for schema changes and migrations.
                       The service starts normally with DATABASE_URL pointing at
@@ -158,7 +158,6 @@ Examples:
   mm run delivery-service --split-queues kafka
   mm run payment-service --split-queues kafka,sqs
   mm run inventory-service --migrate
-  mm run fulfillment-worker --split-queues temporal
   mm config
   mm sessions
   mm cleanup 8DD5CC32EFB3F230
@@ -294,7 +293,6 @@ queue_type_of() {
     sqs|SQS)                echo 'SQS' ;;
     rmq|rabbitmq|RMQ)       echo 'RMQ' ;;
     pubsub|gcp|GCPPubSub)   echo 'GCPPubSub' ;;
-    temporal|Temporal)      echo 'Temporal' ;;
     *) return 1 ;;
   esac
 }
@@ -306,7 +304,7 @@ queue_type_of() {
 add_queue_types() {
   local acc="$1" spec="$2" t qt
   for t in ${spec//,/ }; do
-    qt="$(queue_type_of "$t")" || die "unknown queue type '$t' (use: kafka | sqs | rmq | pubsub | temporal)"
+    qt="$(queue_type_of "$t")" || die "unknown queue type '$t' (use: kafka | sqs | rmq | pubsub)"
     case ",${acc}," in
       *",${qt},"*) ;;
       *) acc="${acc:+${acc},}${qt}" ;;
@@ -596,7 +594,7 @@ cmd_config() {
       --target)    [[ $# -ge 2 ]] || die '--target requires a value';    target="$2"; shift 2 ;;
       --namespace) [[ $# -ge 2 ]] || die '--namespace requires a value'; namespace="$2"; shift 2 ;;
       --split-queues)
-        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub | temporal (comma-separated for several)'
+        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub (comma-separated for several)'
         split_queues="$(add_queue_types "$split_queues" "$2")"
         shift 2 ;;
       --migrate) migrate=1; shift ;;
@@ -646,7 +644,7 @@ cmd_run() {
       --target)    [[ $# -ge 2 ]] || die '--target requires a value';    target="$2"; shift 2 ;;
       --config)    [[ $# -ge 2 ]] || die '--config requires a value';    config_file="$2"; shift 2 ;;
       --split-queues)
-        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub | temporal (comma-separated for several)'
+        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub (comma-separated for several)'
         split_queues="$(add_queue_types "$split_queues" "$2")"
         shift 2 ;;
       --migrate)   migrate=1; shift ;;
