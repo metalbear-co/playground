@@ -28,6 +28,11 @@ async function getClient(): Promise<Client | null> {
   return clientPromise;
 }
 
+function sessionFromBaggage(baggage?: string): string | undefined {
+  const m = baggage?.match(/mirrord-session=([^,;\s]+)/);
+  return m?.[1];
+}
+
 /** Fire-and-forget: start OrderFulfillment. Failures are logged and never fail checkout. */
 export async function startOrderFulfillment(
   payload: StartFulfillmentPayload
@@ -36,11 +41,17 @@ export async function startOrderFulfillment(
   try {
     const client = await getClient();
     if (!client) return;
+    const session = sessionFromBaggage(payload.baggage);
+    // workflow_id is on both workflow and activity tasks. Header-only filters
+    // miss pack/ready activities, so the cluster worker still logs "packing".
+    const workflowId = session
+      ? `order-${payload.orderId}-sess-${session}`
+      : `order-${payload.orderId}`;
     const headers = payload.baggage
       ? { baggage: defaultPayloadConverter.toPayload(payload.baggage) }
       : undefined;
     await client.workflow.start("orderFulfillment", {
-      workflowId: `order-${payload.orderId}`,
+      workflowId,
       taskQueue,
       args: [payload.orderId],
       ...(headers ? { headers } : {}),
