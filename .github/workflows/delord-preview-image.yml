@@ -1,0 +1,90 @@
+# Builds one shop service into a preview image, on demand.
+#
+# The bot that drives this runs on a laptop with no registry credential: a GitHub App cannot write
+# an organization-owned package, and a personal token with `write:packages` is a broader, longer
+# lived secret than the job warrants. A workflow can use the repository's own GITHUB_TOKEN, which
+# already has exactly this permission and nothing else, so the build happens here instead.
+#
+# Dispatched with an explicit service and ref rather than triggered by a branch push, so a run
+# builds precisely what was asked for and the caller knows the resulting tag before it starts.
+name: Preview image (delord)
+run-name: "Preview image: ${{ inputs.service }} @ ${{ inputs.ref }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Directory name under apps/shop
+        required: true
+        type: string
+      ref:
+        description: Branch or SHA to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: delord-preview-${{ inputs.service }}-${{ inputs.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Validate the service
+        run: |
+          dir="apps/shop/${{ inputs.service }}"
+          # Reject anything that is not a real service directory: `service` is caller-supplied and
+          # is about to be interpolated into a path and an image tag.
+          case "${{ inputs.service }}" in
+            */*|.*|"") echo "::error::invalid service name"; exit 1 ;;
+          esac
+          test -f "$dir/Dockerfile" || { echo "::error::$dir/Dockerfile not found"; exit 1; }
+
+      - name: Resolve the tag
+        id: tag
+        run: |
+          sha=$(git rev-parse --short=12 HEAD)
+          echo "image=ghcr.io/metalbear-co/playground/playground-delord:${{ inputs.service }}-${sha}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/shop/${{ inputs.service }}
+          file: ./apps/shop/${{ inputs.service }}/Dockerfile
+          # The preview pod runs on the cluster's amd64 nodes, not on the caller's machine.
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          tags: ${{ steps.tag.outputs.image }}
+          cache-from: type=gha,scope=delord-${{ inputs.service }}
+          cache-to: type=gha,mode=max,scope=delord-${{ inputs.service }}
+
+      - name: Report the image
+        run: |
+          echo "${{ steps.tag.outputs.image }}"
+          {
+            echo "### Preview image"
+            echo
+            echo '```'
+            echo "${{ steps.tag.outputs.image }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
