@@ -20,7 +20,7 @@
       "order-fulfillment": {
         "queue_type": "Temporal",
         "message_filter": {
-          "header.baggage": ".*mirrord-session={{key}}.*"
+          "workflow_id": ".*-sess-{{key}}$"
         }
       }
     }
