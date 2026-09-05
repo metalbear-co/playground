@@ -6,19 +6,9 @@ const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
 let dbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/inventory";
-// mirrord branch DB URLs may omit the database name, and may carry a query string such as
-// `?sslmode=disable`. Set the path through the URL parser so the database name lands before the
-// query rather than inside it — appending it as a suffix turns `sslmode=disable` into
-// `sslmode=disable/inventory`, which pg does not recognise, so it negotiates SSL and the branch
-// refuses the connection.
-try {
-  const parsed = new URL(dbUrl);
-  if (!parsed.pathname || parsed.pathname === "/") {
-    parsed.pathname = "/inventory";
-    dbUrl = parsed.toString();
-  }
-} catch {
-  // Not a URL we can parse; leave it for pg to reject with its own error.
+// mirrord branch DB URLs may omit the database name — ensure we connect to "inventory"
+if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
+  dbUrl += "/inventory";
 }
 
 const pool = new Pool({ connectionString: dbUrl });
