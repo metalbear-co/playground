@@ -51,6 +51,23 @@ account through GitHub OIDC and Workload Identity Federation — no long-lived G
 keys. The infrastructure lives in `metalbear-co/infra` under
 `environments/s8s-gcp`.
 
+The workflow reads four repository secrets, which hold the GCP project and so
+are kept out of this public repository:
+
+| Secret | Holds |
+|---|---|
+| `GCP_S8S_WORKLOAD_IDENTITY_PROVIDER` | Workload Identity Provider, used via OIDC |
+| `GCP_S8S_DEPLOY_SERVICE_ACCOUNT` | Service account the workflow impersonates |
+| `GCP_S8S_ARTIFACT_REGISTRY` | `<region>-docker.pkg.dev/<project>` prefix |
+| `GCP_S8S_BOOTSTRAP_IMAGE` | Bootstrap library image the sidecar builds on |
+
+The first three are Terraform outputs of `environments/s8s-gcp`; the fourth is
+chosen when that image is published. They exist only once that environment has
+been applied, so until then the workflow skips its deploy job rather than failing.
+
+Actions are pinned to a commit rather than a tag: a tag can be repointed at new
+code, and these run with a token that can reach GCP.
+
 Cloud Run runs `linux/amd64` only, so this image and the bootstrap library it
 preloads are both built for amd64. The ECS demo's ARM64 build of that library is
 not interchangeable.
