@@ -8,9 +8,14 @@
 # Dispatched with an explicit service and ref rather than triggered by a branch push, so a run
 # builds precisely what was asked for and the caller knows the resulting tag before it starts.
 name: Preview image (delord)
-run-name: "Preview image: ${{ inputs.service }} @ ${{ inputs.ref }}"
+run-name: "Preview image: ${{ inputs.service || github.ref_name }}"
 
 on:
+  # A push to the bot's own branches is the trigger, not workflow_dispatch. Dispatching needs
+  # Actions: write on the caller's token; pushing needs only Contents: write, which the caller has
+  # anyway to get the branch here. One fewer permission on a long-lived laptop credential.
+  push:
+    branches: ["delord/**"]
   workflow_dispatch:
     inputs:
       service:
@@ -27,33 +32,61 @@ permissions:
   packages: write
 
 concurrency:
-  group: delord-preview-${{ inputs.service }}-${{ inputs.ref }}
+  group: delord-preview-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  image:
+  # On a dispatch the caller names the service. On a push it is whatever the branch actually
+  # changed, so the caller cannot name it wrongly and a push that touches no service builds nothing.
+  resolve:
     runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.pick.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - id: pick
+        run: |
+          if [ -n "${{ inputs.service }}" ]; then
+            case "${{ inputs.service }}" in
+              */*|.*|"") echo "::error::invalid service name"; exit 1 ;;
+            esac
+            list='["${{ inputs.service }}"]'
+          else
+            changed=$(git diff --name-only "origin/${{ github.event.repository.default_branch }}...HEAD" \
+                      | awk -F/ '$1=="apps" && $2=="shop" && NF>3 {print $3}' | sort -u)
+            list=$(printf '%s\n' $changed | jq -R . | jq -sc .)
+          fi
+          echo "services=$list" >> "$GITHUB_OUTPUT"
+          echo "building: $list"
+
+  image:
+    needs: resolve
+    if: needs.resolve.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.resolve.outputs.services) }}
     steps:
       - name: Checkout the requested ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Validate the service
         run: |
-          dir="apps/shop/${{ inputs.service }}"
-          # Reject anything that is not a real service directory: `service` is caller-supplied and
-          # is about to be interpolated into a path and an image tag.
-          case "${{ inputs.service }}" in
-            */*|.*|"") echo "::error::invalid service name"; exit 1 ;;
-          esac
-          test -f "$dir/Dockerfile" || { echo "::error::$dir/Dockerfile not found"; exit 1; }
+          test -f "apps/shop/${{ matrix.service }}/Dockerfile" \
+            || { echo "::error::apps/shop/${{ matrix.service }}/Dockerfile not found"; exit 1; }
 
       - name: Resolve the tag
         id: tag
         run: |
           sha=$(git rev-parse --short=12 HEAD)
-          echo "image=ghcr.io/metalbear-co/playground/playground-delord:${{ inputs.service }}-${sha}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/metalbear-co/playground/playground-delord:${{ matrix.service }}-${sha}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -67,16 +100,16 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./apps/shop/${{ inputs.service }}
-          file: ./apps/shop/${{ inputs.service }}/Dockerfile
+          context: ./apps/shop/${{ matrix.service }}
+          file: ./apps/shop/${{ matrix.service }}/Dockerfile
           # The preview pod runs on the cluster's amd64 nodes, not on the caller's machine.
           platforms: linux/amd64
           push: true
           build-args: |
             NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
           tags: ${{ steps.tag.outputs.image }}
-          cache-from: type=gha,scope=delord-${{ inputs.service }}
-          cache-to: type=gha,mode=max,scope=delord-${{ inputs.service }}
+          cache-from: type=gha,scope=delord-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=delord-${{ matrix.service }}
 
       - name: Report the image
         run: |
