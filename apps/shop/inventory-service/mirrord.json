@@ -19,7 +19,7 @@
         "id": "{{key}}01-branch-db",
         "name": "inventory",
         "type": "pg",
-        "ttl_secs": 30,
+        "ttl_mins": 15,
         "version": "16.0",
         "connection": {
           "url": "DATABASE_URL"
