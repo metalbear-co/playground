@@ -73,7 +73,7 @@ app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
-    res.json(rows);
+    res.json(rows.map((r) => ({ ...r, name: "PREVIEW " + r.name })));
   } catch (err) {
     console.error("Error fetching products:", err);
     res.status(500).json({ error: "Internal server error" });
