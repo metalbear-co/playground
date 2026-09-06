@@ -1,0 +1,91 @@
+---
+# mirrord Operator, managed by ArgoCD from the published Helm chart.
+#
+# Upgrading the operator is a one-line change to `targetRevision` below; ArgoCD
+# renders the pinned chart and rolls the Deployment. Available versions:
+# https://github.com/metalbear-co/charts/releases
+#
+# Secrets are never in this file. The chart reads them from Secrets that exist
+# in the `mirrord` namespace and are created out of band:
+#   mirrord-operator-cloud-api-key  (data key `apiKey`)   -> cloud.apiKey.keyRef
+#   mirrord-operator-license        (OPERATOR_LICENSE_KEY) -> license.keyRef
+#   aws-credentials                                       -> operator.extraEnv
+#
+# There is deliberately no `resources-finalizer.argocd.argoproj.io` finalizer:
+# deleting this Application must leave the operator running, never cascade.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mirrord-operator
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    namespace: mirrord
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://metalbear-co.github.io/charts
+    chart: mirrord-operator
+    targetRevision: 3.198.0
+    helm:
+      # Must stay `mirrord-operator`: the chart stamps the release name into
+      # the `app.kubernetes.io/instance` label on every object.
+      releaseName: mirrord-operator
+      valuesObject:
+        namespace: mirrord
+        # The namespace is shared with the license server and is not owned by
+        # this Application, so pruning can never remove it.
+        createNamespace: false
+
+        cloud:
+          apiKey:
+            keyRef: mirrord-operator-cloud-api-key
+
+        license:
+          # Inert while cloud.apiKey is set; kept only until the cloud key has
+          # been in use long enough to drop the legacy license entirely.
+          keyRef: mirrord-operator-license
+          allowSeatOverages: true
+
+        operator:
+          # Leader plus one standby, so a chart bump rolls without a gap.
+          replicas: 2
+          # The shop Application self-heals; without this the operator's
+          # queue-splitting patches on target workloads get reverted by Argo.
+          applicationPauseAutoSync: true
+          jsonLog: true
+          sqsSplitting: true
+          rmqSplitting: true
+          kafkaSplitting: true
+          gcpPubsubSplitting: true
+          temporalSplitting: true
+          pgBranching: true
+          previewEnv: true
+          shareIngress:
+            # Must match shareIngress.shareDomain on the mirrord-share-ingress Application.
+            shareDomain: preview.playground.metalbear.dev
+          # SQS splitting credentials.
+          extraEnv:
+            AWS_REGION: us-east-1
+            AWS_ACCESS_KEY_ID:
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: aws-access-key-id
+            AWS_SECRET_ACCESS_KEY:
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: aws-secret-access-key
+
+        agent:
+          injectHeaders: true
+          extraConfig:
+            inject_headers: true
+            privileged: true
+
+  # Manual sync while the existing installation is adopted. Switched to
+  # automated (prune + selfHeal) once the first sync has been reviewed.
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true
