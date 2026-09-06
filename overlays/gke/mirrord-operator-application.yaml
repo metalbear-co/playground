@@ -84,8 +84,10 @@ spec:
             inject_headers: true
             privileged: true
 
-  # Manual sync while the existing installation is adopted. Switched to
-  # automated (prune + selfHeal) once the first sync has been reviewed.
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
     syncOptions:
       - ServerSideApply=true
