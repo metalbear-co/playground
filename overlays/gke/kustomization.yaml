@@ -13,6 +13,7 @@ resources:
   - visualization-shop-application.yaml
   - visualization-shop
   - mirrord-share-ingress-application.yaml
+  - mirrord-operator-application.yaml
   - mirrord-preview
   - kafka-ui
   - gateway.yaml
