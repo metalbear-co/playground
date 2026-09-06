@@ -24,7 +24,7 @@
 # An example wrapper, not part of mirrord. MetalBear does not maintain it, and it
 # carries no support or compatibility commitment.
 #
-# Verified against mirrord v3.251.0. Later mirrord releases may change the config
+# Verified against mirrord v3.254.0. Later mirrord releases may change the config
 # schema and CLI output this script depends on, and it isn't guaranteed to keep up.
 #
 # To adapt it:
@@ -422,8 +422,8 @@ EOF
 # database can take a while), and prints one line per branch when ready.
 # Entries are matched on the session key, so only this session's branch is
 # reported even when other sessions have branches open on this machine.
-# Needs a mirrord with JSON output on `db-branches connections` (newer than
-# 3.251.0); on older versions this silently reports nothing.
+# Needs the JSON output of `db-branches connections`, added in mirrord 3.252.0;
+# on older versions this silently reports nothing.
 report_db_branch() {
   local session_key="$1" deadline=$((SECONDS + 300)) json rows
   mirrord db-branches connections --help 2>/dev/null | grep -q -- '--format' || return 0
