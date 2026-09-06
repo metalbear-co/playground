@@ -26,7 +26,7 @@ spec:
   source:
     repoURL: https://metalbear-co.github.io/charts
     chart: mirrord-operator
-    targetRevision: 3.198.0
+    targetRevision: 3.203.0
     helm:
       # Must stay `mirrord-operator`: the chart stamps the release name into
       # the `app.kubernetes.io/instance` label on every object.
