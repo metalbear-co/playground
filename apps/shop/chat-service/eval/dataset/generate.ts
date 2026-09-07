@@ -243,9 +243,40 @@ function arg(name: string, fallback: string): string {
 
 const cataloguePath = arg("catalogue", "eval/fixtures/catalogue-2026-03-16.json");
 const outPath = arg("out", "eval/dataset/shopping-agent-v1.jsonl");
+const perClass = Number(arg("per-class", "6"));
+
+/**
+ * Caps every case class to the same size.
+ *
+ * Enumerating whatever each class can produce is not a balanced suite: the
+ * lookup-and-multiply classes generate combinatorially many cases while the
+ * interesting ones (stock boundaries, products we do not stock) are bounded by
+ * the catalogue. Left uncapped they outnumber everything else two to one, and
+ * the headline score mostly measures arithmetic the agent was never going to
+ * get wrong.
+ *
+ * Taking the first N of each class in generation order keeps this deterministic
+ * and keeps the suite small enough to run in front of an audience.
+ */
+function balance(all: EvalCase[], n: number): EvalCase[] {
+  const seen = new Map<string, number>();
+  const kept: EvalCase[] = [];
+  for (const c of all) {
+    const used = seen.get(c.tag) ?? 0;
+    if (used >= n) continue;
+    seen.set(c.tag, used + 1);
+    kept.push(c);
+  }
+  // Renumber so ids stay contiguous and stable for a given catalogue + N.
+  return kept.map((c, i) => ({ ...c, id: `case-${String(i + 1).padStart(4, "0")}` }));
+}
 
 const catalogue: Product[] = JSON.parse(readFileSync(cataloguePath, "utf-8"));
-const built = build(catalogue);
+const built = balance(build(catalogue), perClass);
+
+const short = Object.entries(
+  built.reduce<Record<string, number>>((a, c) => ((a[c.tag] = (a[c.tag] ?? 0) + 1), a), {})
+).filter(([, n]) => n < perClass);
 
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, built.map((c) => JSON.stringify(c)).join("\n") + "\n");
@@ -256,7 +287,7 @@ const byTag = built.reduce<Record<string, number>>((acc, c) => {
 }, {});
 
 console.log(`catalogue : ${cataloguePath} (${catalogue.length} products)`);
-console.log(`dataset   : ${outPath} (${built.length} cases)\n`);
+console.log(`dataset   : ${outPath} (${built.length} cases, ${perClass} per class)\n`);
 for (const [tag, n] of Object.entries(byTag).sort()) {
   console.log(`  ${tag.padEnd(20)} ${String(n).padStart(4)}`);
 }
@@ -264,6 +295,10 @@ const terminals = built.reduce<Record<string, number>>((acc, c) => {
   acc[c.expected.tool] = (acc[c.expected.tool] ?? 0) + 1;
   return acc;
 }, {});
+if (short.length > 0) {
+  console.log(`\n  classes the catalogue could not fill to ${perClass}:`);
+  for (const [tag, n] of short) console.log(`    - ${tag}: only ${n}`);
+}
 if (skipped.length > 0) {
   console.log(`\n  ${skipped.length} case classes skipped (catalogue cannot express them):`);
   for (const s of skipped) console.log(`    - ${s}`);
