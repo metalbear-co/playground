@@ -1,0 +1,40 @@
+# Turns the shopping agent on for the demo cluster.
+#
+# The agent runs inside chat-service, so the pod needs its own Anthropic
+# credential — the eval process's key is not in play on this path. The secret is
+# optional so chat-service still starts without it: the agent then fails its API
+# call and answers with a handover message rather than the pod crash-looping.
+#
+# A strategic merge rather than a JSON patch, so env vars are matched by name
+# and this keeps working if the base manifest reorders them.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: main
+          # Pinned to the image that actually contains the shopping agent. The
+          # base manifest tracks :latest, which is built from main and predates
+          # the agent — without this pin, applying the overlay silently reverts
+          # the storefront chat to its canned greeting while everything still
+          # looks healthy. Set here rather than via the `images:` transformer,
+          # which the bundled kustomize fails to process in this overlay.
+          image: ghcr.io/metalbear-co/playground-chat-service:agent-evals
+          env:
+            - name: SHOPPING_AGENT_ENABLED
+              value: "true"
+            # A shop agent that says "your order is on its way" has to have
+            # actually placed it. This is the live product path, not the eval:
+            # the eval runner stays read-only, asserting on the tool call the
+            # agent would make without executing it.
+            - name: SHOPPING_AGENT_EXECUTE
+              value: "true"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: shopping-agent
+                  key: anthropic-api-key
+                  optional: true

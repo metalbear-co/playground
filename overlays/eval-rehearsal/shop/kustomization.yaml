@@ -5,7 +5,9 @@ resources:
   - ../../../manifests/shop/base/app/inventory-service
   - ../../../manifests/shop/base/app/order-service
   - ../../../manifests/shop/base/app/chat-service
+  - ../../../manifests/shop/base/app/metal-mart-frontend
   - seed-job.yaml
+  - frontend-ingress.yaml
 
 configMapGenerator:
   - name: catalogue-seed
@@ -17,3 +19,5 @@ patches:
     target:
       kind: Deployment
       name: order-service
+  - path: chat-service-patch.yaml
+  - path: frontend-service-patch.yaml

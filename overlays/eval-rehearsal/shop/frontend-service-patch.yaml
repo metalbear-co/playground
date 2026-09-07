@@ -1,0 +1,18 @@
+# Attaches the BackendConfig to the frontend service.
+#
+# Without this annotation the Ingress builds its backend with default settings
+# and ignores frontend-backendconfig entirely — the /shop health check and the
+# extended SSE timeout would both be silently dropped, and the site would answer
+# 502 because / returns 404.
+#
+# Kept as type LoadBalancer on purpose. The Ingress does not need it, but the L4
+# address (35.254.21.184) stays a working plain-HTTP fallback with SSE already
+# verified through it, in case the managed certificate misbehaves near the date.
+apiVersion: v1
+kind: Service
+metadata:
+  name: metal-mart-frontend
+  annotations:
+    cloud.google.com/backend-config: '{"default": "frontend-backendconfig"}'
+spec:
+  type: LoadBalancer

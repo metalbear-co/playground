@@ -75,4 +75,12 @@ export function renderReport(summary: EvalSummary, results: CaseResult[]): strin
 }
 
 const truncate = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const escape = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+
+/**
+ * Makes a value safe to drop into a markdown table cell.
+ *
+ * Backslashes go first: escaping pipes introduces backslashes, so doing it the
+ * other way round would double-escape them and mangle the output.
+ */
+const escape = (s: string) =>
+  s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");

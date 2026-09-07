@@ -75,10 +75,21 @@ if [ "$APPLY_ONLY" = false ]; then
   gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT"
 fi
 
-kubectl config get-contexts -o name | grep -qx "$CONTEXT" \
-  || die "expected kube context '$CONTEXT' not found — did cluster creation succeed?"
-
 k() { kubectl --context="$CONTEXT" "$@"; }
+
+# Two things settle here, and a live request is the only honest test of either:
+# the kubeconfig entry that get-credentials just rewrote has to be readable, and
+# a freshly created GKE control plane accepts connections before it can serve
+# them — the first helm call otherwise lands as "connection reset by peer".
+say "Waiting for the control plane to answer"
+for attempt in $(seq 1 30); do
+  if k --request-timeout=20s get nodes >/dev/null 2>&1; then
+    printf '  ready after %s attempt(s)\n' "$attempt"
+    break
+  fi
+  [ "$attempt" -eq 30 ] && die "context '$CONTEXT' never became reachable — did cluster creation succeed?"
+  sleep 10
+done
 
 # --------------------------------------------------------------------------
 # 2. mirrord operator
@@ -106,6 +117,22 @@ helm --kube-context="$CONTEXT" upgrade --install mirrord-operator \
 say "Applying the eval-rehearsal overlay"
 k apply -k "$OVERLAY"
 
+# The shopping agent runs inside chat-service, so the pod needs its own
+# Anthropic credential. Created after the overlay because the overlay is what
+# creates the namespace, then chat-service is restarted so it picks the secret
+# up. Skipped when no key is present: chat-service still runs, and the agent
+# answers with a handover message instead of crash-looping.
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  say "Creating the shopping-agent secret"
+  k create secret generic shopping-agent -n shop \
+    --from-literal=anthropic-api-key="$ANTHROPIC_API_KEY" \
+    --dry-run=client -o yaml | k apply -f - >/dev/null
+  k rollout restart deployment/chat-service -n shop >/dev/null
+else
+  printf '\n\033[1;33mWARNING: ANTHROPIC_API_KEY is unset — the shopping agent will not answer chats.\033[0m\n'
+  printf '  Set it and re-run with --apply-only to enable the storefront demo.\n'
+fi
+
 say "Waiting for infrastructure"
 k rollout status deployment/postgres  -n infra --timeout=5m
 k rollout status deployment/rabbitmq  -n infra --timeout=5m
@@ -115,6 +142,7 @@ say "Waiting for shop services"
 k rollout status deployment/inventory-service -n shop --timeout=5m
 k rollout status deployment/order-service     -n shop --timeout=5m
 k rollout status deployment/chat-service      -n shop --timeout=5m
+k rollout status deployment/metal-mart-frontend -n shop --timeout=5m
 
 say "Waiting for the catalogue seed"
 # The job waits for inventory-service to create the products table, so give it
@@ -133,6 +161,21 @@ printf 'operator : '; k get deployment mirrord-operator -n mirrord \
   -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 printf 'pg branching : '; k get deployment mirrord-operator -n mirrord \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPERATOR_PG_BRANCHING")].value}{"\n"}'
+
+# That env var is set by the chart whether or not the operator can license
+# itself, so on its own it proves nothing. An unlicensed operator still runs,
+# and mirrord silently falls back to OSS mode: basic connectivity keeps working
+# while queue splitting, traffic filtering and DB branching quietly do not.
+printf 'licence : '
+if k logs -n mirrord deployment/mirrord-operator --tail=200 2>/dev/null | grep -q "Failed loading license"; then
+  printf '\033[1;31mNOT VALID on this cluster\033[0m\n'
+  printf '  The operator cannot load its licence, so mirrord will run without it.\n'
+  printf '  Acts using the storefront and the eval still work; queue splitting and\n'
+  printf '  DB branching do not. A licence key is bound to its installation — one\n'
+  printf '  copied from another cluster will not validate here.\n'
+else
+  printf 'loaded\n'
+fi
 printf 'products : '; k exec -n infra deployment/postgres -- \
   psql -U postgres -d inventory -tAc 'SELECT count(*) FROM products;'
 printf 'price points : '; k exec -n infra deployment/postgres -- \
@@ -144,10 +187,16 @@ $(printf '\033[1;32mRehearsal cluster ready.\033[0m')
 
   context : $CONTEXT
 
-Point mirrord at it with:
+Show the shop (the agent answers the chat widget):
 
-  kubectl config use-context $CONTEXT
-  mirrord exec --config-file .mirrord/mirrord-order.json -- <your command>
+  kubectl --context $CONTEXT port-forward -n shop svc/metal-mart-frontend 3000:80
+  open http://localhost:3000/shop
+
+Run the eval against it — the cluster is named in the config, so your active
+kube context does not matter:
+
+  cd apps/shop/chat-service
+  mirrord exec --config-file ../../../.mirrord/agent-evals.json -- npm run eval
 
 Tear it down when you are done — it is billable:
 

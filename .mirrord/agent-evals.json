@@ -1,4 +1,5 @@
 {
+  "kube_context": "gke_mirrord-test_us-central1-c_agent-evals-rehearsal",
   "target": {
     "namespace": "shop",
     "path": {

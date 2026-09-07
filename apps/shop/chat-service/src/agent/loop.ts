@@ -21,7 +21,9 @@ Rules:
 - Check stock before ordering more than one of anything.
 - When the customer sets a budget, respect it — check prices before committing.
 - When several products could match, prefer the closest one by kind, then by price.
-- Write one short, friendly sentence to the customer alongside your final tool call.`;
+- Always write one short, friendly sentence to the customer in the same reply as your final tool call. Never call the tool silently — the sentence is what the customer actually sees.
+- Name what you did in that sentence: the products and the total for an order, the substitute and why for an alternative, the order number for a refund.
+- An order you place is confirmed, not shipped. Do not tell a customer their order is on its way.`;
 
 /**
  * Runs the shopping agent over one customer message.

@@ -1,0 +1,60 @@
+# HTTPS entry point for the storefront on the demo cluster.
+#
+# A Google-managed certificate on a global external Application Load Balancer,
+# so the demo runs on a real https:// URL instead of a bare IP. Browsers upgrade
+# http:// to https:// on their own, and an L4 service listening only on :80
+# answers that with a timeout — which is what this replaces.
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: agent-evals-cert
+spec:
+  domains:
+    - agent-evals.metalbear.dev
+---
+# Two settings here earn their place.
+#
+# healthCheck.requestPath: the frontend serves under /shop and returns 404 at
+# /, which is where the load balancer probes by default. Left alone, every
+# backend is marked unhealthy and the site answers 502. The repo hit this on
+# playground already — see overlays/gke/shop/healthcheckpolicy.yaml.
+#
+# timeoutSec: the support chat is a server-sent-event stream that stays open.
+# The 30s default would cut it. chat-service does send a :ka heartbeat every 15
+# seconds, which alone keeps the connection from idling out, but a short
+# backend timeout closes long-lived streams regardless of traffic.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: frontend-backendconfig
+spec:
+  timeoutSec: 3600
+  healthCheck:
+    type: HTTP
+    port: 3000
+    requestPath: /shop
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metal-mart-frontend
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: agent-evals-tls
+    networking.gke.io/managed-certificates: agent-evals-cert
+    # Serve http:// as well as https://. The browser upgrade is what we are
+    # accommodating, not enforcing — an http:// link should still work.
+    kubernetes.io/ingress.allow-http: "true"
+spec:
+  rules:
+    - host: agent-evals.metalbear.dev
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: metal-mart-frontend
+                port:
+                  number: 80
