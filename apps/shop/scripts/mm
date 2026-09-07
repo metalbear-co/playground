@@ -1,41 +1,43 @@
 #!/usr/bin/env bash
 # mm — one-line mirrord developer experience for the MetalMart shop.
 #
-# This is a single-file CLI wrapper around `mirrord exec`. Instead of asking every
+# This is a single-file CLI wrapper around `mirrord up`. Instead of asking every
 # developer to install mirrord, authenticate to the cloud, fetch cluster credentials,
-# and write a mirrord config, they run:
+# and write a mirrord-up.yaml, they run:
 #
 #   mm run order-service
 #
 # and the wrapper handles everything else (installing mirrord, cloud auth, kube
 # context, config scaffolding, session key, and starting the service).
 #
-# The wrapper owns its mirrord config completely: on first run it scaffolds one
-# from the template embedded below — steal mode with a per-developer header
-# filter, nothing else — so a customer starts from scratch with zero mirrord
-# knowledge. Per-service mirrord.json files that may exist in the repo are NOT
-# used; those serve other workflows. Company-specific config (env overrides,
-# queue splitting, DB branching) belongs in the embedded template, so every
-# developer gets it automatically.
+# The wrapper owns its mirrord-up.yaml completely: on first run it scaffolds one
+# with an entry per runnable service in the repo — target deployment plus the
+# local run command, nothing else. `mirrord up` itself supplies the rest: steal
+# mode with a per-developer header filter and queue splitting, both keyed on the
+# session key — so a customer starts from scratch with zero mirrord knowledge.
+# Per-service mirrord.json files that may exist in the repo are NOT used; those
+# serve other workflows. Company-specific config (env overrides, database
+# branches) belongs in the scaffold template embedded below, so every developer
+# gets it automatically.
 #
 # ─── WHAT THIS IS ────────────────────────────────────────────────────────────
 # An example wrapper, not part of mirrord. MetalBear does not maintain it, and it
 # carries no support or compatibility commitment.
 #
-# Verified against mirrord v3.251.0. Later mirrord releases may change the config
+# Verified against mirrord v3.254.0. Later mirrord releases may change the config
 # schema and CLI output this script depends on, and it isn't guaranteed to keep up.
 #
 # To adapt it:
 #   1. CONFIGURATION block below (cluster coordinates, namespace, paths).
-#   2. The config template in `scaffold_config` — where mirrord features go.
-#   3. `service_run_command` if your services don't start with `npm run dev`.
+#   2. The mirrord-up.yaml template in `scaffold_config` — where mirrord features go.
+#   3. `service_command` if your services don't start with `npm run dev`.
 #   4. The GKE auth functions for your provider (EKS, AKS, on-prem).
 # Sections you are expected to touch are marked with "CUSTOMIZE:".
 #
 # Usage:
-#   mm run <service...> [--key NAME] [--namespace NS] [--target NAME] [-- extra args]
+#   mm run <service...> [--key NAME] [--namespace NS] [--migrate] [--ui]
 #   mm list                 List runnable services
-#   mm config               Print the resolved mirrord config (for debugging)
+#   mm config               Print the mirrord-up config (for debugging)
 #   mm setup                Install mirrord + authenticate + fetch cluster creds
 #   mm sessions             Show active mirrord operator sessions
 #   mm cleanup <id|--mine>  Kill one operator session (or every session you own)
@@ -55,7 +57,8 @@ GKE_CLUSTER='playground-cluster-1'
 KUBE_CONTEXT="gke_${GCP_PROJECT}_${GCP_ZONE}_${GKE_CLUSTER}"
 
 # Kubernetes namespace where the workloads are deployed. Each service directory
-# name is assumed to match its Deployment name (override with --target).
+# name is assumed to match its Deployment name (change `target.path` in the
+# scaffolded mirrord-up.yaml where that doesn't hold).
 DEFAULT_NAMESPACE='shop'
 
 # Directory that contains one sub-directory per service. The wrapper discovers
@@ -73,11 +76,12 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 SERVICES_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# The wrapper-owned mirrord config. Scaffolded on first use from the template
+# The wrapper-owned mirrord-up.yaml. Scaffolded on first use from the template
 # in `scaffold_config` below; deliberately separate from any mirrord.json files
-# individual services may carry for other workflows.
+# individual services may carry for other workflows. Each service's
+# `run.directory` is relative to this file's directory, hence `../<service>`.
 MM_CONFIG_DIR="${SERVICES_DIR}/.mirrord"
-MM_CONFIG_FILE="${MM_CONFIG_DIR}/mm.json"
+MM_CONFIG_FILE="${MM_CONFIG_DIR}/mirrord-up.yaml"
 
 # How mirrord gets installed when missing (Homebrew tap; see
 # https://metalbear.com/mirrord/docs for other install methods).
@@ -87,15 +91,18 @@ MIRRORD_TAP_FORMULA='metalbear-co/mirrord/mirrord'
 # session key so the operator routes only *their* requests to their laptop.
 EXTENSION_URL='https://chromewebstore.google.com/detail/mirrord/bijejadnnfgjkfdocgocklekjhnhkhkf'
 
-# The scaffolded config templates its session key from an env var:
-#   "key": "{{ get_env(name='USER', default='changeme') }}"
-# and steals only requests whose baggage header carries mirrord-session=<key>.
-# The wrapper reuses that convention: the key defaults to your username, and
-# --key overrides it by exporting the env var for the mirrord process only.
+# Session key. `mirrord up --key` sets it; mirrord derives the HTTP steal filter
+# (baggage: .*mirrord-session=<key>.*) and the queue-split filters from it, and
+# exposes it to the config file as the `key` template variable. It defaults to
+# the OS username — mirrord's own default — and --key overrides it per run.
 # CUSTOMIZE: to derive the key differently (e.g. from the git branch), change
-# KEY_ENV_VAR + default_key() and the get_env() name inside scaffold_config.
-KEY_ENV_VAR='USER'
+# default_key().
 default_key() { printf '%s' "${USER:-dev}"; }
+
+# Template variables the wrapper exports for the scaffolded mirrord-up.yaml
+# (read there with get_env). Exported for the mirrord process only.
+NAMESPACE_ENV_VAR='MM_NAMESPACE'   # target namespace (--namespace)
+MIGRATE_ENV_VAR='MM_MIGRATE'       # service running against a database branch (--migrate)
 
 # `--migrate` database-branch defaults. The branch is an isolated copy of the
 # service's database that lives only as long as the session (+ ttl_secs), so
@@ -115,13 +122,13 @@ note() { echo "mm: $*"; }
 
 usage() {
   cat <<'EOF'
-mm — run a MetalMart shop service locally against the shared GKE cluster via mirrord
+mm — run MetalMart shop services locally against the shared GKE cluster via mirrord up
 
 Commands:
   run <service...> Start service(s) locally inside mirrord sessions — multiple
-                  services run concurrently, sharing one session key
+                  services run concurrently in one `mirrord up`, sharing one session key
   list            List services this wrapper can run
-  config          Print the resolved mirrord config (templates rendered) without running
+  config          Print the mirrord-up config and the template variables in effect
   setup           Install mirrord, authenticate to Google Cloud, fetch cluster creds
   sessions        List active mirrord operator sessions on the cluster
   cleanup <id>    Kill one operator session by ID (or --mine for all of yours)
@@ -129,24 +136,23 @@ Commands:
   extension       Open the mirrord browser extension install page
 
 Options for `run`:
-  --key <name>        Session key used in the traffic filter (default: your username)
-  --namespace <ns>    Kubernetes namespace of the target (default: shop)
-  --target <name>     Target deployment name (default: same as the service directory)
-  --split-queues <types>  Also split message queues for this run, filtered by the
-                      same session key. Applies to every queue registered for
-                      the target ("*"). One or more comma-separated types:
-                      kafka | sqs | rmq | pubsub (e.g. kafka,sqs)
+  --key <name>        Session key used in the traffic filters (default: your username)
+  --namespace <ns>    Kubernetes namespace of the targets (default: shop)
   --migrate           Run against an isolated database branch instead of the
                       shared database — safe for schema changes and migrations.
                       The service starts normally with DATABASE_URL pointing at
                       the branch; the branch's local address is printed once
                       it is ready. Single service only.
-  --config <file>     Use an alternate mirrord config file instead of the scaffolded one
-  -- <args...>        Everything after -- is passed to the service's run command
+  --ui                Also start `mirrord ui` in the background
+  --config <file>     Use an alternate mirrord-up.yaml instead of the scaffolded one
 
-The wrapper scaffolds its own mirrord config (steal mode, filtered by your
-session key) into .mirrord/mm.json on first run. Edit that file — or the
-template inside this script — to add company-specific mirrord features.
+Queue splitting needs no flag: mirrord up splits every queue registered for a
+target (Kafka, SQS, Pub/Sub, ...) by the same session key as the HTTP filter.
+
+The wrapper scaffolds its own mirrord-up.yaml — one entry per runnable service —
+into .mirrord/mirrord-up.yaml on first run. Edit that file (target names, env
+overrides, config_patch) or the template inside this script to add
+company-specific mirrord features; delete it to re-scaffold.
 
 Examples:
   mm setup
@@ -154,9 +160,7 @@ Examples:
   mm run order-service
   mm run order-service chat-service
   mm run order-service --key alice
-  mm run order-service --target order-service-v2 --namespace staging
-  mm run delivery-service --split-queues kafka
-  mm run payment-service --split-queues kafka,sqs
+  mm run order-service --namespace staging
   mm run inventory-service --migrate
   mm config
   mm sessions
@@ -246,157 +250,169 @@ ensure_cluster_ready() {
   verify_cluster_access "$namespace"
 }
 
-# ─── MIRRORD CONFIG (wrapper-owned) ──────────────────────────────────────────
+# ─── SERVICE DISCOVERY ───────────────────────────────────────────────────────
 
-# Write the wrapper's mirrord config on first use. Written only when the file
-# doesn't exist, so local edits survive; delete the file to re-scaffold.
+# A directory under SERVICES_DIR counts as a runnable service when it contains
+# something we know how to start (see service_command). This keeps the wrapper
+# zero-maintenance: new services show up in `mm list` automatically.
+# CUSTOMIZE: extend the markers if you add stacks (go.mod, build.gradle, ...).
+is_service_dir() {
+  local d="$1"
+  [[ -f "${d}/package.json" || -f "${d}/main.py" ]]
+}
+
+list_services() {
+  local d
+  for d in "$SERVICES_DIR"/*/; do
+    if is_service_dir "$d"; then
+      basename "$d"
+    fi
+  done
+  # Explicit success: with `set -e`, a trailing failed test here would
+  # otherwise abort the whole script when the last directory is not a service.
+  return 0
+}
+
+service_dir() {
+  local service="$1"
+  local dir="${SERVICES_DIR}/${service}"
+  if [[ ! -d "$dir" ]] || ! is_service_dir "$dir"; then
+    die "unknown service '$service' — available: $(list_services | tr '\n' ' ')"
+  fi
+  printf '%s' "$dir"
+}
+
+# Decide how to start a service locally, based on what's in its directory. The
+# command runs with the service directory as working directory (mirrord up sets
+# it from `run.directory`), so paths are relative to the service. The result is
+# returned via the RUN_ARGV array (bash can't return arrays). Pure: no installs
+# here, because this also runs while scaffolding the config for every service.
+# CUSTOMIZE: add cases here for other stacks (go run ., ./gradlew bootRun, ...).
+service_command() {
+  local dir="$1"
+  RUN_ARGV=()
+  if [[ -f "${dir}/package.json" ]]; then
+    # Node/TypeScript services (and the Next.js frontend) all expose `npm run dev`.
+    RUN_ARGV=(npm run dev)
+  elif [[ -f "${dir}/main.py" ]]; then
+    RUN_ARGV=(.venv/bin/python main.py)
+  else
+    die "don't know how to run this service — add a case to service_command()"
+  fi
+}
+
+# First-run dependency setup for a service about to be started, so `mm run`
+# works on a fresh clone. Mirrors the stacks in service_command.
+service_prepare() {
+  local dir="$1"
+  if [[ -f "${dir}/package.json" ]]; then
+    if [[ ! -d "${dir}/node_modules" ]]; then
+      note "node_modules missing in $(basename "$dir") — running npm install first..."
+      (cd "$dir" && npm install)
+    fi
+  elif [[ -f "${dir}/main.py" ]]; then
+    if [[ ! -d "${dir}/.venv" ]]; then
+      note "creating Python virtualenv for $(basename "$dir") and installing requirements..."
+      (cd "$dir" && python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt)
+    fi
+  fi
+}
+
+# ─── MIRRORD-UP CONFIG (wrapper-owned) ───────────────────────────────────────
+
+# Render argv as a YAML flow sequence of double-quoted strings.
+yaml_command() {
+  local out='' arg
+  for arg in "$@"; do
+    arg="${arg//\\/\\\\}"
+    arg="${arg//\"/\\\"}"
+    out="${out:+${out}, }\"${arg}\""
+  done
+  printf '[%s]' "$out"
+}
+
+# Write the wrapper's mirrord-up.yaml on first use: one `services` entry per
+# runnable service, each with its target deployment and local run command.
+# Written only when the file doesn't exist, so local edits survive; delete the
+# file to re-scaffold (e.g. after adding a service to the repo).
 #
-# The scaffold is the minimum for safely sharing a cluster: STEAL incoming
-# traffic, but only requests whose `baggage` header carries this developer's
-# session key — everyone else's traffic keeps flowing to the deployed pod.
-# The key resolves at mirrord launch time via get_env(), so the same file
-# works for every developer without modification.
+# What is NOT in the file is what makes sharing a cluster safe, because
+# `mirrord up` adds it for every service: STEAL incoming traffic, but only
+# requests whose `baggage` header carries this developer's session key, and
+# split every queue registered for the target by the same key — everyone
+# else's traffic keeps flowing to the deployed pod.
+#
+# The file is rendered as a Tera template before parsing, which is how the
+# per-run switches work without editing the file: `mm run` exports
+# $NAMESPACE_ENV_VAR / $MIGRATE_ENV_VAR and the template reads them with
+# get_env(). The `key` template variable is the session key.
 #
 # CUSTOMIZE: this template is the place for company-specific mirrord features,
-# e.g. inside "feature":
-#   "env":          {"override": {"SOME_FLAG": "local"}}
-#   "split_queues": { ... }        (Kafka/SQS/RabbitMQ/PubSub queue splitting)
-#   "db_branches":  [ ... ]        (isolated database branches)
-# Docs: https://metalbear.com/mirrord/docs/reference/configuration
+# e.g. per service:
+#   env:
+#     override: {SOME_FLAG: local}
+#   http_filter: {header_filter: "..."}   (tighter than mirrord's default)
+#   config_patch: {...}                    (any mirrord.json option, e.g. db_branches)
+# Docs: https://metalbear.com/mirrord/docs/use-cases/multiple-concurrent-sessions
 scaffold_config() {
   [[ -f "$MM_CONFIG_FILE" ]] && return 0
   mkdir -p "$MM_CONFIG_DIR"
-  cat >"$MM_CONFIG_FILE" <<EOF
-{
-  "operator": true,
-  "key": "{{ get_env(name='${KEY_ENV_VAR}', default='changeme') }}",
-  "feature": {
-    "network": {
-      "incoming": {
-        "mode": "steal",
-        "http_filter": {
-          "header_filter": "baggage:\\\\s*[^\\\\n]*\\\\bmirrord-session={{key}}\\\\b"
-        }
-      },
-      "outgoing": true
-    }
-  }
-}
+  local svc
+  {
+    # Comments in the file avoid template braces on purpose: Tera renders the
+    # whole file, comments included.
+    cat <<EOF
+# mirrord-up.yaml owned by the \`mm\` wrapper — one entry per runnable service.
+# Edit freely (target names, env overrides, config_patch); delete to re-scaffold.
+# Reference: https://metalbear.com/mirrord/docs/use-cases/multiple-concurrent-sessions
+#
+# \`mm run <service...>\` launches only the named entries. For each of them
+# mirrord up steals the incoming requests whose baggage header carries the
+# session key (baggage: .*mirrord-session=<key>.*) and splits every queue
+# registered for the target by the same key; everything else keeps flowing
+# to the deployed pod.
+#
+# Template variables (rendered before the file is parsed):
+#   key            the session key (mm run --key, default: your username)
+#   ${NAMESPACE_ENV_VAR}   target namespace (mm run --namespace, default: ${DEFAULT_NAMESPACE})
+#   ${MIGRATE_ENV_VAR}     the service running against a database branch (mm run --migrate)
+
+# --migrate: run the named service against an isolated copy of its database.
+# config_patch is mirrord up's escape hatch for mirrord.json options such as
+# db_branches. The macro is expanded once per service below.
+{% macro db_branch(service) %}
+{% if get_env(name='${MIGRATE_ENV_VAR}', default='') == service %}
+    config_patch:
+      feature:
+        db_branches:
+          - id: "{{ key }}01-branch-db"
+            type: ${DB_BRANCH_TYPE}
+            version: "${DB_BRANCH_VERSION}"
+            ttl_secs: ${DB_BRANCH_TTL_SECS}
+            connection: {url: ${DB_BRANCH_CONNECTION_ENV}}
+            copy: {mode: ${DB_BRANCH_COPY_MODE}}
+{% endif %}
+{% endmacro %}
+
+common:
+  operator: true
+  context: ${KUBE_CONTEXT}
+
+services:
 EOF
-  note "scaffolded mirrord config → ${MM_CONFIG_FILE} (steal filtered by \$${KEY_ENV_VAR}; edit to add company-specific features)"
-}
-
-# Map a user-supplied queue type spelling to mirrord's identifier.
-queue_type_of() {
-  case "$1" in
-    kafka|Kafka)            echo 'Kafka' ;;
-    sqs|SQS)                echo 'SQS' ;;
-    rmq|rabbitmq|RMQ)       echo 'RMQ' ;;
-    pubsub|gcp|GCPPubSub)   echo 'GCPPubSub' ;;
-    *) return 1 ;;
-  esac
-}
-
-# Fold a comma-separated user spelling of queue types ("kafka,sqs") into an
-# accumulated comma-separated list of mirrord identifiers, validating each and
-# skipping duplicates. A service can consume several broker types at once, so
-# `--split-queues` takes a list (and may also be repeated).
-add_queue_types() {
-  local acc="$1" spec="$2" t qt
-  for t in ${spec//,/ }; do
-    qt="$(queue_type_of "$t")" || die "unknown queue type '$t' (use: kafka | sqs | rmq | pubsub)"
-    case ",${acc}," in
-      *",${qt},"*) ;;
-      *) acc="${acc:+${acc},}${qt}" ;;
-    esac
-  done
-  printf '%s' "$acc"
-}
-
-# Merge wildcard queue-splitting entries into a temp copy of the config for
-# this run (`--split-queues`). One entry is added per queue type; each uses
-# queue id "*", which applies the split to every queue of that type registered
-# for the target. The message filter matches the same session key as the HTTP
-# steal filter — so HTTP requests and queue messages follow one routing rule:
-# tagged with your key → your laptop, everything else → the deployed pod.
-# The list form of `split_queues` is used because it allows the same queue id
-# ("*") once per queue type; a map-form section already present in the config
-# is converted to the list form before appending. The scaffolded config file
-# itself is never modified.
-# CUSTOMIZE: the filter matches a `baggage` header/attribute on the messages;
-# change the name if your producers propagate the session key differently.
-with_split_queues() {
-  local config="$1" queue_types="$2"   # comma-separated mirrord queue types
-  local out="${TMPDIR:-/tmp}/mm-config-splitq-$$.json"
-  local filter='.*mirrord-session={{key}}.*'
-  if have jq; then
-    jq --arg types "$queue_types" --arg f "$filter" '
-      .feature.split_queues =
-        ((.feature.split_queues // [])
-         | if type == "array" then . else to_entries | map({queue_id: .key} + .value) end)
-        + [($types | split(","))[] | {queue_id: "*", queue_type: ., message_filter: {baggage: $f}}]
-    ' "$config" >"$out"
-  elif have python3; then
-    python3 - "$config" "$out" "$queue_types" "$filter" <<'PY'
-import json, sys
-cfg = json.load(open(sys.argv[1]))
-feature = cfg.setdefault("feature", {})
-splits = feature.get("split_queues", [])
-if isinstance(splits, dict):
-    splits = [{"queue_id": qid, **entry} for qid, entry in splits.items()]
-splits.extend(
-    {"queue_id": "*", "queue_type": qt, "message_filter": {"baggage": sys.argv[4]}}
-    for qt in sys.argv[3].split(",")
-)
-feature["split_queues"] = splits
-json.dump(cfg, open(sys.argv[2], "w"), indent=2)
-PY
-  else
-    die '--split-queues needs jq or python3 to merge the config'
-  fi
-  printf '%s' "$out"
-}
-
-# Merge a database-branch section into a temp copy of the config for this run
-# (`--migrate`). mirrord spins up an isolated copy of the service's database
-# and rewrites $DB_BRANCH_CONNECTION_ENV to point at it, so the service — and
-# any migration it runs on startup — operates on the branch while the shared
-# database stays untouched. The branch id embeds the session key, giving each
-# developer their own branch. The scaffolded config file is never modified.
-with_db_branch() {
-  local config="$1"
-  local out="${TMPDIR:-/tmp}/mm-config-dbbranch-$$.json"
-  if have jq; then
-    jq --arg type "$DB_BRANCH_TYPE" --arg ver "$DB_BRANCH_VERSION" \
-       --arg env "$DB_BRANCH_CONNECTION_ENV" --arg copy "$DB_BRANCH_COPY_MODE" \
-       --argjson ttl "$DB_BRANCH_TTL_SECS" \
-      '.feature.db_branches = [{
-         id: "{{key}}01-branch-db",
-         type: $type,
-         ttl_secs: $ttl,
-         version: $ver,
-         connection: {url: $env},
-         copy: {mode: $copy}
-       }]' "$config" >"$out"
-  elif have python3; then
-    python3 - "$config" "$out" "$DB_BRANCH_TYPE" "$DB_BRANCH_VERSION" \
-      "$DB_BRANCH_CONNECTION_ENV" "$DB_BRANCH_COPY_MODE" "$DB_BRANCH_TTL_SECS" <<'PY'
-import json, sys
-cfg = json.load(open(sys.argv[1]))
-cfg.setdefault("feature", {})["db_branches"] = [{
-    "id": "{{key}}01-branch-db",
-    "type": sys.argv[3],
-    "ttl_secs": int(sys.argv[7]),
-    "version": sys.argv[4],
-    "connection": {"url": sys.argv[5]},
-    "copy": {"mode": sys.argv[6]},
-}]
-json.dump(cfg, open(sys.argv[2], "w"), indent=2)
-PY
-  else
-    die '--migrate needs jq or python3 to merge the config'
-  fi
-  printf '%s' "$out"
+    for svc in $(list_services); do
+      service_command "${SERVICES_DIR}/${svc}"
+      printf '  %s:\n' "$svc"
+      printf '    target:\n'
+      printf '      path: deployment/%s\n' "$svc"
+      printf "      namespace: \"{{ get_env(name='%s', default='%s') }}\"\n" "$NAMESPACE_ENV_VAR" "$DEFAULT_NAMESPACE"
+      printf '    run:\n'
+      printf '      directory: ../%s\n' "$svc"
+      printf '      command: %s\n' "$(yaml_command "${RUN_ARGV[@]}")"
+      printf "    {{ self::db_branch(service='%s') }}\n\n" "$svc"
+    done
+  } >"$MM_CONFIG_FILE"
+  note "scaffolded mirrord-up config → ${MM_CONFIG_FILE} ($(list_services | wc -l | tr -d ' ') services; edit to add company-specific features)"
 }
 
 # Report the database branch created for this session (`--migrate`). The
@@ -406,8 +422,8 @@ PY
 # database can take a while), and prints one line per branch when ready.
 # Entries are matched on the session key, so only this session's branch is
 # reported even when other sessions have branches open on this machine.
-# Needs a mirrord with JSON output on `db-branches connections` (newer than
-# 3.251.0); on older versions this silently reports nothing.
+# Needs the JSON output of `db-branches connections`, added in mirrord 3.252.0;
+# on older versions this silently reports nothing.
 report_db_branch() {
   local session_key="$1" deadline=$((SECONDS + 300)) json rows
   mirrord db-branches connections --help 2>/dev/null | grep -q -- '--format' || return 0
@@ -441,137 +457,30 @@ for c in json.loads(sys.argv[1]):
   return 0
 }
 
-# Print the config exactly as mirrord will use it: templates rendered (session
-# key, filters), target merged in, and every default filled in. This is what to
-# read — and attach to a support ticket — when debugging "why is my traffic not
-# arriving". `verify-config` also validates the config, so a broken one fails
-# fast here with a clear error instead of partway through the mirrord launch.
-# Relies on the session key env var already being exported (templates read it).
-#
-# The target/namespace are passed on the mirrord command line at run time, but
-# `verify-config` only sees the file — and rejects steal mode without a target —
-# so merge them into a temp copy first, mirroring what the real launch does.
-print_resolved_config() {
-  local config="$1" target="$2" namespace="$3" label="$4"
-  local raw
-  local merged="${TMPDIR:-/tmp}/mm-verify-${label}.json"
-  local resolved_file="${TMPDIR:-/tmp}/mm-resolved-${label}.json"
-
-  if have jq; then
-    jq --arg t "deployment/${target}" --arg ns "$namespace" \
-      '.target = {path: $t, namespace: $ns}' "$config" >"$merged"
-  elif have python3; then
-    python3 - "$config" "$merged" "deployment/${target}" "$namespace" <<'PY'
-import json, sys
-cfg = json.load(open(sys.argv[1]))
-cfg["target"] = {"path": sys.argv[3], "namespace": sys.argv[4]}
-json.dump(cfg, open(sys.argv[2], "w"), indent=2)
-PY
-  else
-    # Without jq/python3 the merge is impossible; verify the file as-is and
-    # accept that steal-mode configs will report the missing-target conflict.
-    cp "$config" "$merged"
-  fi
-
-  if ! raw="$(mirrord verify-config --resolved "$merged" 2>&1)"; then
-    echo "$raw" >&2
-    die "invalid mirrord config: $config"
-  fi
-  # verify-config exits 0 even on semantic failures; the JSON carries the verdict.
-  if printf '%s' "$raw" | grep -q '"type": "Fail"'; then
-    if have jq; then
-      printf '%s' "$raw" | jq -r '.errors[]? | "mm: config error: \(.)"' >&2
-    else
-      printf '%s\n' "$raw" >&2
-    fi
-    die "invalid mirrord config: $config"
-  fi
-
-  # Extract just the resolved config (and any warnings) from the verify output.
-  # jq preferred, python3 fallback; with neither, print the raw verify output.
-  if have jq; then
-    printf '%s' "$raw" | jq -r '.warnings[]? | "mm: config warning: \(.)"' >&2
-    printf '%s' "$raw" | jq '.resolved_config' >"$resolved_file"
-  elif have python3; then
-    printf '%s' "$raw" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-for w in data.get("warnings") or []:
-    print(f"mm: config warning: {w}", file=sys.stderr)
-json.dump(data.get("resolved_config"), open(sys.argv[1], "w"), indent=2)
-' "$resolved_file"
-  else
-    printf '%s\n' "$raw" >"$resolved_file"
-  fi
-
-  # Print the concise view: exactly the wrapper's config plus the merged-in
-  # target, with the session key templates rendered — what a developer expects
-  # to read before launch. The full resolved config (every mirrord default
-  # filled in) stays in $resolved_file for deep debugging / support tickets.
-  local key_value="${!KEY_ENV_VAR}"
-  note "mirrord config for this run (${config}; fully resolved copy: ${resolved_file}):"
-  sed \
-    -e "s|{{ *get_env(name='${KEY_ENV_VAR}'[^}]*}}|${key_value}|g" \
-    -e "s|{{ *key *}}|${key_value}|g" \
-    "$merged"
+# Print the part of the mirrord-up config a run will use: the `common` block
+# and the entries of the selected services, straight from the file (templates
+# unrendered — the variables they read are printed alongside), so a developer
+# sees exactly what `mirrord up` is about to launch and where to edit it.
+print_run_config() {
+  local config="$1"; shift
+  local services="$*"
+  note "mirrord-up config (${config}):"
+  awk -v wanted=" ${services} " '
+    /^common:/   { section = "common";   keep = 1 }
+    /^services:/ { section = "services"; keep = 1 }
+    /^[^ #]/ && !/^(common|services):/ { section = ""; keep = 0 }
+    section == "services" && /^  [^ #][^:]*:/ {
+      name = $1; sub(/:$/, "", name); keep = index(wanted, " " name " ") > 0
+    }
+    keep && !/^[[:space:]]*$/ { print }
+  ' "$config"
 }
 
-# ─── SERVICE DISCOVERY ───────────────────────────────────────────────────────
-
-# A directory under SERVICES_DIR counts as a runnable service when it contains
-# something we know how to start (see service_run_command). This keeps the
-# wrapper zero-maintenance: new services show up in `mm list` automatically.
-# CUSTOMIZE: extend the markers if you add stacks (go.mod, build.gradle, ...).
-is_service_dir() {
-  local d="$1"
-  [[ -f "${d}/package.json" || -f "${d}/main.py" ]]
-}
-
-list_services() {
-  local d
-  for d in "$SERVICES_DIR"/*/; do
-    if is_service_dir "$d"; then
-      basename "$d"
-    fi
-  done
-  # Explicit success: with `set -e`, a trailing failed test here would
-  # otherwise abort the whole script when the last directory is not a service.
-  return 0
-}
-
-service_dir() {
-  local service="$1"
-  local dir="${SERVICES_DIR}/${service}"
-  if [[ ! -d "$dir" ]] || ! is_service_dir "$dir"; then
-    die "unknown service '$service' — available: $(list_services | tr '\n' ' ')"
-  fi
-  printf '%s' "$dir"
-}
-
-# Decide how to start a service locally, based on what's in its directory.
-# The result is returned via the RUN_ARGV array (bash can't return arrays).
-# CUSTOMIZE: add cases here for other stacks (go run ., ./gradlew bootRun, ...).
-service_run_command() {
-  local dir="$1"
-  RUN_ARGV=()
-  if [[ -f "${dir}/package.json" ]]; then
-    # Node/TypeScript services (and the Next.js frontend) all expose `npm run dev`.
-    # Install dependencies on first run so `mm run` works on a fresh clone.
-    if [[ ! -d "${dir}/node_modules" ]]; then
-      note 'node_modules missing — running npm install first...'
-      (cd "$dir" && npm install)
-    fi
-    RUN_ARGV=(npm run dev)
-  elif [[ -f "${dir}/main.py" ]]; then
-    # Python services: create a local virtualenv on first run.
-    if [[ ! -d "${dir}/.venv" ]]; then
-      note 'creating Python virtualenv and installing requirements...'
-      (cd "$dir" && python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt)
-    fi
-    RUN_ARGV=("${dir}/.venv/bin/python" main.py)
-  else
-    die "don't know how to run this service — add a case to service_run_command()"
-  fi
+# Minimal mirrord config for operator commands (`mirrord operator status` /
+# `session kill`), which need the kube context and operator flag only.
+write_operator_config() {
+  local out="$1"
+  printf 'kube_context: "%s"\noperator: true\n' "$KUBE_CONTEXT" >"$out"
 }
 
 # ─── COMMANDS ────────────────────────────────────────────────────────────────
@@ -581,47 +490,33 @@ cmd_list() {
   list_services | sed 's/^/  /'
 }
 
-# `mm config` — show the resolved wrapper config without starting a session.
-# The target deployment/namespace are passed on the mirrord command line at run
-# time, so they are not part of this file.
+# `mm config` — show the mirrord-up config `mm run` would launch with, and the
+# template variables it would export. The file is printed as-is (templates
+# unrendered): `mirrord up` renders it at launch, and the variables listed at
+# the top are everything the templates can read.
 cmd_config() {
-  local key='' config_file="$MM_CONFIG_FILE" target='' namespace="$DEFAULT_NAMESPACE"
-  local split_queues='' migrate=0
+  local key='' config_file="$MM_CONFIG_FILE" namespace="$DEFAULT_NAMESPACE" migrate=''
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --key)       [[ $# -ge 2 ]] || die '--key requires a value';       key="$2"; shift 2 ;;
       --config)    [[ $# -ge 2 ]] || die '--config requires a value';    config_file="$2"; shift 2 ;;
-      --target)    [[ $# -ge 2 ]] || die '--target requires a value';    target="$2"; shift 2 ;;
       --namespace) [[ $# -ge 2 ]] || die '--namespace requires a value'; namespace="$2"; shift 2 ;;
-      --split-queues)
-        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub (comma-separated for several)'
-        split_queues="$(add_queue_types "$split_queues" "$2")"
-        shift 2 ;;
-      --migrate) migrate=1; shift ;;
+      --migrate)   [[ $# -ge 2 ]] || die '--migrate requires the service name here (mm config --migrate <service>)'; migrate="$2"; shift 2 ;;
       -h|--help)
-        echo 'usage: mm config [--key NAME] [--target NAME] [--namespace NS] [--split-queues TYPES] [--migrate] [--config FILE]'
-        echo 'Prints the fully resolved mirrord config (templates rendered, defaults filled).'
+        echo 'usage: mm config [--key NAME] [--namespace NS] [--migrate SERVICE] [--config FILE]'
+        echo 'Prints the mirrord-up config and the template variables in effect for such a run.'
         return 0 ;;
       *) die "unknown config option: $1" ;;
     esac
   done
 
-  ensure_mirrord
   scaffold_config
   [[ -f "$config_file" ]] || die "config file not found: $config_file"
-  if [[ -n "$split_queues" ]]; then
-    config_file="$(with_split_queues "$config_file" "$split_queues")"
-  fi
-  if (( migrate )); then
-    config_file="$(with_db_branch "$config_file")"
-  fi
-  # Resolution needs a target (steal mode requires one); default to the first
-  # discovered service, matching what `mm run` would do.
-  target="${target:-$(list_services | head -1)}"
-  [[ -n "$target" ]] || die 'no services found — pass --target explicitly'
   key="${key:-$(default_key)}"
-  export "${KEY_ENV_VAR}=${key}"
-  print_resolved_config "$config_file" "$target" "$namespace" 'mm'
+  note "mirrord-up config: ${config_file}"
+  note "template variables: key=${key} ${NAMESPACE_ENV_VAR}=${namespace} ${MIGRATE_ENV_VAR}=${migrate:-<unset>}"
+  note "→ mirrord up adds per service: steal filtered by 'baggage: .*mirrord-session=${key}.*', queue splitting by the same key"
+  cat "$config_file"
 }
 
 cmd_setup() {
@@ -633,39 +528,36 @@ cmd_setup() {
 }
 
 cmd_run() {
-  local namespace="$DEFAULT_NAMESPACE" target='' key='' config_file="$MM_CONFIG_FILE"
-  local split_queues='' migrate=0
-  local -a services=() extra_args=() RUN_ARGV=()
+  local namespace="$DEFAULT_NAMESPACE" key='' config_file="$MM_CONFIG_FILE"
+  local migrate=0 ui=0
+  local -a services=() up_flags=() RUN_ARGV=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --key)       [[ $# -ge 2 ]] || die '--key requires a value';       key="$2"; shift 2 ;;
       --namespace) [[ $# -ge 2 ]] || die '--namespace requires a value'; namespace="$2"; shift 2 ;;
-      --target)    [[ $# -ge 2 ]] || die '--target requires a value';    target="$2"; shift 2 ;;
       --config)    [[ $# -ge 2 ]] || die '--config requires a value';    config_file="$2"; shift 2 ;;
-      --split-queues)
-        [[ $# -ge 2 && -n "$2" ]] || die '--split-queues requires queue type(s): kafka | sqs | rmq | pubsub (comma-separated for several)'
-        split_queues="$(add_queue_types "$split_queues" "$2")"
-        shift 2 ;;
       --migrate)   migrate=1; shift ;;
+      --ui)        ui=1; shift ;;
       -h|--help)   usage; return 0 ;;
-      --)          shift; extra_args=("$@"); break ;;
+      # Things that moved into the config file with mirrord up — say where.
+      --target)    die "--target is gone: set services.<service>.target.path in ${MM_CONFIG_FILE}" ;;
+      --split-queues) die 'queue splitting needs no flag — mirrord up splits every registered queue by the session key' ;;
+      --)          die "extra service arguments are gone: edit services.<service>.run.command in ${MM_CONFIG_FILE}" ;;
       -*)          die "unknown run option: $1" ;;
       *)           services+=("$1"); shift ;;
     esac
   done
 
   [[ ${#services[@]} -gt 0 ]] || die "service is required — try: mm run $(list_services | head -1)  (see: mm list)"
-  if [[ ${#services[@]} -gt 1 ]]; then
-    [[ -z "$target" ]] || die '--target only works with a single service'
-    [[ ${#extra_args[@]} -eq 0 ]] || die 'extra args after -- only work with a single service'
-    # One branch id per key: concurrent sessions would collide on it.
-    (( migrate == 0 )) || die '--migrate only works with a single service'
+  # One branch id per key: concurrent sessions would collide on it.
+  if (( migrate )) && [[ ${#services[@]} -gt 1 ]]; then
+    die '--migrate only works with a single service'
   fi
 
   # Validate every service before starting anything, so a typo in the second
   # name doesn't leave the first one already running.
-  local svc dir
+  local svc
   for svc in "${services[@]}"; do
     service_dir "$svc" >/dev/null
   done
@@ -674,109 +566,60 @@ cmd_run() {
   scaffold_config
   [[ -f "$config_file" ]] || die "config file not found: $config_file"
 
-  # --split-queues: run with a temp copy of the config that also splits every
-  # registered queue by the same session key.
-  if [[ -n "$split_queues" ]]; then
-    config_file="$(with_split_queues "$config_file" "$split_queues")"
-    note "queue splitting enabled (types=${split_queues}, all queues, filtered by the session key)"
-  fi
-
-  # --migrate: run against an isolated database branch instead of the shared DB.
-  if (( migrate )); then
-    config_file="$(with_db_branch "$config_file")"
-    note "database branch enabled — ${DB_BRANCH_CONNECTION_ENV} will point at an isolated ${DB_BRANCH_TYPE} branch (copy=${DB_BRANCH_COPY_MODE}); the shared database stays untouched"
-  fi
+  for svc in "${services[@]}"; do
+    service_prepare "$(service_dir "$svc")"
+  done
 
   ensure_cluster_ready "$namespace"
 
-  # Session key: the mirrord config reads it from $KEY_ENV_VAR (see CONFIGURATION).
-  # Exporting it here only affects the mirrord child processes, not your shell.
+  # Session key: passed to mirrord up, which derives the traffic filters from
+  # it and exposes it to the config file as the `key` template variable.
   key="${key:-$(default_key)}"
-  export "${KEY_ENV_VAR}=${key}"
+
+  # Per-run switches for the templates in the config file. Exporting them here
+  # only affects the mirrord child process, not your shell.
+  export "${NAMESPACE_ENV_VAR}=${namespace}"
+  if (( migrate )); then
+    export "${MIGRATE_ENV_VAR}=${services[0]}"
+    note "database branch enabled — ${DB_BRANCH_CONNECTION_ENV} will point at an isolated ${DB_BRANCH_TYPE} branch (copy=${DB_BRANCH_COPY_MODE}); the shared database stays untouched"
+  fi
+  (( ui )) && up_flags+=(--ui)
 
   note "session key: ${key}"
-  note "→ only requests carrying 'baggage: ... mirrord-session=${key}' are routed to your laptop"
+  note "→ only requests carrying 'baggage: ... mirrord-session=${key}' (and queue messages tagged the same way) are routed to your laptop"
   note "→ install the browser extension to tag your traffic: mm extension"
+  note "services=${services[*]} namespace=${namespace} context=${KUBE_CONTEXT}"
+  note "template variables: key=${key} ${NAMESPACE_ENV_VAR}=${namespace} ${MIGRATE_ENV_VAR}=${!MIGRATE_ENV_VAR:-<unset>}"
+  print_run_config "$config_file" "${services[@]}"
 
-  # Single service: exec replaces this script with mirrord, so Ctrl-C reaches
-  # the session directly and no orphan wrapper process is left behind. The
-  # target comes from the command line, so the one scaffolded config serves
-  # every service (convention: the Deployment is named after the directory).
-  if [[ ${#services[@]} -eq 1 ]]; then
-    svc="${services[0]}"
-    dir="$(service_dir "$svc")"
-    target="${target:-$svc}"
-    service_run_command "$dir"
-
-    # Show exactly what mirrord is about to do (and fail fast on a bad config).
-    print_resolved_config "$config_file" "$target" "$namespace" "$svc"
-    note "service=${svc} target=deployment/${target} namespace=${namespace} context=${KUBE_CONTEXT}"
-
-    # --migrate: the exec below replaces this shell, so the branch watcher must
-    # be launched first. It shares the terminal and prints its report amid the
-    # service logs once the branch is ready; on Ctrl-C it dies with the session
-    # (same process group), and its polling is time-bounded either way.
-    if (( migrate )); then
-      report_db_branch "$key" &
-    fi
-
-    cd "$dir"
-    exec mirrord exec \
-      --context "$KUBE_CONTEXT" \
-      --target "deployment/${target}" \
-      --target-namespace "$namespace" \
-      --config-file "$config_file" \
-      -- "${RUN_ARGV[@]}" ${extra_args[@]+"${extra_args[@]}"}
+  # --migrate: the exec below replaces this shell, so the branch watcher must
+  # be launched first. It shares the terminal and prints its report amid the
+  # service logs once the branch is ready; on Ctrl-C it dies with the session
+  # (same process group), and its polling is time-bounded either way.
+  if (( migrate )); then
+    report_db_branch "$key" &
   fi
 
-  # Multiple services: one concurrent mirrord session per service, all sharing
-  # the same key, so one baggage header routes an entire request chain to this
-  # laptop. Ctrl-C (or any signal) tears all of them down together.
-  # The config is identical for every session except the target, so validate
-  # and print it once using the first service's target.
-  print_resolved_config "$config_file" "${services[0]}" "$namespace" "${services[0]}"
-  note "config above applies to every session; only the target changes per service"
-
-  local -a pids=()
-  cleanup_children() {
-    local p
-    for p in "${pids[@]:-}"; do
-      kill "$p" 2>/dev/null || true
-    done
-  }
-  trap cleanup_children EXIT INT TERM
-
-  for svc in "${services[@]}"; do
-    dir="$(service_dir "$svc")"
-    service_run_command "$dir"
-    note "starting ${svc} → deployment/${svc} (namespace=${namespace})"
-    (
-      cd "$dir"
-      exec mirrord exec \
-        --context "$KUBE_CONTEXT" \
-        --target "deployment/${svc}" \
-        --target-namespace "$namespace" \
-        --config-file "$config_file" \
-        -- "${RUN_ARGV[@]}"
-    ) &
-    pids+=("$!")
-  done
-
-  # Wait for every session; if one dies, the others keep running until Ctrl-C.
-  local p status=0
-  for p in "${pids[@]}"; do
-    wait "$p" || status=$?
-  done
-  trap - EXIT INT TERM
-  return "$status"
+  # exec replaces this script with mirrord up, so Ctrl-C reaches it directly
+  # and no orphan wrapper process is left behind. mirrord up runs one session
+  # per named service, all sharing the key — so one baggage header routes an
+  # entire request chain to this laptop — and tears them all down together.
+  # --context is passed explicitly so an alternate --config file still lands
+  # on this cluster (the flag wins over `common.context` in the file).
+  exec mirrord up \
+    --config-file "$config_file" \
+    --key "$key" \
+    --context "$KUBE_CONTEXT" \
+    ${up_flags[@]+"${up_flags[@]}"} \
+    "${services[@]}"
 }
 
 cmd_sessions() {
   ensure_mirrord
   ensure_cluster_ready "$DEFAULT_NAMESPACE"
   # Operator status includes the table of active sessions (who, target, since).
-  local op_cfg="${TMPDIR:-/tmp}/mm-operator-$$.json"
-  printf '{"kube_context":"%s","operator":true}\n' "$KUBE_CONTEXT" >"$op_cfg"
+  local op_cfg="${TMPDIR:-/tmp}/mm-operator-$$.yaml"
+  write_operator_config "$op_cfg"
   mirrord operator status -f "$op_cfg"
   rm -f "$op_cfg"
 }
@@ -800,8 +643,8 @@ cmd_cleanup() {
 
   ensure_mirrord
   ensure_cluster_ready "$DEFAULT_NAMESPACE"
-  local op_cfg="${TMPDIR:-/tmp}/mm-operator-$$.json"
-  printf '{"kube_context":"%s","operator":true}\n' "$KUBE_CONTEXT" >"$op_cfg"
+  local op_cfg="${TMPDIR:-/tmp}/mm-operator-$$.yaml"
+  write_operator_config "$op_cfg"
 
   if (( kill_mine )); then
     # Deliberately no kill-all: the cluster is shared, and tearing down other
@@ -866,7 +709,16 @@ cmd_doctor() {
   if have gcloud; then check gcloud ok "$(gcloud --version 2>/dev/null | head -1)"; else check gcloud fail 'install: https://cloud.google.com/sdk/docs/install'; fi
   if gke_plugin_available; then check gke-gcloud-auth-plugin ok; else check gke-gcloud-auth-plugin fail 'run: gcloud components install gke-gcloud-auth-plugin'; fi
   if have kubectl; then check kubectl ok; else check kubectl fail 'not on PATH'; fi
-  if have mirrord; then check mirrord ok "$(mirrord --version 2>/dev/null | head -1)"; else check mirrord fail 'run: mm setup'; fi
+  if have mirrord; then
+    check mirrord ok "$(mirrord --version 2>/dev/null | head -1)"
+    if mirrord up --help >/dev/null 2>&1; then
+      check 'mirrord up' ok
+    else
+      check 'mirrord up' fail 'this mirrord has no `up` command — upgrade: brew upgrade mirrord'
+    fi
+  else
+    check mirrord fail 'run: mm setup'
+  fi
   if have npm; then check npm ok; else check npm fail 'needed for the Node services'; fi
 
   if have gcloud; then
@@ -893,8 +745,8 @@ cmd_doctor() {
   fi
 
   if have mirrord && have kubectl; then
-    local op_cfg="${TMPDIR:-/tmp}/mm-doctor-$$.json"
-    printf '{"kube_context":"%s","operator":true}\n' "$KUBE_CONTEXT" >"$op_cfg"
+    local op_cfg="${TMPDIR:-/tmp}/mm-doctor-$$.yaml"
+    write_operator_config "$op_cfg"
     if mirrord operator status -f "$op_cfg" >/dev/null 2>&1; then
       check 'mirrord operator' ok
     else
@@ -904,10 +756,16 @@ cmd_doctor() {
   fi
 
   if [[ -f "$MM_CONFIG_FILE" ]]; then
-    if grep -q "get_env(name='${KEY_ENV_VAR}'" "$MM_CONFIG_FILE"; then
-      check 'mm config' ok "${MM_CONFIG_FILE} (key from \$${KEY_ENV_VAR})"
+    # A service added to the repo after scaffolding is missing from the file;
+    # `mirrord up` would reject it by name. Re-scaffolding picks it up.
+    local svc missing=''
+    for svc in $(list_services); do
+      grep -Eq "^  ${svc}:" "$MM_CONFIG_FILE" || missing="${missing:+${missing} }${svc}"
+    done
+    if [[ -z "$missing" ]]; then
+      check 'mm config' ok "$MM_CONFIG_FILE"
     else
-      check 'mm config' ok "${MM_CONFIG_FILE} (customized — key no longer from \$${KEY_ENV_VAR})"
+      check 'mm config' fail "${MM_CONFIG_FILE} lacks: ${missing} — add them, or delete the file to re-scaffold"
     fi
   else
     check 'mm config' ok 'not scaffolded yet (created automatically on first run)'
