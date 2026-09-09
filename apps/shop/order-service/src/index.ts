@@ -228,7 +228,7 @@ async function createOrderDirect(
 
   await startOrderFulfillment({ orderId, baggage });
 
-  return { orderId, status: "confirmed" };
+  return { orderId, status: "confirmed 0909" };
 }
 
 app.post("/orders", async (req, res) => {
