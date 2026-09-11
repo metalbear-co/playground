@@ -9,7 +9,8 @@
     "lint": "tsc --noEmit",
     "eval": "tsx eval/run-eval.ts",
     "eval:generate": "tsx eval/dataset/generate.ts",
-    "eval:refresh": "tsx eval/dataset/refresh.ts"
+    "eval:refresh": "tsx eval/dataset/refresh.ts",
+    "eval:show": "tsx eval/show.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
