@@ -3,6 +3,11 @@
 -- Captured from https://playground.metalbear.dev on 2026-08-23 via the public shop API.
 -- Regenerate with scripts/capture-catalogue.sh.
 --
+-- Product 4 is priced at 2799 here while the frozen March fixture still says
+-- 2499. That gap is deliberate and load-bearing: it is the price change the
+-- eval labels have not caught up with. Re-capturing from a catalogue where the
+-- two agree would remove it and the suite would stop failing.
+--
 -- The 8-product snapshot hardcoded in
 -- .github/workflows/ci-demo-shop-mirrord-vs-baseline.yml (frozen 2026-03-16)
 -- is a different thing: that one is the stale fixture the agent eval demo is
@@ -12,7 +17,7 @@ INSERT INTO products (id, name, description, price_cents, stock, image_urls, is_
   (1, 'Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 1159, '["team_work_makes_the_Dream_work_ljp4we"]'::jsonb, true),
   (2, 'Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 169, '["","Metal Mart/samples/mirrord-hoodie-front"]'::jsonb, true),
   (3, 'Mind The Gap Sticker', 'MetalBear Mind The Gap sticker', 499, 161, '["Mind_the_Gap_pkyuc6"]'::jsonb, false),
-  (4, 'Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2499, 41, '["Mind_the_gap_-_Front_anazkh","Mind_the_gap_-_Back_oh9jyf"]'::jsonb, false),
+  (4, 'Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2799, 41, '["Mind_the_gap_-_Front_anazkh","Mind_the_gap_-_Back_oh9jyf"]'::jsonb, false),
   (5, 'Increase Velocity Sticker', 'MetalBear Increase Velocity sticker', 499, 189, '["Increase_velocity_mfsov2"]'::jsonb, false),
   (6, 'Increase Velocity T-Shirt', 'MetalBear Increase Velocity tee — front and back designs', 2499, 81, '["Increase_Velocity_-_Front_c2dgw6","Increase_Velocity_-_Back_ywhxi6"]'::jsonb, false),
   (7, 'Cloudboat Willie T-Shirt', 'MetalBear Cloudboat Willie tee — front and back designs', 2499, 44, '["Cloudboat_Willie_-_Front_wpgqi2","Cloudboat_Willie_-_Back_z05dna"]'::jsonb, false),

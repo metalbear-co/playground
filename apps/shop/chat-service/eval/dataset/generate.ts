@@ -168,54 +168,60 @@ function build(catalogue: Product[]): EvalCase[] {
       expected: order([[best, 1]]), scoring: "exact", tag: "budget-ceiling" });
   }
 
-  // -- F. quantity boundary (exact) ----------------------------------------
-  // At exactly the stock level the order stands; one over and it cannot.
-  // These are the cases stock drift moves.
-  for (const p of byId.slice(0, 8)) {
-    add({ input: `I need ${p.stock} of the ${p.name} for an event.`,
-      expected: order([[p, p.stock]]), scoring: "exact", tag: "quantity-at-stock" });
-
-    const sameKind = inStock.filter((x) => x.id !== p.id && kindOf(x) === kindOf(p));
-    const fallback = [...sameKind].sort((a, b) => b.stock - a.stock || a.id - b.id)[0];
-    if (fallback) {
-      // Scored on the action, not the substitute. Which same-kind product to
-      // offer is a tiebreak between near-identical items — the stickers share a
-      // price and differ by a unit or two of stock, so "most stock" is a rule
-      // the agent has no way to infer and no customer would care about. The
-      // drift signal lives in the action flipping between place_order and
-      // offer_alternative as stock moves, and that is what this scores.
-      add({ input: `I need ${p.stock + 25} of the ${p.name} for an event.`,
-        expected: alternative(fallback, `only ${p.stock} of the ${p.name} are in stock`),
-        scoring: "tool", tag: "quantity-over-stock" });
-    }
-  }
-
-  // -- G. family variant that does not exist (offer_alternative, exact) ----
-  // "a Mind The Gap hoodie" — the family exists, that variant does not, and the
-  // family has exactly one member, so the substitute is not a matter of taste.
-  const missingVariants = ["hoodie", "mug", "cap", "poster"];
+  // -- F. bulk orders beyond any plausible stock (offer_alternative, tool) --
+  //
+  // A conference-sized quantity nobody carries. The number is chosen to exceed
+  // every product's stock rather than read off any snapshot, which is what
+  // makes these cases worth having: they test whether the agent verifies stock
+  // before committing, and they answer the same way whatever the catalogue is
+  // doing. A case whose expected answer moves with the data tests the fixture,
+  // not the agent.
+  //
+  // An earlier revision generated "I need <stock> of X" and "I need <stock>+25
+  // of X" straight from the snapshot's own counts. Those failed the moment
+  // stock moved, which looked like drift detection but was circular — and no
+  // one writes a test asking for exactly the number of units in the warehouse.
+  const bulkPhrasings: Array<(n: string, q: number) => string> = [
+    (n, q) => `I need ${q} ${n}s for a conference next month.`,
+    (n, q) => `Can you do a bulk order — ${q} of the ${n}?`,
+    (n, q) => `We want ${q} ${n}s for an event. Possible?`,
+  ];
+  // A flat constant, not derived from the snapshot. Deriving it — max stock plus
+  // a margin — reintroduces exactly the coupling these cases exist to avoid: the
+  // figure would sit above stock in the snapshot it was computed from and below
+  // it in a catalogue that has since restocked, so the expected answer would
+  // flip with the data. 5000 units of a sticker is beyond any merch shop, which
+  // is the property that has to hold in every catalogue.
+  const beyondAnyStock = 5000;
   for (const p of byId) {
-    const family = familyOf(p);
-    if (!family) continue;
-    const familyMembers = inStock.filter((x) => familyOf(x) === family);
-    if (familyMembers.length !== 1) continue;
-    for (const variant of missingVariants) {
-      add({ input: `Do you sell a ${family} ${variant}?`,
-        expected: alternative(p, `no ${family} ${variant} in the catalogue`),
-        scoring: "exact", tag: "variant-missing" });
+    for (const phrase of bulkPhrasings) {
+      // Scored on the action alone. Which substitute to offer when nothing can
+      // fill the order is a judgement call between comparable products, and
+      // scoring it would measure taste rather than correctness.
+      add({
+        input: phrase(p.name, beyondAnyStock),
+        expected: alternative(p, `no product has ${beyondAnyStock} units available`),
+        scoring: "tool",
+        tag: "bulk-beyond-stock",
+      });
     }
   }
 
   // -- H. product kind absent entirely (offer_alternative, tool) -----------
   // Scored on the action only: when nothing of that kind exists, several
   // substitutes are equally defensible.
-  for (const kind of ["mug", "hoodie", "keychain", "tote bag", "notebook", "cap", "plush toy"]) {
+  const kindPhrasings = [
+    (k: string) => `I'm looking for a ${k} — what have you got?`,
+    (k: string) => `Any chance you sell a ${k}?`,
+    (k: string) => `Do you do ${k}s?`,
+  ];
+  for (const kind of ["mug", "hoodie", "keychain", "tote bag", "notebook", "cap", "plush toy", "poster", "water bottle"]) {
     const exists = inStock.some((p) => p.name.toLowerCase().includes(kind.split(" ")[0]));
     if (exists) continue;
-    add({ input: `I'm looking for a ${kind} — what have you got?`,
-      expected: alternative(byPrice[0], `no ${kind} in the catalogue`), scoring: "tool", tag: "kind-missing" });
-    add({ input: `Any chance you sell a ${kind}?`,
-      expected: alternative(byPrice[0], `no ${kind} in the catalogue`), scoring: "tool", tag: "kind-missing" });
+    for (const phrase of kindPhrasings) {
+      add({ input: phrase(kind),
+        expected: alternative(byPrice[0], `no ${kind} in the catalogue`), scoring: "tool", tag: "kind-missing" });
+    }
   }
 
   // -- I. refunds (issue_refund, exact) ------------------------------------
