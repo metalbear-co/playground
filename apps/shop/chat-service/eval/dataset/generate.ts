@@ -265,14 +265,28 @@ const perClass = Number(arg("per-class", "6"));
  * and keeps the suite small enough to run in front of an audience.
  */
 function balance(all: EvalCase[], n: number): EvalCase[] {
-  const seen = new Map<string, number>();
-  const kept: EvalCase[] = [];
+  const byTag = new Map<string, EvalCase[]>();
   for (const c of all) {
-    const used = seen.get(c.tag) ?? 0;
-    if (used >= n) continue;
-    seen.set(c.tag, used + 1);
-    kept.push(c);
+    const bucket = byTag.get(c.tag);
+    if (bucket) bucket.push(c);
+    else byTag.set(c.tag, [c]);
   }
+
+  // Spread the sample across each class rather than taking its first N. Cases
+  // are generated in product order, so a prefix silently drops every
+  // high-numbered product — a suite capped low would omit whole products and
+  // any drift affecting them, which looks like the agent improving. Striding
+  // keeps the product range intact at every size.
+  const kept: EvalCase[] = [];
+  for (const bucket of byTag.values()) {
+    if (bucket.length <= n) {
+      kept.push(...bucket);
+      continue;
+    }
+    const stride = bucket.length / n;
+    for (let i = 0; i < n; i++) kept.push(bucket[Math.floor(i * stride)]);
+  }
+  kept.sort((a, b) => a.id.localeCompare(b.id));
   // Renumber so ids stay contiguous and stable for a given catalogue + N.
   return kept.map((c, i) => ({ ...c, id: `case-${String(i + 1).padStart(4, "0")}` }));
 }

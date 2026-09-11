@@ -27,7 +27,12 @@ function arg(name: string, fallback: string): string {
 
 const datasetPath = arg("dataset", "eval/dataset/shopping-agent-v1.jsonl");
 const threshold = Number(arg("threshold", "0.85"));
-const concurrency = Number(arg("concurrency", process.env.EVAL_CONCURRENCY ?? "8"));
+// Wall-clock is dominated by model latency per case, so this is the setting that
+// decides how long a run takes: 84 cases go from 105s at 8 to 59s at 16. Going
+// to 32 saves only another 12s and raises the chance of a rate-limit mid-run,
+// which surfaces as errored cases scored as failures — survivable in a run you
+// expect to fail, not in one you need to pass.
+const concurrency = Number(arg("concurrency", process.env.EVAL_CONCURRENCY ?? "16"));
 const limit = Number(arg("limit", "0"));
 const outPath = arg("out", "eval/results/latest.json");
 
