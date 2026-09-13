@@ -105,17 +105,32 @@ export const TOOLS: Anthropic.Tool[] = [
     description:
       "Offer a different product instead. Ends the conversation turn. Use this when what the " +
       "customer asked for is out of stock, short of the quantity they want, or not in the " +
-      "catalogue at all. Pick the closest available product by kind and price.",
+      "catalogue at all. Pick the closest available product by kind and price. Record what " +
+      "could not be filled in instead_of whenever the customer named a product we carry, so " +
+      "unmet demand is captured rather than left in prose.",
     input_schema: {
       type: "object",
       properties: {
         product_id: { type: "integer", description: "The product being offered instead." },
         reason: { type: "string", description: "Short explanation for the customer." },
+        instead_of: {
+          type: "object",
+          description:
+            "The request that could not be filled. Give this whenever the customer asked for a " +
+            "product in the catalogue — including when the problem is the quantity rather than " +
+            "the product. Omit it only when they asked for something we do not carry at all, " +
+            "which has no product id.",
+          properties: {
+            product_id: { type: "integer" },
+            quantity: { type: "integer" },
+          },
+          required: ["product_id", "quantity"],
+          additionalProperties: false,
+        },
       },
       required: ["product_id", "reason"],
       additionalProperties: false,
     },
-    strict: true,
   },
   {
     name: "issue_refund",
@@ -160,11 +175,22 @@ export function asTerminalCall(name: string, input: unknown): TerminalCall | nul
         },
       };
     }
-    case "offer_alternative":
+    case "offer_alternative": {
+      const requested = args.instead_of as { product_id?: unknown; quantity?: unknown } | undefined;
+      const instead =
+        requested && Number.isFinite(Number(requested.product_id))
+          ? {
+              instead_of: {
+                product_id: Number(requested.product_id),
+                quantity: Number(requested.quantity),
+              },
+            }
+          : {};
       return {
         tool: "offer_alternative",
-        args: { product_id: Number(args.product_id), reason: String(args.reason ?? "") },
+        args: { product_id: Number(args.product_id), reason: String(args.reason ?? ""), ...instead },
       };
+    }
     case "issue_refund":
       return {
         tool: "issue_refund",

@@ -65,8 +65,15 @@ function order(items: Array<[Product, number]>): EvalCase["expected"] {
   };
 }
 
-function alternative(p: Product, reason: string): EvalCase["expected"] {
-  return { tool: "offer_alternative", args: { product_id: p.id, reason } };
+function alternative(
+  p: Product,
+  reason: string,
+  insteadOf?: { product_id: number; quantity: number }
+): EvalCase["expected"] {
+  return {
+    tool: "offer_alternative",
+    args: { product_id: p.id, reason, ...(insteadOf ? { instead_of: insteadOf } : {}) },
+  };
 }
 
 // ------------------------------------------------------------------- build
@@ -195,13 +202,17 @@ function build(catalogue: Product[]): EvalCase[] {
   const beyondAnyStock = 5000;
   for (const p of byId) {
     for (const phrase of bulkPhrasings) {
-      // Scored on the action alone. Which substitute to offer when nothing can
-      // fill the order is a judgement call between comparable products, and
-      // scoring it would measure taste rather than correctness.
+      // Scored on the request rather than the substitute. Which product to
+      // offer when nothing can fill the order is a judgement call between
+      // comparable items; which request could not be filled is a fact, and it
+      // is the half worth asserting on.
       add({
         input: phrase(p.name, beyondAnyStock),
-        expected: alternative(p, `no product has ${beyondAnyStock} units available`),
-        scoring: "tool",
+        expected: alternative(p, `no product has ${beyondAnyStock} units available`, {
+          product_id: p.id,
+          quantity: beyondAnyStock,
+        }),
+        scoring: "request",
         tag: "bulk-beyond-stock",
       });
     }

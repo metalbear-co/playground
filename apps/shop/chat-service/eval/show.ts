@@ -36,8 +36,11 @@ function expectation(c: EvalCase): string {
       const items = e.args.items.map((i) => `${i.quantity} x #${i.productId}`).join(", ");
       return `place_order  ${items}  total ${money(e.args.total_cents)}`;
     }
-    case "offer_alternative":
-      return `offer_alternative  product #${e.args.product_id}`;
+    case "offer_alternative": {
+      const req = e.args.instead_of;
+      const unmet = req ? `  (could not fill ${req.quantity} x #${req.product_id})` : "";
+      return `offer_alternative  product #${e.args.product_id}${unmet}`;
+    }
     case "issue_refund":
       return `issue_refund  order #${e.args.order_id}`;
   }
@@ -61,6 +64,12 @@ for (const [tag, group] of [...byTag].sort()) {
     // the argument is a judgement call, which is otherwise invisible.
     console.log(`  customer  "${c.input}"`);
     console.log(`  expected  ${expectation(c)}`);
-    console.log(`  scored on ${c.scoring === "exact" ? "tool + arguments" : "tool only"}\n`);
+    const how =
+      c.scoring === "exact"
+        ? "tool + arguments"
+        : c.scoring === "request"
+          ? "tool + the request it could not fill"
+          : "tool only";
+    console.log(`  scored on ${how}\n`);
   }
 }

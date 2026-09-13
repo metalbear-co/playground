@@ -83,6 +83,39 @@ export function judge(
 
   const toolCorrect = actual.tool === evalCase.expected.tool;
 
+  // `request` scoring splits an offer_alternative case in two: which request
+  // could not be filled has a right answer, which substitute to offer does not.
+  // Only the first half is scored. A label without instead_of has no request to
+  // check — the customer asked for something outside the catalogue — so it
+  // falls back to matching the action alone.
+  if (evalCase.scoring === "request") {
+    if (!toolCorrect) {
+      return {
+        ...base,
+        toolCorrect,
+        passed: false,
+        reason: `wrong-tool (${actual.tool} instead of ${evalCase.expected.tool})`,
+      };
+    }
+    const want =
+      evalCase.expected.tool === "offer_alternative" ? evalCase.expected.args.instead_of : undefined;
+    if (!want) return { ...base, toolCorrect, passed: true, reason: "ok" };
+
+    const got = actual.tool === "offer_alternative" ? actual.args.instead_of : undefined;
+    if (!got) {
+      return { ...base, toolCorrect, passed: false, reason: "missing-instead-of" };
+    }
+    const matches = got.product_id === want.product_id && got.quantity === want.quantity;
+    return {
+      ...base,
+      toolCorrect,
+      passed: matches,
+      reason: matches
+        ? "ok"
+        : `wrong-instead-of (#${got.product_id}x${got.quantity} vs #${want.product_id}x${want.quantity})`,
+    };
+  }
+
   // `tool` scoring is for cases where the right action is clear but the specific
   // argument is a judgement call — see the note on Scoring in types.ts.
   if (evalCase.scoring === "tool") {

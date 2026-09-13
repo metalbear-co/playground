@@ -11,8 +11,12 @@ import type { TerminalCall } from "../src/agent/types.js";
  *            "we don't sell that, offer something else", where any of several
  *            products would be a reasonable substitute. Scoring these on the
  *            argument would measure taste, not correctness.
+ * `request` — tool name plus `instead_of`: the request the agent could not
+ *            fill. Splits an offer_alternative case into the half that has a
+ *            right answer (which request was unfillable) and the half that does
+ *            not (which substitute to offer), and scores only the first.
  */
-export type Scoring = "exact" | "tool";
+export type Scoring = "exact" | "tool" | "request";
 
 export type EvalCase = {
   id: string;

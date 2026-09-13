@@ -29,7 +29,20 @@ export type Order = {
  */
 export type TerminalCall =
   | { tool: "place_order"; args: { items: OrderItem[]; total_cents: number; customer_email?: string } }
-  | { tool: "offer_alternative"; args: { product_id: number; reason: string } }
+  | {
+      tool: "offer_alternative";
+      args: {
+        /** The product being offered instead. */
+        product_id: number;
+        reason: string;
+        /**
+         * The request that could not be filled, when it names a product we
+         * carry. Absent when the customer asked for something outside the
+         * catalogue entirely — there is no id for a mug we do not sell.
+         */
+        instead_of?: { product_id: number; quantity: number };
+      };
+    }
   | { tool: "issue_refund"; args: { order_id: number; reason: string } };
 
 export const TERMINAL_TOOLS = ["place_order", "offer_alternative", "issue_refund"] as const;
