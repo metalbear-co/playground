@@ -1,0 +1,26 @@
+# Health checks for the two visualization backends.
+#
+# Both serve 404 at `/`, which is where a GCE load balancer probes by default,
+# and a backend that fails its health check is dropped from rotation and
+# answers 502. Each probe therefore names a path the service actually serves.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: visualization-shop-frontend-backendconfig
+spec:
+  timeoutSec: 3600
+  healthCheck:
+    type: HTTP
+    port: 3000
+    requestPath: /visualization-shop
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: visualization-shop-backend-backendconfig
+spec:
+  timeoutSec: 3600
+  healthCheck:
+    type: HTTP
+    port: 8080
+    requestPath: /healthz

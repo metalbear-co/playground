@@ -1,0 +1,21 @@
+# Cluster visualization for the demo cluster.
+#
+# Deployed into `shop` rather than its own namespace, which is the one place
+# this diverges from playground. A GCE Ingress can only route to Services in
+# its own namespace, and the single Ingress that terminates TLS for
+# agent-evals.metalbear.dev lives in `shop`. Playground reaches these same
+# Services through the Gateway API, which has no such restriction.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: shop
+
+resources:
+  - ../../../manifests/visualization-shop
+  - backendconfig.yaml
+
+patches:
+  - path: backend-patch.yaml
+  - path: service-frontend-patch.yaml
+  - path: service-backend-patch.yaml
+  - path: clusterrolebinding-patch.yaml

@@ -1,0 +1,11 @@
+# The shared manifest names the ServiceAccount's namespace literally, and the
+# namespace transformer does not rewrite it, so the binding would still point
+# at a namespace this cluster does not have.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: visualization-shop-backend-reader
+subjects:
+  - kind: ServiceAccount
+    name: visualization-shop-backend
+    namespace: shop

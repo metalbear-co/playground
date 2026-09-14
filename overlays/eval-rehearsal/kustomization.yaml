@@ -14,3 +14,4 @@ resources:
   - namespaces.yaml
   - infra
   - shop
+  - visualization-shop

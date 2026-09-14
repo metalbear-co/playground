@@ -51,6 +51,31 @@ spec:
     - host: agent-evals.metalbear.dev
       http:
         paths:
+          # The visualization serves under /visualization-shop and calls its own
+          # backend under /visualization-shop/api. Both are matched ahead of the
+          # catch-all so the storefront does not swallow them; the api prefix is
+          # listed first because it is the more specific of the two.
+          - path: /visualization-shop/api/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: visualization-shop-backend
+                port:
+                  number: 80
+          - path: /visualization-shop
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: visualization-shop-frontend
+                port:
+                  number: 80
+          - path: /visualization-shop/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: visualization-shop-frontend
+                port:
+                  number: 80
           - path: /*
             pathType: ImplementationSpecific
             backend:

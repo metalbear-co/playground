@@ -1,0 +1,14 @@
+# The banner in the UI reads from CLUSTER_NAME, so it has to name this cluster
+# rather than the one the shared manifests were written for.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visualization-shop-backend
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          env:
+            - name: CLUSTER_NAME
+              value: agent-evals-rehearsal
