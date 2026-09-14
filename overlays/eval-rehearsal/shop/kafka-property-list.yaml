@@ -1,0 +1,32 @@
+# Broker connection for Kafka queue splitting on this cluster.
+#
+# chat-service's MirrordSplitConfig references this MirrordPropertyList by name.
+# The canonical copy lives at
+# manifests/shop/base/app/delivery-service/mirrord-property-list.yaml, next to the
+# service it was first written for — and this cluster does not run delivery-service,
+# so that copy never gets applied here. Kustomize will not pull a single file from
+# outside the overlay, hence the duplicate; keep the two in step if the broker moves.
+#
+# Apply this one directly:
+#
+#   kubectl apply -n shop -f overlays/eval-rehearsal/shop/kafka-property-list.yaml
+#
+# It is deliberately left out of kustomization.yaml. Kustomize expands any kind
+# whose name ends in "List" as a Kubernetes List and reads its `items`; this CRD
+# has none, so listing it as a resource drops it silently and still exits 0.
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: shop-kafka-connection
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.infra.svc.cluster.local:9092
+    - name: client.id
+      value: mirrord-operator-shop
+    - name: session.timeout.ms
+      value: "30000"
+    - name: max.poll.interval.ms
+      value: "60000"
+    - name: partition.assignment.strategy
+      value: range
