@@ -161,6 +161,11 @@ function build(catalogue: Product[]): EvalCase[] {
 
   // Budget ceilings. Under a cap, buy the dearest item that still fits — a
   // single answer whenever that price is unique in the catalogue.
+  //
+  // Both phrasings name that rule outright. Asking for the "best" or "nicest"
+  // option within a budget reads as a matter of taste, and an agent that picks
+  // any affordable product has answered the customer perfectly well; scoring
+  // that against one labelled product measures taste rather than correctness.
   for (const cap of [1000, 2000, 3000, 5000]) {
     const affordable = byPrice.filter((p) => p.price_cents <= cap);
     if (affordable.length === 0) continue;
@@ -169,9 +174,9 @@ function build(catalogue: Product[]): EvalCase[] {
       skipped.push(`budget-ceiling/${money(cap)}: price tie, no single defensible answer`);
       continue;
     }
-    add({ input: `I've got ${money(cap)} to spend. Get me the best thing that fits.`,
+    add({ input: `I've got ${money(cap)} to spend and want to use as much of it as I can — order me the most expensive item that still fits.`,
       expected: order([[best, 1]]), scoring: "exact", tag: "budget-ceiling" });
-    add({ input: `Nothing over ${money(cap)} please — what's the nicest option in that range?`,
+    add({ input: `Order me the priciest thing you sell for ${money(cap)} or less.`,
       expected: order([[best, 1]]), scoring: "exact", tag: "budget-ceiling" });
   }
 
