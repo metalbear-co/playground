@@ -15,7 +15,7 @@
 
 INSERT INTO products (id, name, description, price_cents, stock, image_urls, is_new) VALUES
   (1, 'Team Work Makes The Dream Work Sticker', 'MetalBear teamwork sticker', 499, 1159, '["team_work_makes_the_Dream_work_ljp4we"]'::jsonb, true),
-  (2, 'Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 169, '["","Metal Mart/samples/mirrord-hoodie-front"]'::jsonb, true),
+  (2, 'Team Work Makes The Dream Work T-Shirt', 'MetalBear teamwork tee — front and back designs', 2499, 169, '["team_Work_makes_the_Dream_Work_-_front_w5qdnb","team_work_makes_the_dream_work_-_back_onanux"]'::jsonb, true),
   (3, 'Mind The Gap Sticker', 'MetalBear Mind The Gap sticker', 499, 161, '["Mind_the_Gap_pkyuc6"]'::jsonb, false),
   (4, 'Mind The Gap T-Shirt', 'MetalBear Mind The Gap tee — front and back designs', 2799, 41, '["Mind_the_gap_-_Front_anazkh","Mind_the_gap_-_Back_oh9jyf"]'::jsonb, false),
   (5, 'Increase Velocity Sticker', 'MetalBear Increase Velocity sticker', 499, 189, '["Increase_velocity_mfsov2"]'::jsonb, false),
