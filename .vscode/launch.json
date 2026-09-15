@@ -148,6 +148,27 @@
             "cwd": "${workspaceFolder}/apps/shop/inventory-service"
         },
         {
+            "name": "metal-mart-frontend (Next.js)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "cwd": "${workspaceFolder}/apps/shop/metal-mart-frontend",
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "port": 9229,
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "env": {
+                "NEXT_BASE_PATH": "/shop",
+                "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxas4fpir"
+            }
+        },
+        {
             "name": "visualization-backend",
             "type": "node",
             "request": "launch",
