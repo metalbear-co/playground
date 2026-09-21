@@ -10,6 +10,17 @@ import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+function PromoBanner() {
+  return (
+    <div
+      data-testid="promo-banner"
+      className="w-full bg-pink-500 px-4 py-2.5 text-center text-sm font-semibold text-white"
+    >
+      🎉 Big Sale — Up to 30% Off Everything!
+    </div>
+  );
+}
+
 function ProductTile({
   product,
   variant,
@@ -151,6 +162,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <PromoBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +174,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <PromoBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +191,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <PromoBanner />
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
