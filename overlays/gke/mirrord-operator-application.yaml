@@ -61,6 +61,7 @@ spec:
           temporalSplitting: true
           pgBranching: true
           previewEnv: true
+          topology: true
           shareIngress:
             # Must match shareIngress.shareDomain on the mirrord-share-ingress Application.
             shareDomain: preview.playground.metalbear.dev
