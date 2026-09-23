@@ -1,0 +1,95 @@
+name: ci-lab
+
+on:
+  pull_request:
+    paths:
+      - "apps/ci-lab/**"
+      - "manifests/ci-lab/**"
+      - "overlays/gke/ci-lab-application.yaml"
+      - ".github/workflows/ci-lab.yaml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect which pull request this is
+        id: scope
+        run: |
+          set -euo pipefail
+          files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)"
+          printf '%s\n' "$files"
+          account=false
+          login=false
+          auth=false
+          printf '%s\n' "$files" | grep -q '^apps/ci-lab/account-srvc/' && account=true || true
+          printf '%s\n' "$files" | grep -q '^apps/ci-lab/login-app/' && login=true || true
+          printf '%s\n' "$files" | grep -q '^apps/ci-lab/auth-srvc/' && auth=true || true
+          echo "account=$account" >> "$GITHUB_OUTPUT"
+          echo "login=$login" >> "$GITHUB_OUTPUT"
+          echo "auth=$auth" >> "$GITHUB_OUTPUT"
+
+      - name: Install mirrord 3.258.0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o mirrord.zip "https://github.com/metalbear-co/mirrord/releases/download/3.258.0/mirrord_linux_x86_64.zip"
+          echo "34b89237b8af334d7b1e284be7bc7c0bf43d62f121e4b72cc4e1968db68446f9  mirrord.zip" | sha256sum -c
+          unzip -o mirrord.zip
+          sudo mv mirrord /usr/local/bin/mirrord
+          sudo chmod +x /usr/local/bin/mirrord
+          mirrord --version
+
+      - name: Install kubectl
+        run: |
+          curl -fsSL -o kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl get ns ci-lab
+
+      - name: Set up Java
+        if: steps.scope.outputs.account == 'true' || steps.scope.outputs.auth == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Node
+        if: steps.scope.outputs.login == 'true' || steps.scope.outputs.auth == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright browser
+        if: steps.scope.outputs.login == 'true' || steps.scope.outputs.auth == 'true'
+        working-directory: apps/ci-lab/login-app
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Test A, account-srvc pull request
+        if: steps.scope.outputs.account == 'true'
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+        run: ./apps/ci-lab/run-a.sh
+
+      - name: Test B, login-app pull request
+        if: steps.scope.outputs.login == 'true'
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+        run: ./apps/ci-lab/run-b-login.sh
+
+      - name: Test B, auth-srvc pull request
+        if: steps.scope.outputs.auth == 'true'
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+        run: ./apps/ci-lab/run-b-auth.sh

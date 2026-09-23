@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ci-lab
+
+resources:
+  - postgres.yaml
+  - profile-srvc.yaml
+  - account-srvc.yaml
+  - auth-srvc.yaml
+  - login-app.yaml
