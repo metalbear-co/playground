@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-srvc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-srvc
+  template:
+    metadata:
+      labels:
+        app: auth-srvc
+    spec:
+      containers:
+        - name: auth-srvc
+          image: ghcr.io/metalbear-co/playground-auth-srvc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DEMO_USER
+              value: demo
+            - name: DEMO_PASSWORD
+              value: demo-pass
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-srvc
+spec:
+  selector:
+    app: auth-srvc
+  ports:
+    - port: 8080
+      targetPort: 8080

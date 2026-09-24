@@ -35,3 +35,9 @@ apps/shop/*/dist/
 localstack/
 # Scaffolded per-developer mirrord config written by apps/shop/scripts/mm
 apps/shop/.mirrord/
+
+# ci-lab build output
+apps/ci-lab/**/target/
+apps/ci-lab/login-app/dist/
+apps/ci-lab/login-app/test-results/
+apps/ci-lab/login-app/playwright-report/

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile-srvc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: profile-srvc
+  template:
+    metadata:
+      labels:
+        app: profile-srvc
+    spec:
+      containers:
+        - name: profile-srvc
+          image: ghcr.io/metalbear-co/playground-profile-srvc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile-srvc
+spec:
+  selector:
+    app: profile-srvc
+  ports:
+    - port: 8080
+      targetPort: 8080

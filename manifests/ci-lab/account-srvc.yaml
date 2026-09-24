@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-srvc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: account-srvc
+  template:
+    metadata:
+      labels:
+        app: account-srvc
+    spec:
+      containers:
+        - name: account-srvc
+          image: ghcr.io/metalbear-co/playground-account-srvc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: PROFILE_URL
+              value: http://profile-srvc:8080
+            - name: DATABASE_URL
+              value: jdbc:postgresql://postgres:5432/accounts?user=account&password=account
+            - name: FETCHED_BY
+              value: staging
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-srvc
+spec:
+  selector:
+    app: account-srvc
+  ports:
+    - port: 8080
+      targetPort: 8080
