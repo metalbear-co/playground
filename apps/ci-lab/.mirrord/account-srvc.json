@@ -1,7 +1,9 @@
 {
   "target": {
-    "path": "targetless",
-    "namespace": "ci-lab"
+    "namespace": "ci-lab",
+    "path": {
+      "deployment": "account-srvc"
+    }
   },
   "ci": {
     "output_dir": "/tmp/mirrord"
