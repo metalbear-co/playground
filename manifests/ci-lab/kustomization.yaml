@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: ci-lab
 
 resources:
+  - mirrord-ci-rbac.yaml
   - postgres.yaml
   - profile-srvc.yaml
   - account-srvc.yaml
