@@ -1,0 +1,21 @@
+{
+  "target": {
+    "path": "targetless",
+    "namespace": "ci-lab"
+  },
+  "ci": {
+    "output_dir": "/tmp/mirrord"
+  },
+  "feature": {
+    "fs": "local",
+    "env": {
+      "override": {
+        "AUTH_URL": "http://auth-srvc.ci-lab.svc.cluster.local:8080"
+      }
+    },
+    "network": {
+      "incoming": "off",
+      "outgoing": true
+    }
+  }
+}

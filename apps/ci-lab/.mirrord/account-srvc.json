@@ -1,0 +1,23 @@
+{
+  "target": {
+    "path": "targetless",
+    "namespace": "ci-lab"
+  },
+  "ci": {
+    "output_dir": "/tmp/mirrord"
+  },
+  "feature": {
+    "fs": "local",
+    "env": {
+      "override": {
+        "PROFILE_URL": "http://profile-srvc.ci-lab.svc.cluster.local:8080",
+        "DATABASE_URL": "jdbc:postgresql://postgres.ci-lab.svc.cluster.local:5432/accounts?user=account&password=account",
+        "FETCHED_BY": "pull-request"
+      }
+    },
+    "network": {
+      "incoming": "off",
+      "outgoing": true
+    }
+  }
+}

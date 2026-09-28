@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+data:
+  init.sql: |
+    CREATE TABLE account (
+        username text PRIMARY KEY,
+        name text NOT NULL,
+        email text NOT NULL,
+        password text NOT NULL,
+        last_fetched_at timestamptz,
+        fetched_by text
+    );
+
+    INSERT INTO account (username, name, email, password)
+    VALUES ('demo', 'Demo User', 'demo@example.com', 'demo-pass');
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: account
+            - name: POSTGRES_PASSWORD
+              value: account
+            - name: POSTGRES_DB
+              value: accounts
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "account", "-d", "accounts"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

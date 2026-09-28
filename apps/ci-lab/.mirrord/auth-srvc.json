@@ -1,0 +1,23 @@
+{
+  "target": {
+    "path": {
+      "deployment": "auth-srvc"
+    },
+    "namespace": "ci-lab"
+  },
+  "ci": {
+    "output_dir": "/tmp/mirrord"
+  },
+  "feature": {
+    "fs": "localwithoverrides",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "^x-mirrord-session:\\s*{{ key }}$"
+        }
+      },
+      "outgoing": true
+    }
+  }
+}
