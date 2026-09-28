@@ -49,7 +49,7 @@
       "deployment": "chat-service",
       "namespace": "shop",
       "build_args": "",
-      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}}}}"
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}},\"split_queues\":{\"support-chat\":{\"queue_type\":\"Kafka\",\"message_filter\":{\"baggage\":\".*mirrord-session={{ key }}.*\"}}}}}"
     },
     {
       "name": "receipt-service",
