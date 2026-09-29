@@ -46,9 +46,38 @@ jobs:
           java-version: "21"
 
       - name: Test A, account-srvc pull request
+        id: account
         env:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
-        run: ./apps/ci-lab/run-a.sh
+        run: |
+          set -o pipefail
+          ./apps/ci-lab/run-a.sh | tee "$RUNNER_TEMP/test-a.log"
+
+      - name: Record Test A outcome
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "OUTCOME: ${{ steps.account.outcome }}"
+            echo
+            if [[ -f "$RUNNER_TEMP/test-a.log" ]]; then
+              grep -E "GET /v2/account|database row|FAILURE|AssertionError|BUILD" "$RUNNER_TEMP/test-a.log" || true
+            fi
+          } > outcome-test-a.txt
+          {
+            echo "### Test A, account-srvc"
+            echo
+            echo '```'
+            cat outcome-test-a.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Test A outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outcome-test-a
+          path: outcome-test-a.txt
 
   test-b:
     name: Test B, login and auth
@@ -98,11 +127,140 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Test B, login-app pull request
+        id: login
         env:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
-        run: ./apps/ci-lab/run-b-login.sh
+          PLAYWRIGHT_HTML_REPORT: ${{ github.workspace }}/out/login-report
+          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/out/login-results
+        run: |
+          set -o pipefail
+          ./apps/ci-lab/run-b-login.sh | tee "$RUNNER_TEMP/login.log"
 
       - name: Test B, auth-srvc pull request
+        id: auth
+        if: always() && steps.login.outcome == 'success'
         env:
           MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
-        run: ./apps/ci-lab/run-b-auth.sh
+          PLAYWRIGHT_HTML_REPORT: ${{ github.workspace }}/out/auth-report
+          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/out/auth-results
+        run: |
+          set -o pipefail
+          ./apps/ci-lab/run-b-auth.sh | tee "$RUNNER_TEMP/auth.log"
+
+      - name: Record Test B outcome
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "login OUTCOME: ${{ steps.login.outcome }}"
+            echo "auth OUTCOME: ${{ steps.auth.outcome }}"
+            echo
+            if [[ -f "$RUNNER_TEMP/login.log" ]]; then
+              echo "login-app"
+              grep -E "passed|failed|Error|Signed in|Timeout" "$RUNNER_TEMP/login.log" || true
+              echo
+            fi
+            if [[ -f "$RUNNER_TEMP/auth.log" ]]; then
+              echo "auth-srvc"
+              grep -E "passed|failed|Error|Signed in|Timeout" "$RUNNER_TEMP/auth.log" || true
+            fi
+          } > outcome-test-b.txt
+          {
+            echo "### Test B, login and auth"
+            echo
+            echo '```'
+            cat outcome-test-b.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Test B outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outcome-test-b
+          path: outcome-test-b.txt
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright
+          path: out
+          if-no-files-found: ignore
+
+  outcome:
+    name: Outcome
+    if: always()
+    needs: [test-a, test-b]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download outcomes
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: outcome-*
+          path: outcomes
+
+      - name: Comment on the pull request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const marker = "<!-- ci-lab-outcome -->";
+            function label(result) {
+              if (result === "success") return "SUCCESS";
+              if (result === "failure") return "FAIL";
+              if (result === "skipped") return "SKIPPED";
+              return String(result || "UNKNOWN").toUpperCase();
+            }
+            function readOutcome(dirName) {
+              const dir = path.join("outcomes", dirName);
+              if (!fs.existsSync(dir)) return "";
+              const file = fs.readdirSync(dir).find((name) => name.endsWith(".txt"));
+              if (!file) return "";
+              return fs.readFileSync(path.join(dir, file), "utf8").trim();
+            }
+            const testA = label("${{ needs.test-a.result }}");
+            const testB = label("${{ needs.test-b.result }}");
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const details = [readOutcome("outcome-test-a"), readOutcome("outcome-test-b")]
+              .filter(Boolean)
+              .join("\n\n");
+            const body = [
+              marker,
+              "## ci-lab outcome",
+              "",
+              "| Check | Outcome |",
+              "| --- | --- |",
+              `| Test A, account-srvc | ${testA} |`,
+              `| Test B, login and auth | ${testB} |`,
+              "",
+              `Playwright video and trace: ${runUrl}`,
+              "",
+              details ? "```\n" + details + "\n```" : "",
+            ].join("\n");
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
