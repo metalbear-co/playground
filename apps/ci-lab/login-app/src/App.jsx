@@ -25,7 +25,7 @@ export default function App() {
 
   return (
     <main>
-      <h1>Account portal</h1>
+      <h1>Account portal demo-20260929-1240</h1>
       <p className="lede">Sign in with the account fetched from account-srvc.</p>
       <form onSubmit={onSubmit}>
         <label>

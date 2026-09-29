@@ -19,7 +19,7 @@ import java.sql.ResultSet;
 
 public final class Main {
     // Change this string on an account-srvc pull request. The test prints it.
-    static final String BADGE = "pull-request";
+    static final String BADGE = "demo-20260929-1240";
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();

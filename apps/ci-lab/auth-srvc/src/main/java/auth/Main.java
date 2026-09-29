@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 
 public final class Main {
     // Change this string on an auth-srvc pull request. The portal prints it after login.
-    static final String MESSAGE = "authenticated by auth-srvc";
+    static final String MESSAGE = "authenticated by demo-20260929-1240";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
