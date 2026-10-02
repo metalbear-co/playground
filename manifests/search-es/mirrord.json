@@ -1,0 +1,47 @@
+{
+  "operator": true,
+  "target": {
+    "path": "deploy/search-service",
+    "namespace": "search-es"
+  },
+  "feature": {
+    "env": true,
+    "fs": "local",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session=es9\\b"
+        }
+      },
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "type": "generic",
+        "id": "es9",
+        "profile": "team-search",
+        "ttl_secs": 1800,
+        "creation_timeout_secs": 600,
+        "image": "docker.elastic.co/elasticsearch/elasticsearch:9.0.0",
+        "port": 9200,
+        "connection": {
+          "params": {
+            "host": "ELASTICSEARCH_HOST",
+            "port": "ELASTICSEARCH_PORT"
+          }
+        },
+        "env": {
+          "discovery.type": "single-node",
+          "xpack.security.enabled": "false",
+          "ES_JAVA_OPTS": "-Xms512m -Xmx512m",
+          "node.store.allow_mmap": "false"
+        },
+        "readiness": {
+          "type": "http_get",
+          "path": "/"
+        }
+      }
+    ]
+  }
+}
