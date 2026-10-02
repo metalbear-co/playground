@@ -1,0 +1,21 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: search-es
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: playground-gateway
+      namespace: argocd
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /search-es
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: search-service
+          port: 8080
+          weight: 1

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: search-es
+
+resources:
+  - elasticsearch.yaml
+  - search-service.yaml
+  - httproute.yaml
+  - networkpolicy.yaml
+
+configMapGenerator:
+  - name: search-service
+    files:
+      - search_service.py
+    options:
+      disableNameSuffixHash: true
