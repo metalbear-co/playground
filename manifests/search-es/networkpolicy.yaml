@@ -8,11 +8,10 @@ spec:
       app: elasticsearch
   policyTypes:
     - Ingress
+  # The copy job is a different pod in this namespace and has to read the source document.
   ingress:
     - from:
-        - podSelector:
-            matchLabels:
-              app: search-service
+        - podSelector: {}
       ports:
         - port: 9200
           protocol: TCP
