@@ -44,6 +44,21 @@ spec:
             # Skips the vm.max_map_count bootstrap check, which GKE nodes do not set.
             - name: node.store.allow_mmap
               value: "false"
+          # The pod has no volume, so this document disappears with the container.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - |
+                    for _ in $(seq 1 90); do
+                      curl -sf http://127.0.0.1:9200/ >/dev/null && break
+                      sleep 2
+                    done
+                    curl -sf -X PUT http://127.0.0.1:9200/catalog/_doc/shared \
+                      -H 'Content-Type: application/json' \
+                      -d '{"title":"Shared cluster"}'
           resources:
             requests:
               cpu: "250m"
