@@ -45,7 +45,7 @@
           "image": "docker.elastic.co/elasticsearch/elasticsearch:8.18.0",
           "command": ["bash", "-c"],
           "args": [
-            "set -euo pipefail; src=\"http://${MIRRORD_PARAM_HOST}:${MIRRORD_PARAM_PORT}\"; dst=\"http://${MIRRORD_BRANCH_HOST}:${MIRRORD_BRANCH_PORT}\"; curl -sf \"$src/catalog/_source/shared\" | curl -sf -X PUT \"$dst/catalog/_doc/shared\" -H 'Content-Type: application/json' -d @-"
+            "set -euo pipefail; src=\"http://${MIRRORD_PARAM_HOST}:${MIRRORD_PARAM_PORT}\"; dst=\"http://${MIRRORD_BRANCH_HOST}:${MIRRORD_BRANCH_PORT}\"; curl -sf -X PUT \"$dst/catalog\" -H 'Content-Type: application/json' -d '{\"mappings\":{\"properties\":{\"title\":{\"type\":\"text\"},\"sku\":{\"type\":\"keyword\"}}}}'; for id in 1 2 3; do curl -sf \"$src/catalog/_source/$id\" | curl -sf -X PUT \"$dst/catalog/_doc/$id\" -H 'Content-Type: application/json' -d @-; done; curl -sf -X POST \"$dst/catalog/_refresh\""
           ]
         }
       }
