@@ -1,0 +1,54 @@
+{
+  "operator": true,
+  "target": {
+    "path": "deploy/search-service",
+    "namespace": "search-es"
+  },
+  "feature": {
+    "env": true,
+    "fs": "local",
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "baggage:\\s*[^\\n]*\\bmirrord-session=es9-copy\\b"
+        }
+      },
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "type": "generic",
+        "id": "es9-copy",
+        "profile": "team-search",
+        "ttl_secs": 1800,
+        "creation_timeout_secs": 600,
+        "image": "docker.elastic.co/elasticsearch/elasticsearch:9.0.0",
+        "port": 9200,
+        "connection": {
+          "params": {
+            "host": "ELASTICSEARCH_HOST",
+            "port": "ELASTICSEARCH_PORT"
+          }
+        },
+        "env": {
+          "discovery.type": "single-node",
+          "xpack.security.enabled": "false",
+          "ES_JAVA_OPTS": "-Xms512m -Xmx512m",
+          "node.store.allow_mmap": "false"
+        },
+        "readiness": {
+          "type": "http_get",
+          "path": "/"
+        },
+        "copy": {
+          "image": "docker.elastic.co/elasticsearch/elasticsearch:8.18.0",
+          "command": ["bash", "-c"],
+          "args": [
+            "set -euo pipefail; src=\"http://${MIRRORD_PARAM_HOST}:${MIRRORD_PARAM_PORT}\"; dst=\"http://${MIRRORD_BRANCH_HOST}:${MIRRORD_BRANCH_PORT}\"; curl -sf -X PUT \"$dst/catalog\" -H 'Content-Type: application/json' -d '{\"mappings\":{\"properties\":{\"title\":{\"type\":\"text\"},\"sku\":{\"type\":\"keyword\"}}}}'; for id in 1 2 3; do curl -sf \"$src/catalog/_source/$id\" | curl -sf -X PUT \"$dst/catalog/_doc/$id\" -H 'Content-Type: application/json' -d @-; done; curl -sf -X POST \"$dst/catalog/_refresh\""
+          ]
+        }
+      }
+    ]
+  }
+}

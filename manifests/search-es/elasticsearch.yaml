@@ -44,6 +44,31 @@ spec:
             # Skips the vm.max_map_count bootstrap check, which GKE nodes do not set.
             - name: node.store.allow_mmap
               value: "false"
+          # The pod has no volume, so this catalog disappears with the container.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - |
+                    for _ in $(seq 1 90); do
+                      curl -sf http://127.0.0.1:9200/ >/dev/null && break
+                      sleep 2
+                    done
+                    curl -sf -X PUT http://127.0.0.1:9200/catalog \
+                      -H 'Content-Type: application/json' \
+                      -d '{"mappings":{"properties":{"title":{"type":"text"},"sku":{"type":"keyword"}}}}'
+                    curl -sf -X PUT http://127.0.0.1:9200/catalog/_doc/1 \
+                      -H 'Content-Type: application/json' \
+                      -d '{"title":"copper kettle","sku":"KETTLE-1"}'
+                    curl -sf -X PUT http://127.0.0.1:9200/catalog/_doc/2 \
+                      -H 'Content-Type: application/json' \
+                      -d '{"title":"linen apron","sku":"APRON-2"}'
+                    curl -sf -X PUT http://127.0.0.1:9200/catalog/_doc/3 \
+                      -H 'Content-Type: application/json' \
+                      -d '{"title":"oak board","sku":"BOARD-3"}'
+                    curl -sf -X POST http://127.0.0.1:9200/catalog/_refresh
           resources:
             requests:
               cpu: "250m"
