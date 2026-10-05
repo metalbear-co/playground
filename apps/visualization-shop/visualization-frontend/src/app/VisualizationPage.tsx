@@ -1266,13 +1266,11 @@ export default function VisualizationPage() {
                   </p>
                 ))}
                 {group.previewEnvKeys.length > 0 && (
-                  <div className="mt-1 flex flex-col gap-0.5 border-t border-slate-200 pt-1">
+                  <div className="-mt-1 flex flex-col">
                     {group.previewEnvKeys.map((entry) => (
-                      entry.podName && (
-                        <p key={`${entry.key}-${entry.podName}`} className="break-all text-[11px] font-bold text-[#0EA5E9]">
-                          {entry.podName}
-                        </p>
-                      )
+                      <p key={`${entry.key}-${entry.podName ?? ""}`} className="break-all text-[11px] font-bold leading-tight text-[#0EA5E9]">
+                        {entry.podName ?? entry.key}
+                      </p>
                     ))}
                   </div>
                 )}
