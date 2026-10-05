@@ -135,6 +135,14 @@ function ProductTile({
   );
 }
 
+function AgentBanner() {
+  return (
+    <div className="bg-red-600 px-4 py-2 text-center text-sm font-semibold text-white">
+      AI Agent change
+    </div>
+  );
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,7 +159,8 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
-        <Header showSubtitle />
+        <AgentBanner />
+      <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
         </main>
@@ -162,7 +171,8 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
-        <Header showSubtitle />
+        <AgentBanner />
+      <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
             Error: {error}
@@ -178,6 +188,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <AgentBanner />
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
