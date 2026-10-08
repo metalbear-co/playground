@@ -1,0 +1,39 @@
+# Run from the playground repo root, so the `npm --prefix` paths resolve:
+#   mirrord up -f mirrord-up-scenerio-a-migration.yaml
+#
+# The session key comes from `--key` or MIRRORD_KEY, and defaults to the OS username.
+services:
+  order-service:
+    target:
+      namespace: shop
+    # Steals only the requests that carry this session's key in the baggage header.
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    # Gives the local process its own Postgres branch that has the schema and no rows.
+    # mirrord points DATABASE_URL at the branch. The branch id is the session key, so
+    # a session with the same key reuses the branch while it is still alive.
+    config_patch:
+      feature:
+        db_branches:
+          - type: pg
+            version: "16.0"
+            connection: { url: DATABASE_URL }
+            copy:
+              mode: schema
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  payment-service:
+    target:
+      namespace: shop
+    # Splits the `payments` SQS queue on the customer email inside the JWT in the
+    # message body. This replaces the session-key queue filters that mirrord up
+    # generates by default.
+    config_patch:
+      feature:
+        split_queues:
+          "*":
+            queue_type: SQS
+            jq_filter: '.Body | fromjson | .jwt | split(".") | .[1] | gsub("-"; "+") | gsub("_"; "/") | . as $s | $s + ("=" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .customer_email | test("metalbear\\.com")'
+    run:
+      command: ["npm", "--prefix", "apps/shop/payment-service", "run", "dev"]
