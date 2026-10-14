@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
+import { context, propagation } from "@opentelemetry/api";
 import { pool, producer, sqsClient, sqsQueueUrl } from "./connections.js";
 import { inventoryUrl } from "./connections.js";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
@@ -181,18 +182,42 @@ async function createOrderDirect(
     client.release();
   }
 
+  // The propagation headers come from the active OTel context, which the HTTP
+  // auto-instrumentation populated from the incoming request. The `baggage`
+  // header carries `mirrord-session=<key>`, so signing it into the JWT lets the
+  // payment-service queue filter decode the token and route by session key.
+  const otelHeaders: Record<string, string> = {};
+  propagation.inject(context.active(), otelHeaders);
+  const propagatedBaggage = otelHeaders["baggage"] ?? baggage ?? null;
+
   const token = jwt.sign(
-    { orderId, amount: totalCents, customer_email: customer_email ?? null },
+    {
+      orderId,
+      amount: totalCents,
+      customer_email: customer_email ?? null,
+      baggage: propagatedBaggage,
+      traceparent: otelHeaders["traceparent"] ?? null,
+    },
     JWT_SECRET,
     { expiresIn: "1h" }
   );
-  console.log("[Order] JWT created for order %d: %s", orderId, token);
+  console.log("[Order] JWT created for order %d (baggage=%s): %s", orderId, propagatedBaggage, token);
 
   if (sqsQueueUrl) {
+    // The JWT travels as an SQS message attribute (the message "header"), not
+    // in the body, so queue filters can inspect it without parsing the payload.
     await sqsClient.send(
       new SendMessageCommand({
         QueueUrl: sqsQueueUrl,
-        MessageBody: JSON.stringify({ jwt: token }),
+        MessageBody: JSON.stringify({
+          orderId,
+          amount: totalCents,
+          customer_email: customer_email ?? null,
+          items,
+        }),
+        MessageAttributes: {
+          jwt: { DataType: "String", StringValue: token },
+        },
       })
     );
   } else {

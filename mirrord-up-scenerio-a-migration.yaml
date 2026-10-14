@@ -26,14 +26,15 @@ services:
   payment-service:
     target:
       namespace: shop
-    # Splits the `payments` SQS queue on the customer email inside the JWT in the
-    # message body. This replaces the session-key queue filters that mirrord up
-    # generates by default.
+    # Splits the `payments` SQS queue on the session key inside the JWT that
+    # order-service puts in the `jwt` message attribute. The JWT payload carries
+    # the OTel `baggage` header (`mirrord-session=<key>`). This replaces the
+    # session-key queue filters that mirrord up generates by default.
     config_patch:
       feature:
         split_queues:
           "*":
             queue_type: SQS
-            jq_filter: '.Body | fromjson | .jwt | split(".") | .[1] | gsub("-"; "+") | gsub("_"; "/") | . as $s | $s + ("=" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .customer_email | test("metalbear\\.com")'
+            jq_filter: '.MessageAttributes.jwt.StringValue | split(".") | .[1] | gsub("-"; "+") | gsub("_"; "/") | . as $s | $s + ("=" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .baggage | test("mirrord-session={{ key }}")'
     run:
       command: ["npm", "--prefix", "apps/shop/payment-service", "run", "dev"]

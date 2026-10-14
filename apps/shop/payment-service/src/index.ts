@@ -60,17 +60,21 @@ async function consumeMessages(): Promise<void> {
         }, null, 2));
         console.log("[Payment] SQS message attributes:", JSON.stringify(message.MessageAttributes, null, 2));
 
-        // JWT decryption
-        if (body.jwt) {
-          console.log("[Payment] Raw JWT token: %s", body.jwt);
+        // The JWT arrives as the `jwt` SQS message attribute. Its payload carries
+        // the OTel propagation headers (`baggage`, `traceparent`) captured by
+        // order-service, so the session key is readable without the body.
+        const token = message.MessageAttributes?.["jwt"]?.StringValue;
+        if (token) {
+          console.log("[Payment] Raw JWT token: %s", token);
           try {
-            const decoded = jwt.verify(body.jwt, JWT_SECRET);
+            const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
             console.log("[Payment] Decrypted JWT payload:", JSON.stringify(decoded, null, 2));
+            console.log("[Payment] JWT baggage: %s", decoded.baggage ?? "none");
           } catch (jwtErr) {
             console.error("[Payment] JWT verification failed:", jwtErr);
           }
         } else {
-          console.log("[Payment] No JWT token found in message");
+          console.log("[Payment] No JWT message attribute found in message");
         }
 
         const outgoingHeaders = { "Content-Type": "application/json" };
