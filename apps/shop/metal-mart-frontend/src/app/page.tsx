@@ -5,6 +5,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
+import LimitedBadge from "@/components/LimitedBadge";
 import ProductImage from "@/components/ProductImage";
 import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
@@ -15,12 +16,14 @@ function ProductTile({
   variant,
   delay = 0,
   elevated = false,
+  limited = false,
 }: {
   product: Product;
   variant: "featured" | "standard" | "wide";
   delay?: number;
   /** Above mascot on home page so card stays opaque */
   elevated?: boolean;
+  limited?: boolean;
 }) {
   const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
@@ -35,6 +38,7 @@ function ProductTile({
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
+        {limited && <LimitedBadge />}
         <div className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
@@ -207,7 +211,7 @@ export default function Home() {
                           : ""
                       }
                     >
-                      <ProductTile product={featured} variant="featured" delay={0} elevated />
+                      <ProductTile product={featured} variant="featured" delay={0} elevated limited />
                     </div>
                   )}
                   {/* Side tiles - products 2 and 3 stacked on the right (or single tile spans 2 rows) */}
