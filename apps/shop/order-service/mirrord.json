@@ -1,5 +1,5 @@
 {
-  "key": "{{ get_env(name='USER', default='changeme') }}",
+  "key": "mirrord-ai-agent-20261020-181101",
   "target": {
     "namespace": "shop",
     "path": {
