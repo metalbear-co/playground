@@ -32,14 +32,13 @@ function ProductTile({
 
   if (variant === "featured") {
     return (
-      <Link
-        href={href}
+      <article
         className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
         {limited && <LimitedBadge />}
-        <div className="absolute inset-0">
+        <Link href={href} aria-label={`View ${product.name}`} className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
               src={getPrimaryImageUrl(product)!}
@@ -54,17 +53,34 @@ function ProductTile({
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        </div>
-        <div className="relative mt-auto p-6">
+        </Link>
+        <div className="relative mt-auto p-6 pointer-events-none">
           <h2 className="text-2xl font-bold text-white drop-shadow-sm md:text-3xl">
-            {product.name}
+            <Link
+              href={href}
+              className="pointer-events-auto rounded focus:outline-none focus:ring-2 focus:ring-white"
+            >
+              {product.name}
+            </Link>
           </h2>
           <p className="mt-1 text-lg font-semibold text-white/90">{price}</p>
-          <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
-            Shop now →
-          </span>
+          {limited ? (
+            <Link
+              href={href}
+              className="pointer-events-auto mt-4 inline-flex min-h-11 items-center rounded-lg bg-amber-300 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-slate-950 shadow-md transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-slate-900"
+            >
+              Limited Edition
+            </Link>
+          ) : (
+            <Link
+              href={href}
+              className="pointer-events-auto mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline"
+            >
+              Shop now →
+            </Link>
+          )}
         </div>
-      </Link>
+      </article>
     );
   }
 
