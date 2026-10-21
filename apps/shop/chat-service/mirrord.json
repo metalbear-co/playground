@@ -7,8 +7,16 @@
     }
   },
   "feature": {
+    "env": {
+      "override": {
+        "PORT": "8081"
+      }
+    },
     "network": {
-      "incoming": "steal",
+      "incoming": {
+        "mode": "steal",
+        "port_mapping": [[80, 8081]]
+      },
       "outgoing": true
     },
     "split_queues": {
