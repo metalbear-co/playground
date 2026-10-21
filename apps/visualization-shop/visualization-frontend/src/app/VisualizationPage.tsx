@@ -45,6 +45,12 @@ const MIRRORD_NODE_SHADOW = "0px 30px 60px rgba(79, 70, 229, 0.3)";
 /** Static mascot for the mirrord Operator node (`public/mirrord/mirrord-operator-mascot.png`). */
 const MIRRORD_OPERATOR_MASCOT_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/mirrord/mirrord-operator-mascot.png`;
 const MIRRORD_CI_LABEL = "mirrord CI";
+/**
+ * Sessions started by an AI agent run as `root` inside the agent's VM. Showing "agent" instead of
+ * "root" keeps the Local Machine labels readable for humans watching the visualization.
+ */
+const AGENT_OS_USERNAME = "root";
+const AGENT_DISPLAY_USERNAME = "agent";
 const MIRRORD_CI_K8S_USERNAMES = new Set([
   "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
 ]);
@@ -608,6 +614,14 @@ const mirrordLayerBasePos =
   adjustedNodes.find((n) => n.id === "mirrord-layer")?.position ?? { x: 0, y: 0 };
 const DYNAMIC_LOCAL_SPACING_X =
   mirrordLayerBasePos.x - localProcessBasePos.x + nodeWidth + 280;
+
+const normalizeOwnerUsername = (username: string) =>
+  username === AGENT_OS_USERNAME ? AGENT_DISPLAY_USERNAME : username;
+
+const normalizeOperatorSession = (session: OperatorSession): OperatorSession => ({
+  ...session,
+  owner: { ...session.owner, username: normalizeOwnerUsername(session.owner.username) },
+});
 
 const sanitizeHostname = (hostname: string) =>
   hostname.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
@@ -3599,7 +3613,7 @@ export default function VisualizationPage() {
       const body = (await response.json()) as Partial<OperatorStatusResponse>;
       console.log("Operator status response:", body);
       if (isMountedRef.current) {
-        setOperatorSessions(body.sessions ?? []);
+        setOperatorSessions((body.sessions ?? []).map(normalizeOperatorSession));
         setKafkaTopics(body.kafkaTopics ?? []);
         setSqsQueues(body.sqsQueues ?? []);
         setRmqQueues(body.rmqQueues ?? []);
