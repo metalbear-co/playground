@@ -23,7 +23,7 @@ const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
 const topic = process.env.KAFKA_TOPIC || "support-chat";
-const BOT_REPLY = "Thanks for reaching out — a support agent will be with you shortly.";
+const botReply = () => `This is an AI test from mirrord ${Date.now()}`;
 const SENDERS: Sender[] = ["customer", "agent", "bot"];
 const HEARTBEAT_MS = 15000;
 
@@ -101,7 +101,7 @@ async function startConsumer() {
               id: randomUUID(),
               conversationId: msg.conversationId,
               sender: "bot",
-              text: BOT_REPLY,
+              text: botReply(),
               timestamp: new Date().toISOString(),
             },
             baggage
