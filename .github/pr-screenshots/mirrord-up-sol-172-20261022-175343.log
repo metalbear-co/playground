@@ -4,9 +4,9 @@
  -> 949
 
 * Web UI:
- -> http://127.0.0.1:59281/auth?token=41b364987f360e472b8d1a0eaf69595aba7ef10f60d4e917543a7898db1d1048&redirect=/
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
 * API token:
- -> x-auth-token: 41b364987f360e472b8d1a0eaf69595aba7ef10f60d4e917543a7898db1d1048
+ -> x-auth-token: <redacted>
 
 * mirrord session monitor ready!
 

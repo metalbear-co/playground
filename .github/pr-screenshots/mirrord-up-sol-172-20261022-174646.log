@@ -4,9 +4,9 @@
  -> 949
 
 * Web UI:
- -> http://127.0.0.1:59281/auth?token=41b364987f360e472b8d1a0eaf69595aba7ef10f60d4e917543a7898db1d1048&redirect=/
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
 * API token:
- -> x-auth-token: 41b364987f360e472b8d1a0eaf69595aba7ef10f60d4e917543a7898db1d1048
+ -> x-auth-token: <redacted>
 
 * mirrord session monitor ready!
  -> daemon log file: /tmp/mirrord/ui-3.277.0/stderr-1792691209
@@ -172,7 +172,7 @@ order-service:       "quantity": 1
 order-service:     }
 order-service:   ]
 order-service: }
-order-service: [Order] JWT created for order 2226 (baggage=mirrord-session=sol-172-20261022-174646): eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvcmRlcklkIjoyMjI2LCJhbW91bnQiOjQ5OSwiY3VzdG9tZXJfZW1haWwiOiJwcmV2aWV3LXZlcmlmaWNhdGlvbi1ib3RAbWV0YWxiZWFyLmRldiIsImJhZ2dhZ2UiOiJtaXJyb3JkLXNlc3Npb249c29sLTE3Mi0yMDI2MTAyMi0xNzQ2NDYiLCJ0cmFjZXBhcmVudCI6IjAwLTE5OTU5OGNmOGM1ZDAzN2FjZGVhZTJiMDkwOGNmN2EyLWZkY2RjZmM1OWUwNjQ3MDQtMDEiLCJpYXQiOjE3OTI2OTEyNzIsImV4cCI6MTc5MjY5NDg3Mn0.KUhvGNc3E8ryqdoKs0bRJyjBXew5MTzJDU73jvxzm3s
+order-service: [Order] JWT created for order 2226 (baggage=mirrord-session=sol-172-20261022-174646): <redacted-jwt>
 order-service: [Order/Rabbit] published notification for order 2226
 order-service: [Order/PubSub] publish failed (order still ok): Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
 order-service:     at GoogleAuth.getApplicationDefaultAsync (/home/user/playground/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:287:15)
