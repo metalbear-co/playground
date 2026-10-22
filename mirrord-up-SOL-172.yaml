@@ -1,0 +1,27 @@
+# Verification config for SOL-172 (order-service, chat-service, metal-mart-frontend).
+# Run from the repo root:
+#   mirrord up -f mirrord-up-SOL-172.yaml --key sol-172-<timestamp>
+# Every service runs in the default `split` mode: only requests / queue messages that
+# carry `mirrord-session=<key>` (baggage header) reach the local process. mirrord up
+# derives the HTTP filter and the queue-split filters from the key.
+services:
+  order-service:
+    target:
+      path: deployment/order-service
+      namespace: shop
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  chat-service:
+    target:
+      path: deployment/chat-service
+      namespace: shop
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target:
+      path: deployment/metal-mart-frontend
+      namespace: shop
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]
