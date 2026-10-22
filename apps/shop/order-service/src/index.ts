@@ -253,7 +253,7 @@ async function createOrderDirect(
 
   await startOrderFulfillment({ orderId, baggage });
 
-  return { orderId, status: "confirmed" };
+  return { orderId, status: `confirmed test-agent-${Date.now()}` };
 }
 
 app.post("/orders", async (req, res) => {

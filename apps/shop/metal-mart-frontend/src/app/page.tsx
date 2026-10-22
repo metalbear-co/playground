@@ -139,6 +139,11 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [agentChangeTime, setAgentChangeTime] = useState("");
+
+  useEffect(() => {
+    setAgentChangeTime(new Date().toLocaleString());
+  }, []);
 
   useEffect(() => {
     fetch(`${basePath}/api/products`)
@@ -178,6 +183,9 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <div className="bg-red-600 px-4 py-2 text-center text-sm font-semibold text-white">
+        AI Agent change {agentChangeTime}
+      </div>
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
