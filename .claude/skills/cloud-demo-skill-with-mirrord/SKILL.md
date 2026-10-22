@@ -90,9 +90,18 @@ the `mirrord-header-propagation` skill to find which service drops `baggage`.
 
 ## Step 4 — Verify with real traffic
 
+Learned in practice: the run's own `status` can read `completed` while its build jobs
+are still going, so poll the **jobs** (`gh api repos/<o>/<r>/actions/runs/<id>/jobs`;
+`gh api` works in cloud sessions) until every `Build & Preview (...)` job concludes.
+Always pass `per_page: 3` when listing runs (the payload is huge). A PR-opened run for
+the same branch may also be queued; the dispatched run with your key is the one that
+counts. Preview pods are visible with `kubectl -n shop get pods | grep <key>`.
+
 Base URL `https://playground.metalbear.dev/shop`, header
 `baggage: mirrord-session=<key>` on every request. Use `curl` for APIs and Playwright
-(`extraHTTPHeaders`) for UI. Create the evidence directory `.github/pr-screenshots/`.
+(`extraHTTPHeaders`) for UI. If Playwright's own browser download is missing, launch
+with `chromium.launch({ executablePath: '/opt/pw-browsers/chromium' })`; never
+`playwright install`. Create the evidence directory `.github/pr-screenshots/`.
 
 Sanity-check first that the preview is selected and the baseline is not: the same
 request **without** the header must still show the old behaviour. Record both.
@@ -105,7 +114,11 @@ Per change type:
 - **Chat service**: `POST $BASE/api/chat/messages` with
   `{"conversationId":"<id>-<TS>","sender":"customer","text":"hello","customerName":"agent"}`
   and the header, wait a few seconds, then `GET $BASE/api/chat/conversations/<id>-<TS>/messages`
-  (header again) and confirm the bot message text. Chat goes through Kafka queue
+  (header again). **The frontend's GET does not forward `baggage`**, so it is served
+  by the normal chat-service and returns `[]`; that is not a failure. Prove the reply
+  instead from the preview chat pod log (`kubectl -n shop logs <chat preview pod>`:
+  `customer message in ...` then `bot message in ...`). `pods/exec` is forbidden, so
+  the reply text itself may not be observable; say so in the PR rather than guessing. Chat goes through Kafka queue
   splitting, so the message must carry the baggage header to reach the preview.
 - **Frontend**: Playwright with `extraHTTPHeaders: { baggage: 'mirrord-session=<key>' }`,
   open `$BASE/`, wait for network idle, take a full-page screenshot to
