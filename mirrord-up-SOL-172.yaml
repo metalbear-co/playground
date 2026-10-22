@@ -23,5 +23,10 @@ services:
     target:
       path: deployment/metal-mart-frontend
       namespace: shop
+    # NEXT_PUBLIC_* vars are inlined at build time, so the remote value does not
+    # reach `next dev`; override it so product images load from Cloudinary.
+    env:
+      override:
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir
     run:
       command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]
