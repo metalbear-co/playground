@@ -69,7 +69,7 @@ function ProductTile({
               href={href}
               className="pointer-events-auto mt-4 inline-flex min-h-11 items-center rounded-lg bg-amber-300 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-slate-950 shadow-md transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-slate-900"
             >
-              Limited Edition
+              Limited
             </Link>
           ) : (
             <Link
@@ -124,34 +124,45 @@ function ProductTile({
 
   // standard
   return (
-    <Link
-      href={href}
+    <article
       className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
-      <div className="relative aspect-square overflow-hidden bg-slate-100">
-        {getPrimaryImageUrl(product) ? (
-          <ProductImage
-            src={getPrimaryImageUrl(product)!}
-            alt={product.name}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            fill
-            sizes="(max-width: 640px) 50vw, 25vw"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-slate-400">
-            No image
-          </div>
-        )}
-      </div>
+      <Link href={href} aria-label={`View ${product.name}`}>
+        <div className="relative aspect-square overflow-hidden bg-slate-100">
+          {getPrimaryImageUrl(product) ? (
+            <ProductImage
+              src={getPrimaryImageUrl(product)!}
+              alt={product.name}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 50vw, 25vw"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-slate-400">
+              No image
+            </div>
+          )}
+        </div>
+      </Link>
       <div className="flex flex-1 flex-col p-4">
         <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
-          {product.name}
+          <Link href={href} className="rounded focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]">
+            {product.name}
+          </Link>
         </h2>
         <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
+        {limited && (
+          <Link
+            href={href}
+            className="mt-3 inline-flex min-h-10 w-fit items-center rounded-lg bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-950 shadow-sm transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-[#6a4ff5] focus:ring-offset-2"
+          >
+            Limited
+          </Link>
+        )}
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -235,7 +246,7 @@ export default function Home() {
                     <div
                       className={`md:col-span-2 ${rest[1] ? "md:row-span-1" : "md:row-span-2"}`}
                     >
-                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated />
+                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated limited />
                     </div>
                   )}
                   {rest[1] && (
