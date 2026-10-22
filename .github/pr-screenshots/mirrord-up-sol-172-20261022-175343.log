@@ -1,0 +1,70 @@
+
+* Local mirrord daemon already running
+* Daemon PID:
+ -> 949
+
+* Web UI:
+ -> http://127.0.0.1:59281/auth?token=41b364987f360e472b8d1a0eaf69595aba7ef10f60d4e917543a7898db1d1048&redirect=/
+* API token:
+ -> x-auth-token: 41b364987f360e472b8d1a0eaf69595aba7ef10f60d4e917543a7898db1d1048
+
+* mirrord session monitor ready!
+
+metal-mart-frontend: requesting DB branching
+metal-mart-frontend: no DB branch definitions, running against the source DB
+metal-mart-frontend: mirrord exec (cli version 3.277.0)
+metal-mart-frontend: Detected `mirrord exec` running with a CI token.
+metal-mart-frontend: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+metal-mart-frontend: mirrord ci start (cli version 3.277.0)
+metal-mart-frontend: version check
+metal-mart-frontend: preparing to launch process
+metal-mart-frontend: checking if target binary is dynamically linked
+metal-mart-frontend: target binary is dynamically linked
+metal-mart-frontend: extracting layer
+metal-mart-frontend: layer extracted
+metal-mart-frontend: checking operator
+metal-mart-frontend: checking license
+metal-mart-frontend: Operator license is valid for 74 more days.
+metal-mart-frontend: operator license valid
+metal-mart-frontend: preparing user credentials
+metal-mart-frontend: user credentials prepared
+metal-mart-frontend: starting session
+metal-mart-frontend: connecting to the target
+metal-mart-frontend: connected to the target
+metal-mart-frontend: session started
+metal-mart-frontend: using operator
+metal-mart-frontend: session ID: 310B24F95AA8C045
+metal-mart-frontend: ready to launch process
+metal-mart-frontend: config summary
+metal-mart-frontend: Running command: npm --prefix apps/shop/metal-mart-frontend run dev -- -p 3000
+metal-mart-frontend: mirrord will target: deployment/metal-mart-frontend, no configuration file was loaded
+metal-mart-frontend: mirrord will run with the mirrord Operator
+metal-mart-frontend: env: all remote environment variables will be fetched
+metal-mart-frontend: fs: file operations will default to read from the remote
+metal-mart-frontend: incoming: incoming traffic will be stolen
+metal-mart-frontend: outgoing: forwarding is enabled on TCP and UDP
+metal-mart-frontend: dns: DNS will be resolved remotely
+metal-mart-frontend: internal proxy: logs will be written to /tmp/mirrord-intproxy-1792691623-pmGHDDY.log
+metal-mart-frontend: Session key: sol-172-20261022-175343
+metal-mart-frontend: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+metal-mart-frontend: config summary
+metal-mart-frontend: running process
+metal-mart-frontend: Ready!
+metal-mart-frontend: 
+metal-mart-frontend: > metal-mart-frontend@0.1.0 dev
+metal-mart-frontend: > next dev -p 3000
+metal-mart-frontend: 
+metal-mart-frontend:  ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+metal-mart-frontend: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+metal-mart-frontend:    ▲ Next.js 16.0.0 (Turbopack)
+metal-mart-frontend:    - Local:        http://localhost:3000
+metal-mart-frontend:    - Network:      http://192.0.2.2:3000
+metal-mart-frontend: 
+metal-mart-frontend:  ✓ Starting...
+metal-mart-frontend:  ✓ Ready in 4.1s
+metal-mart-frontend:  ○ Compiling / ...
+metal-mart-frontend:  GET / 200 in 5.2s (compile: 4.8s, render: 420ms)
+metal-mart-frontend:  GET /api/banner 200 in 745ms (compile: 511ms, render: 234ms)
+metal-mart-frontend:  GET /api/products 200 in 818ms (compile: 561ms, render: 257ms)
+metal-mart-frontend: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+metal-mart-frontend: [?25h
