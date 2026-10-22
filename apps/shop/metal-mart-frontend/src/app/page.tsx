@@ -181,7 +181,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200">
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -192,7 +192,7 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200">
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -208,7 +208,7 @@ export default function Home() {
   const hasMultipleProducts = products.length > 1;
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200">
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
@@ -246,7 +246,7 @@ export default function Home() {
                     <div
                       className={`md:col-span-2 ${rest[1] ? "md:row-span-1" : "md:row-span-2"}`}
                     >
-                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated limited />
+                      <ProductTile product={rest[0]} variant="standard" delay={0.06} elevated />
                     </div>
                   )}
                   {rest[1] && (
