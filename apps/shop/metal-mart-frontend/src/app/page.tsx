@@ -148,9 +148,16 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  const banner = (
+    <div className="bg-red-600 px-4 py-2 text-center text-sm font-semibold text-white">
+      AI Agent change 2026-10-22 11:18 UTC
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        {banner}
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +169,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        {banner}
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +186,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      {banner}
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
