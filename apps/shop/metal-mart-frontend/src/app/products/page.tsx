@@ -83,6 +83,11 @@ export default function ProductsPage() {
                     {p.name}
                   </h2>
                   <p className="mt-2 text-lg font-semibold text-[#6a4ff5]">${(p.price_cents / 100).toFixed(2)}</p>
+                  {i === 0 && (
+                    <span className="mt-3 inline-flex min-h-10 w-fit items-center rounded-lg bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-950 shadow-sm">
+                      Limited
+                    </span>
+                  )}
                   <p className="mt-auto pt-3 text-xs text-slate-500">In stock: {p.stock}</p>
                 </div>
               </Link>
