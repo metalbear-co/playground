@@ -5,6 +5,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NewBadge from "@/components/NewBadge";
+import LimitedBadge from "@/components/LimitedBadge";
 import ProductImage from "@/components/ProductImage";
 import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
@@ -15,12 +16,14 @@ function ProductTile({
   variant,
   delay = 0,
   elevated = false,
+  limited = false,
 }: {
   product: Product;
   variant: "featured" | "standard" | "wide";
   delay?: number;
   /** Above mascot on home page so card stays opaque */
   elevated?: boolean;
+  limited?: boolean;
 }) {
   const href = `/products/${product.id}`;
   const price = `$${(product.price_cents / 100).toFixed(2)}`;
@@ -29,13 +32,13 @@ function ProductTile({
 
   if (variant === "featured") {
     return (
-      <Link
-        href={href}
+      <article
         className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
-        <div className="absolute inset-0">
+        {limited && <LimitedBadge />}
+        <Link href={href} aria-label={`View ${product.name}`} className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
             <ProductImage
               src={getPrimaryImageUrl(product)!}
@@ -50,17 +53,34 @@ function ProductTile({
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        </div>
-        <div className="relative mt-auto p-6">
+        </Link>
+        <div className="relative mt-auto p-6 pointer-events-none">
           <h2 className="text-2xl font-bold text-white drop-shadow-sm md:text-3xl">
-            {product.name}
+            <Link
+              href={href}
+              className="pointer-events-auto rounded focus:outline-none focus:ring-2 focus:ring-white"
+            >
+              {product.name}
+            </Link>
           </h2>
           <p className="mt-1 text-lg font-semibold text-white/90">{price}</p>
-          <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
-            Shop now →
-          </span>
+          {limited ? (
+            <Link
+              href={href}
+              className="pointer-events-auto mt-4 inline-flex min-h-11 items-center rounded-lg bg-amber-300 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-slate-950 shadow-md transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-slate-900"
+            >
+              Limited
+            </Link>
+          ) : (
+            <Link
+              href={href}
+              className="pointer-events-auto mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline"
+            >
+              Shop now →
+            </Link>
+          )}
         </div>
-      </Link>
+      </article>
     );
   }
 
@@ -104,34 +124,45 @@ function ProductTile({
 
   // standard
   return (
-    <Link
-      href={href}
+    <article
       className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#6a4ff5]/30 hover:shadow-xl hover:shadow-[#6a4ff5]/10 animate-card-reveal ${elevatedClass}`}
       style={{ animationDelay: `${delay}s` }}
     >
       {product.is_new && <NewBadge size="default" />}
-      <div className="relative aspect-square overflow-hidden bg-slate-100">
-        {getPrimaryImageUrl(product) ? (
-          <ProductImage
-            src={getPrimaryImageUrl(product)!}
-            alt={product.name}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            fill
-            sizes="(max-width: 640px) 50vw, 25vw"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-slate-400">
-            No image
-          </div>
-        )}
-      </div>
+      <Link href={href} aria-label={`View ${product.name}`}>
+        <div className="relative aspect-square overflow-hidden bg-slate-100">
+          {getPrimaryImageUrl(product) ? (
+            <ProductImage
+              src={getPrimaryImageUrl(product)!}
+              alt={product.name}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 50vw, 25vw"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-slate-400">
+              No image
+            </div>
+          )}
+        </div>
+      </Link>
       <div className="flex flex-1 flex-col p-4">
         <h2 className="font-semibold text-slate-900 group-hover:text-[#6a4ff5] transition-colors">
-          {product.name}
+          <Link href={href} className="rounded focus:outline-none focus:ring-2 focus:ring-[#6a4ff5]">
+            {product.name}
+          </Link>
         </h2>
         <p className="mt-1 font-semibold text-[#6a4ff5]">{price}</p>
+        {limited && (
+          <Link
+            href={href}
+            className="mt-3 inline-flex min-h-10 w-fit items-center rounded-lg bg-amber-300 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-950 shadow-sm transition-colors hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-[#6a4ff5] focus:ring-offset-2"
+          >
+            Limited
+          </Link>
+        )}
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -150,7 +181,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200">
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -161,7 +192,7 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col bg-white">
+      <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200">
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -177,7 +208,7 @@ export default function Home() {
   const hasMultipleProducts = products.length > 1;
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-slate-200">
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
@@ -207,7 +238,7 @@ export default function Home() {
                           : ""
                       }
                     >
-                      <ProductTile product={featured} variant="featured" delay={0} elevated />
+                      <ProductTile product={featured} variant="featured" delay={0} elevated limited />
                     </div>
                   )}
                   {/* Side tiles - products 2 and 3 stacked on the right (or single tile spans 2 rows) */}
