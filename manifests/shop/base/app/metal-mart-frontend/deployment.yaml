@@ -34,6 +34,12 @@ spec:
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "support-chat"
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLAUDE_CODE_OAUTH_TOKEN
+                  optional: true
           ports:
             - containerPort: 3000
               protocol: TCP
