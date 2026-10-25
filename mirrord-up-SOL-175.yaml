@@ -1,0 +1,57 @@
+# SOL-175 verification: runs the three changed shop services locally against the
+# playground cluster. Run from the repo root:
+#   mirrord up -f mirrord-up-SOL-175.yaml --key sol-175-<timestamp>
+#
+# Every service is in split mode: only requests whose `baggage` header carries
+# `mirrord-session=<key>` are stolen, everything else keeps hitting the deployed pods.
+services:
+  order-service:
+    target:
+      path: deployment/order-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  chat-service:
+    target:
+      path: deployment/chat-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    # order-service already binds local port 80, so the chat service listens on
+    # 8081 and mirrord maps the stolen remote port 80 onto it (port_mapping is [local, remote]).
+    env:
+      override:
+        PORT: "8081"
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8081, 80]]
+        # Only `support-chat` messages whose Kafka `baggage` header carries the
+        # session key reach the local consumer (the frontend copies the HTTP
+        # baggage header onto the message it produces).
+        split_queues:
+          support-chat:
+            queue_type: Kafka
+            message_filter:
+              baggage: ".*mirrord-session={{ key }}.*"
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target:
+      path: deployment/metal-mart-frontend
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      # The pod runs a production build; `next dev` must not inherit NODE_ENV=production.
+      exclude: NODE_ENV
+      override:
+        # NEXT_PUBLIC_* is baked at build time, so `next dev` needs it locally.
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]
