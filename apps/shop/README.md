@@ -96,7 +96,7 @@ Without `CLOUDINARY_CLOUD_NAME`, the header logo, product images, and mascot wil
 
 ## Cloud agents table (`/shop/cloud-agents.html`, internal)
 
-Static internal R&D page at `metal-mart-frontend/public/cloud-agents.html`: two tables (cloud-agent tickets, urgent bugs) with status. Every row is decorative except **SOL-175** in the first table: its button calls `POST /api/cloud-agents/run`, which starts the Claude Code cloud routine that implements the ticket and opens a mirrord-verified preview PR. The route needs two env vars on the frontend:
+Static internal R&D page at `metal-mart-frontend/public/cloud-agents.html`: two tables (cloud-agent tickets, QA reported urgent bugs) with status. Every row is decorative except **SOL-175** in the first table: its button calls `POST /api/cloud-agents/run`, which starts the Claude Code cloud routine that implements the ticket and opens a mirrord-verified preview PR. The route needs two env vars on the frontend:
 
 ```bash
 CLAUDE_CODE_OAUTH_TOKEN=<token from `claude setup-token`> \
