@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cloud agents · MetalMart R&D</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="https://res.cloudinary.com/dxas4fpir/image/upload/w_64,h_64,c_fit/MetalBear_logo_c2doft" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Poppins:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    color-scheme: light;
+    --purple: #756DF3; --purple-hover: #5f58d6; --purple-deep: #4a44b8; --purple-mid: #E4E3FD; --purple-shadow: #9E99F7;
+    --yellow: #FFCB7D; --ink: #232141; --cream: #FFFDF9; --bg: #FAFAFD; --grey-500: #888899; --grey-700: #333344; --line: #E4E3FD;
+    --ok: #1f8a5b; --ok-bg: #dff5ea; --warn: #a35a00; --warn-bg: #fff0d6; --bad: #b3261e; --bad-bg: #fde4e2;
+    --display: "Unbounded", system-ui, sans-serif; --body: "Poppins", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--grey-700); font: 400 14px/1.5 var(--body); -webkit-font-smoothing: antialiased; }
+  button { font-family: var(--body); }
+  a { color: var(--purple-deep); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1.5px solid var(--line); margin-bottom: 20px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #000; text-decoration: none; }
+  .brand img { width: 32px; height: 32px; object-fit: contain; }
+  .brand b { font: 700 14px/1 var(--display); }
+  .brand span { font: 500 12px/1 var(--body); color: var(--grey-500); margin-left: 8px; }
+  .right { display: flex; align-items: center; gap: 10px; }
+  .api { display: inline-flex; align-items: center; gap: 7px; font: 500 12px/1 var(--mono); padding: 7px 10px; border-radius: 100px; background: var(--purple-mid); }
+  .api i { width: 8px; height: 8px; border-radius: 50%; background: var(--grey-500); }
+  .api[data-state="ok"] i { background: var(--ok); } .api[data-state="off"] i { background: var(--bad); }
+  .ghost { font: 600 12px/1 var(--body); color: #000; text-decoration: none; padding: 8px 12px; border: 1.5px solid var(--purple-shadow); border-radius: 8px; }
+  .ghost:hover { background: var(--purple-mid); }
+
+  h1 { font: 700 18px/1.2 var(--display); color: #000; margin: 0 0 4px; }
+  h2 { font: 700 16px/1.2 var(--display); color: #000; margin: 32px 0 4px; }
+  .sub { margin: 0 0 16px; color: var(--grey-500); font-size: 13px; }
+  td.sev { font: 600 12px/1 var(--mono); white-space: nowrap; }
+  td.sev.s1 { color: var(--bad); } td.sev.s2 { color: var(--warn); } td.sev.s3 { color: var(--grey-500); }
+
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); overflow: hidden; }
+  th, td { padding: 11px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+  th { font: 600 11px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey-500); background: var(--purple-mid); }
+  tr:last-child td { border-bottom: 0; }
+  tr.live td { background: #F3F2FE; }
+  td.ticket { font: 500 12.5px/1 var(--mono); white-space: nowrap; }
+  td.ticket a { text-decoration: none; }
+  td.title { font-weight: 500; color: #000; }
+  td.services { font: 400 12px/1.6 var(--mono); color: var(--grey-700); }
+  td.action { text-align: right; white-space: nowrap; }
+  td.note { color: var(--grey-500); font-size: 12.5px; }
+
+  .status { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--body); padding: 6px 9px; border-radius: 100px; border: 1.5px solid transparent; white-space: nowrap; }
+  .status svg { width: 12px; height: 12px; }
+  .status.done { color: var(--ok); background: var(--ok-bg); }
+  .status.running { color: var(--purple-deep); background: #fff; border-color: var(--purple-shadow); }
+  .status.queued { color: var(--grey-700); background: #fff; border-color: var(--line); }
+  .status.failed { color: var(--bad); background: var(--bad-bg); }
+  .status.review { color: var(--warn); background: var(--warn-bg); }
+  .status.ready { color: var(--ink); background: var(--yellow); border-color: var(--ink); }
+  .spin { animation: spin 1s linear infinite; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; font: 600 12.5px/1 var(--body); padding: 9px 14px; border-radius: 8px; border: 1.5px solid var(--ink); cursor: pointer; background: var(--purple-hover); color: #fff; box-shadow: 3px 4px 0 var(--ink); transition: transform 120ms, box-shadow 120ms; }
+  .btn:hover { transform: translate(-1px,-1px); box-shadow: 4px 5px 0 var(--ink); }
+  .btn:disabled { cursor: progress; background: var(--purple-shadow); transform: none; box-shadow: 2px 3px 0 var(--ink); }
+  .btn.quiet { background: var(--cream); color: var(--grey-500); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
+  .btn.quiet:hover { transform: none; }
+  .link { font: 600 12.5px/1 var(--body); color: var(--purple-deep); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+  [contenteditable="true"] { outline: 2px dashed var(--purple); outline-offset: 2px; border-radius: 3px; background: #fff; cursor: text; }
+
+  .error { margin-top: 8px; font: 500 12px/1.45 var(--mono); color: var(--bad); background: var(--bad-bg); border-radius: 6px; padding: 8px 10px; word-break: break-word; }
+  .foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; font-size: 12px; color: var(--grey-500); flex-wrap: wrap; }
+
+  @media (max-width: 820px) {
+    th.hide-sm, td.hide-sm { display: none; }
+    .brand span { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="./" title="Storefront">
+      <img src="https://res.cloudinary.com/dxas4fpir/image/upload/w_96,h_96,c_fit/MetalBear_logo_c2doft" alt="MetalBear" width="32" height="32" />
+      <b>MetalMart</b><span>R&amp;D · cloud agents</span>
+    </a>
+    <div class="right">
+      <span class="api" id="api-pill" data-state="unknown"><i></i><span id="api-pill-text">api: checking</span></span>
+      <a class="ghost" href="./">Storefront</a>
+    </div>
+  </header>
+
+  <h1>Cloud agents</h1>
+  <p class="sub">Linear tickets assigned to Claude Code cloud agents. Each run branches, verifies with mirrord against the playground cluster, and opens a PR with a preview environment.</p>
+
+  <table>
+    <thead>
+      <tr><th>Ticket</th><th>Title</th><th class="hide-sm">Services</th><th>Status</th><th class="hide-sm">Notes</th><th></th></tr>
+    </thead>
+    <tbody>
+      <!-- Live row: the only working button -->
+      <tr class="live" id="row-live">
+        <td class="ticket">
+          <a id="ticket-live" href="https://linear.app/metalbear/issue/SOL-175" target="_blank" rel="noopener">SOL-175</a>
+        </td>
+        <td class="title"><span id="title-live" spellcheck="false">Metal Mart V2</span><div id="feedback-live"></div></td>
+        <td class="services hide-sm">order-service<br />metal-mart-frontend<br />chat-service</td>
+        <td><span class="status ready" id="status-live"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
+        <td class="note hide-sm" id="note-live">routine claude-agent-demo</td>
+        <td class="action"><button class="btn" id="run-live" type="button">Run agent</button></td>
+      </tr>
+
+      <!-- Dummy rows -->
+      <tr>
+        <td class="ticket">SOL-171</td>
+        <td class="title">Idempotency key on POST /orders</td>
+        <td class="services hide-sm">order-service</td>
+        <td><span class="status running"><svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg><span>Running</span></span></td>
+        <td class="note hide-sm">step 4/6 · mirrord preview · 6m 12s</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Running</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">SOL-168</td>
+        <td class="title">Low-stock badge on product tiles</td>
+        <td class="services hide-sm">metal-mart-frontend<br />inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Done</span></span></td>
+        <td class="note hide-sm">PR merged · 11 min</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Done</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">SOL-174</td>
+        <td class="title">Typing indicator in the chat widget</td>
+        <td class="services hide-sm">metal-mart-frontend<br />chat-service</td>
+        <td><span class="status review"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>In review</span></span></td>
+        <td class="note hide-sm">preview env live · waiting on Han</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Open preview</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">SOL-170</td>
+        <td class="title">Temporal activity timeout to 30s</td>
+        <td class="services hide-sm">fulfillment-worker</td>
+        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg><span>Failed</span></span></td>
+        <td class="note hide-sm">Playwright screenshot step · 2 attempts</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Retry</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">SOL-173</td>
+        <td class="title">Validate email before placing an order</td>
+        <td class="services hide-sm">metal-mart-frontend</td>
+        <td><span class="status queued"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg><span>Queued</span></span></td>
+        <td class="note hide-sm">position 1</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Run agent</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">SOL-162</td>
+        <td class="title">Retry the Kafka consumer on rebalance</td>
+        <td class="services hide-sm">delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Done</span></span></td>
+        <td class="note hide-sm">PR merged · 18 min</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Done</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">SOL-166</td>
+        <td class="title">PDF receipt for orders over $100</td>
+        <td class="services hide-sm">receipt-service<br />order-service</td>
+        <td><span class="status queued"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg><span>Queued</span></span></td>
+        <td class="note hide-sm">position 2</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Run agent</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>QA reported urgent bugs</h2>
+  <p class="sub">Open bugs in staging. Debug the service locally with mirrord against the playground cluster, then fix.</p>
+
+  <table>
+    <thead>
+      <tr><th>Bug</th><th>Title</th><th class="hide-sm">Service</th><th>Sev</th><th>Status</th><th class="hide-sm">Notes</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr class="live" id="bug-live">
+        <td class="ticket">BUG-101</td>
+        <td class="title">MetalMart titles are not capital letters</td>
+        <td class="services hide-sm">metal-mart-frontend</td>
+        <td class="sev s1">S1</td>
+        <td><span class="status failed" id="bug-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
+        <td class="note hide-sm" id="bug-note">reported 2h ago · product tiles and detail page</td>
+        <td class="action"><button class="btn" id="bug-debug" type="button">Debug in staging</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">BUG-098</td>
+        <td class="title">Checkout returns 500 when the cart has a discontinued product</td>
+        <td class="services hide-sm">order-service</td>
+        <td class="sev s1">S1</td>
+        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
+        <td class="note hide-sm">reported 5h ago · 14 failed orders</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Debug in staging</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">BUG-097</td>
+        <td class="title">Delivery status stuck at "preparing" after a Kafka rebalance</td>
+        <td class="services hide-sm">delivery-service</td>
+        <td class="sev s2">S2</td>
+        <td><span class="status review"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg><span>Investigating</span></span></td>
+        <td class="note hide-sm">Areg · mirrord session on delivery-service</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Debug in staging</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">BUG-095</td>
+        <td class="title">Back-view product image 404s on mobile</td>
+        <td class="services hide-sm">metal-mart-frontend</td>
+        <td class="sev s2">S2</td>
+        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
+        <td class="note hide-sm">reported yesterday · Cloudinary transform</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Debug in staging</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">BUG-093</td>
+        <td class="title">Receipt total ignores shipping</td>
+        <td class="services hide-sm">receipt-service</td>
+        <td class="sev s3">S3</td>
+        <td><span class="status running"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Fix in review</span></span></td>
+        <td class="note hide-sm">PR #561 · preview env live</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Open preview</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    <span>Routine: <span id="kv-trigger" style="font-family: var(--mono)">claude-agent-demo</span> · playground cluster · namespace shop</span>
+    <button class="link" id="reset" type="button" title="Clears the in-progress state. The edited ticket id and title are kept.">Reset demo state</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = 'metal-mart-cloud-agents:run';
+  var LABEL_KEY = 'metal-mart-cloud-agents:label';
+  var API = 'api/cloud-agents/run'; // relative, so it works under the /shop base path too
+
+  var ticketEl = document.getElementById('ticket-live');
+  var titleEl = document.getElementById('title-live');
+  var btn = document.getElementById('run-live');
+  var status = document.getElementById('status-live');
+  var note = document.getElementById('note-live');
+  var feedback = document.getElementById('feedback-live');
+  var pill = document.getElementById('api-pill');
+  var pillText = document.getElementById('api-pill-text');
+  var TICKET = ticketEl.textContent.trim();
+
+  var SPIN = '<svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg>';
+  var CROSS = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+
+  function hhmmss(d) { return d.toTimeString().slice(0, 8); }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+  function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
+
+  // Editable ticket id + title, so each demo can point at a fresh Linear issue.
+  // Hidden trigger: double-click the ticket id or title. Enter saves, Esc cancels.
+  var editing = false;
+  var locked = false; // no edits once a run is in progress
+  function applyLabel(l) {
+    if (l && l.ticket) { TICKET = l.ticket.trim().toUpperCase(); ticketEl.textContent = TICKET; }
+    if (l && l.title) titleEl.textContent = l.title.trim();
+    ticketEl.href = 'https://linear.app/metalbear/issue/' + encodeURIComponent(TICKET);
+    document.title = 'Cloud agents · ' + TICKET + ' · MetalMart R&D';
+  }
+  function setEditing(on, focusEl) {
+    if (on && locked) return;
+    editing = on;
+    [ticketEl, titleEl].forEach(function (el) { el.contentEditable = on ? 'true' : 'false'; });
+    if (on) { var f = focusEl || titleEl; f.focus(); document.getSelection().selectAllChildren(f); }
+    else { applyLabel({ ticket: ticketEl.textContent, title: titleEl.textContent }); save(LABEL_KEY, { ticket: TICKET, title: titleEl.textContent.trim() }); }
+  }
+  ticketEl.addEventListener('click', function (e) { if (ticketEl.isContentEditable) e.preventDefault(); });
+  [ticketEl, titleEl].forEach(function (el) {
+    el.addEventListener('dblclick', function (e) { if (!editing) { e.preventDefault(); setEditing(true, el); } });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); setEditing(false); }
+      if (e.key === 'Escape') { e.preventDefault(); applyLabel(load(LABEL_KEY)); setEditing(false); }
+    });
+    el.addEventListener('paste', function (e) { e.preventDefault(); document.execCommand('insertText', false, (e.clipboardData || window.clipboardData).getData('text').replace(/\s+/g, ' ')); });
+  });
+  applyLabel(load(LABEL_KEY));
+
+  function setInProgress(state) {
+    status.className = 'status running';
+    status.innerHTML = SPIN + '<span>In progress</span>';
+    note.textContent = 'started ' + hhmmss(new Date(state.startedAt)) + ' · branch claude/' + TICKET.toLowerCase();
+    btn.disabled = true;
+    btn.className = 'btn quiet';
+    btn.textContent = 'Running';
+    if (state.url) {
+      var a = document.createElement('a'); a.href = state.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'open run'; a.style.marginLeft = '8px';
+      note.appendChild(document.createTextNode(' · ')); note.appendChild(a);
+    }
+    feedback.innerHTML = '';
+    locked = true;
+  }
+
+  function setFailed(message) {
+    status.className = 'status failed';
+    status.innerHTML = CROSS + '<span>Failed to start</span>';
+    feedback.innerHTML = '<div class="error">' + esc(message) + '</div>';
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+  }
+
+  function findUrl(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    var keys = ['url', 'session_url', 'claude_ai_url', 'web_url'];
+    for (var i = 0; i < keys.length; i++) if (typeof obj[keys[i]] === 'string' && /^https?:\/\//.test(obj[keys[i]])) return obj[keys[i]];
+    for (var k in obj) { if (obj[k] && typeof obj[k] === 'object') { var u = findUrl(obj[k]); if (u) return u; } }
+    return null;
+  }
+
+  btn.addEventListener('click', function () {
+    if (editing) setEditing(false);
+    btn.disabled = true;
+    btn.innerHTML = SPIN + ' Starting…';
+    feedback.innerHTML = '';
+
+    fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
+      .then(function (r) {
+        if (!r.ok) {
+          var msg = (r.data && (r.data.error || (r.data.result && r.data.result.error && (r.data.result.error.message || r.data.result.error)))) || ('HTTP ' + r.status);
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        var state = { startedAt: r.data.started_at || new Date().toISOString(), url: findUrl(r.data.result), trigger: r.data.trigger_id };
+        save(KEY, state);
+        setInProgress(state);
+      })
+      .catch(function (err) { setFailed(err.message || String(err)); });
+  });
+
+  // Urgent bugs: the first row flips to "Debugging" locally; the rest are static.
+  var BUG_KEY = 'metal-mart-cloud-agents:bug';
+  var bugBtn = document.getElementById('bug-debug');
+  var bugStatus = document.getElementById('bug-status');
+  var bugNote = document.getElementById('bug-note');
+  function setDebugging(state) {
+    bugStatus.className = 'status running';
+    bugStatus.innerHTML = SPIN + '<span>Debugging</span>';
+    bugNote.textContent = 'mirrord session on metal-mart-frontend · started ' + hhmmss(new Date(state.startedAt));
+    bugBtn.className = 'btn quiet';
+    bugBtn.textContent = 'In progress';
+    bugBtn.disabled = true;
+  }
+  bugBtn.addEventListener('click', function () {
+    var state = { startedAt: new Date().toISOString() };
+    save(BUG_KEY, state);
+    setDebugging(state);
+  });
+  var priorBug = load(BUG_KEY);
+  if (priorBug && priorBug.startedAt) setDebugging(priorBug);
+
+  document.getElementById('reset').addEventListener('click', function () { save(KEY, null); save(BUG_KEY, null); location.reload(); });
+
+  var prior = load(KEY);
+  if (prior && prior.startedAt) setInProgress(prior);
+
+  fetch(API, { method: 'GET' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      pill.dataset.state = d.configured ? 'ok' : 'off';
+      pillText.textContent = d.configured ? 'api: connected' : 'api: not configured';
+      if (d.trigger_id) document.getElementById('kv-trigger').textContent = d.trigger_id;
+    })
+    .catch(function () { pill.dataset.state = 'off'; pillText.textContent = 'api: unreachable'; });
+})();
+</script>
+</body>
+</html>
