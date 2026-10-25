@@ -15,6 +15,7 @@
 const API_BASE = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
 const TRIGGER_ID = process.env.CLOUD_AGENT_TRIGGER_ID ?? "trig_01YSsN4xAz2bf3W7Mcb4FBPF";
 const OAUTH_BETA = "oauth-2025-04-20";
+const API_VERSION = "2023-06-01";
 
 function token(): string | undefined {
   return process.env.CLAUDE_CODE_OAUTH_TOKEN || undefined;
@@ -41,6 +42,7 @@ export async function POST() {
     headers: {
       Authorization: `Bearer ${oauth}`,
       "anthropic-beta": OAUTH_BETA,
+      "anthropic-version": API_VERSION,
       "Content-Type": "application/json",
     },
     body: "{}",
