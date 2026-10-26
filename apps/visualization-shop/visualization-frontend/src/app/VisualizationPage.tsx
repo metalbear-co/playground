@@ -2292,12 +2292,11 @@ export default function VisualizationPage() {
     return replaced;
   }, [kafkaTopics, operatorSessions, aliasIndex, baseEdges]);
 
-  // When there are multiple kafka topics, create per-topic local machine nodes
-  // (each with its own local-process and mirrord-layer).
-  // When there are no kafka topics but multiple unique hostnames in operator sessions,
-  // create per-hostname local machine nodes instead.
-  const hasMultipleKafkaTopics = kafkaTopics.length > 1;
-
+  // One local machine per unique developer hostname across all non-CI operator
+  // sessions in the shop namespace. A session with no queue split (plain mirror or
+  // steal) counts the same as one with a Kafka split: the local machine exists
+  // regardless of which features the session uses. When fewer than two hostnames
+  // are active, the static Local Machine zone is used instead.
   type LocalMachineEntry = {
     ownerName: string;
     k8sUsername?: string;
@@ -2305,25 +2304,6 @@ export default function VisualizationPage() {
   };
 
   const localMachineEntries = useMemo((): LocalMachineEntry[] => {
-    if (hasMultipleKafkaTopics) {
-      const uniqueByHostname = new Map<string, LocalMachineEntry>();
-      for (const topic of kafkaTopics) {
-        const session = operatorSessions.find((s) => s.sessionId === topic.sessionId);
-        if (!session || isMirrordCiOwner(session.owner)) continue;
-        const hostname = session?.owner.hostname ?? "";
-        if (!uniqueByHostname.has(hostname)) {
-          uniqueByHostname.set(hostname, {
-            ownerName: session?.owner.username ?? "Unknown",
-            k8sUsername: session?.owner.k8sUsername,
-            hostname,
-          });
-        }
-      }
-      if (uniqueByHostname.size > 1) {
-        return Array.from(uniqueByHostname.values());
-      }
-      return [];
-    }
     const uniqueHostnames = new Map<string, LocalMachineEntry>();
     for (const session of localOperatorSessions) {
       if (!uniqueHostnames.has(session.owner.hostname)) {
@@ -2338,7 +2318,7 @@ export default function VisualizationPage() {
       return Array.from(uniqueHostnames.values());
     }
     return [];
-  }, [kafkaTopics, operatorSessions, hasMultipleKafkaTopics, localOperatorSessions]);
+  }, [localOperatorSessions]);
 
   const hasDynamicLocalMachines = localMachineEntries.length > 1;
 
