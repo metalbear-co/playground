@@ -51,9 +51,6 @@
   td.title { font-weight: 500; color: #000; }
   td.services { font: 400 12px/1.6 var(--mono); color: var(--grey-700); }
   td.action { text-align: right; white-space: nowrap; }
-  td.action .link { display: block; margin: 6px 4px 0 auto; font-size: 11.5px; color: var(--grey-500); }
-  td.action .link[hidden] { display: none; }
-  td.action .link:hover { color: var(--purple-deep); }
   td.note { color: var(--grey-500); font-size: 12.5px; }
   td.flow { font: 400 12px/1.6 var(--mono); color: var(--grey-700); white-space: nowrap; }
   td.flow i { font-style: normal; color: var(--purple-shadow); padding-right: 5px; }
@@ -135,7 +132,7 @@
         <td class="services hide-sm">order-service<br />metal-mart-frontend<br />chat-service</td>
         <td><span class="status ready" id="status-live"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
         <td class="note hide-sm" id="note-live">routine claude-agent-demo</td>
-        <td class="action"><button class="btn" id="run-live" type="button">Run agent</button><button class="link" id="reset-live" type="button" hidden title="Clear this run's state here and on the server">reset run</button></td>
+        <td class="action"><button class="btn" id="run-live" type="button">Run agent</button></td>
       </tr>
 
       <!-- Dummy rows -->
@@ -198,6 +195,68 @@
     </tbody>
   </table>
 
+  <h2>End-to-end tests</h2>
+  <p class="sub">Shop scenarios run against the playground cluster on every merge to main. Each scenario drives the storefront through a full order cycle and checks every service on the path.
+    <span class="totals"><b class="p">5 passed</b></span></p>
+
+  <table>
+    <thead>
+      <tr><th>Scenario</th><th>Title</th><th class="hide-sm">Flow</th><th>Status</th><th>Duration</th><th class="hide-sm">Last run</th><th class="hide-sm">Notes</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="ticket">E2E-01</td>
+        <td class="title e2e">Guest checkout, single product</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>fulfillment-worker<br /><i>↳</i>delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">48s</td>
+        <td class="when hide-sm">6 min ago</td>
+        <td class="note hide-sm">order → paid → fulfilled → delivered</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-03</td>
+        <td class="title e2e">Multi-item cart, stock decremented per line</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">39s</td>
+        <td class="when hide-sm">14 min ago</td>
+        <td class="note hide-sm">3 lines · stock matches</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-04</td>
+        <td class="title e2e">Out-of-stock product rejected at checkout</td>
+        <td class="flow hide-sm">order-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">12s</td>
+        <td class="when hide-sm">14 min ago</td>
+        <td class="note hide-sm">409 returned · cart kept</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-06</td>
+        <td class="title e2e">Order tracking page follows delivery events</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">55s</td>
+        <td class="when hide-sm">41 min ago</td>
+        <td class="note hide-sm">preparing → shipped → delivered</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-10</td>
+        <td class="title e2e">Cart survives reload and NEW badge renders</td>
+        <td class="flow hide-sm">metal-mart-frontend</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">9s</td>
+        <td class="when hide-sm">2h ago</td>
+        <td class="note hide-sm">localStorage · Playwright</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+    </tbody>
+  </table>
+
   <h2>QA reported urgent bugs</h2>
   <p class="sub">Open bugs in staging. Debug the service locally with mirrord against the playground cluster, then fix.</p>
 
@@ -213,7 +272,7 @@
         <td class="sev s1">S1</td>
         <td><span class="status failed" id="bug-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
         <td class="note hide-sm" id="bug-note">reported 2h ago · product tiles and detail page</td>
-        <td class="action"><button class="btn" id="bug-debug" type="button">Debug in staging</button><button class="link" id="bug-reset" type="button" hidden title="Clear the debugging state">reset</button></td>
+        <td class="action"><button class="btn" id="bug-debug" type="button">Debug in staging</button></td>
       </tr>
       <tr>
         <td class="ticket">BUG-098</td>
@@ -254,118 +313,6 @@
     </tbody>
   </table>
 
-  <h2>End-to-end tests</h2>
-  <p class="sub">Shop scenarios run against the playground cluster on every merge to main. Each scenario drives the storefront through a full order cycle and checks every service on the path.
-    <span class="totals"><b class="p">7 passed</b><b class="f">2 failed</b><b class="r">1 running</b></span></p>
-
-  <table>
-    <thead>
-      <tr><th>Scenario</th><th>Title</th><th class="hide-sm">Flow</th><th>Status</th><th>Duration</th><th class="hide-sm">Last run</th><th class="hide-sm">Notes</th><th></th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="ticket">E2E-01</td>
-        <td class="title e2e">Guest checkout, single product</td>
-        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>fulfillment-worker<br /><i>↳</i>delivery-service</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">48s</td>
-        <td class="when hide-sm">6 min ago</td>
-        <td class="note hide-sm">order → paid → fulfilled → delivered</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-02</td>
-        <td class="title e2e">Checkout with email, receipt generated</td>
-        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>receipt-service</td>
-        <td><span class="status running"><svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg><span>Running</span></span></td>
-        <td class="dur">31s</td>
-        <td class="when hide-sm">now</td>
-        <td class="note hide-sm">step 5/7 · waiting for receipt</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Running</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-03</td>
-        <td class="title e2e">Multi-item cart, stock decremented per line</td>
-        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>inventory-service</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">39s</td>
-        <td class="when hide-sm">14 min ago</td>
-        <td class="note hide-sm">3 lines · stock matches</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-04</td>
-        <td class="title e2e">Out-of-stock product rejected at checkout</td>
-        <td class="flow hide-sm">order-service<br /><i>↳</i>inventory-service</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">12s</td>
-        <td class="when hide-sm">14 min ago</td>
-        <td class="note hide-sm">409 returned · cart kept</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-05</td>
-        <td class="title e2e">Payment declined, order failed, stock restored</td>
-        <td class="flow hide-sm">order-service<br /><i>↳</i>payment-service<br /><i>↳</i>inventory-service</td>
-        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg><span>Failed</span></span></td>
-        <td class="dur">27s</td>
-        <td class="when hide-sm">22 min ago</td>
-        <td class="note hide-sm">stock not restored for 1 line</td>
-        <td class="action"><button class="btn" type="button" data-demo="run">Re-run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-06</td>
-        <td class="title e2e">Order tracking page follows delivery events</td>
-        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>delivery-service</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">55s</td>
-        <td class="when hide-sm">41 min ago</td>
-        <td class="note hide-sm">preparing → shipped → delivered</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-07</td>
-        <td class="title e2e">Fulfillment retries after an activity timeout</td>
-        <td class="flow hide-sm">fulfillment-worker</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">1m 20s</td>
-        <td class="when hide-sm">1h ago</td>
-        <td class="note hide-sm">Temporal retry · 2 attempts</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-08</td>
-        <td class="title e2e">Delivery consumed once after a Kafka rebalance</td>
-        <td class="flow hide-sm">delivery-service</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">44s</td>
-        <td class="when hide-sm">1h ago</td>
-        <td class="note hide-sm">no duplicate deliveries</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-09</td>
-        <td class="title e2e">Receipt total includes shipping</td>
-        <td class="flow hide-sm">receipt-service<br /><i>↳</i>order-service</td>
-        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg><span>Failed</span></span></td>
-        <td class="dur">18s</td>
-        <td class="when hide-sm">2h ago</td>
-        <td class="note hide-sm">off by shipping · see BUG-093</td>
-        <td class="action"><button class="btn" type="button" data-demo="run">Re-run</button></td>
-      </tr>
-      <tr>
-        <td class="ticket">E2E-10</td>
-        <td class="title e2e">Cart survives reload and NEW badge renders</td>
-        <td class="flow hide-sm">metal-mart-frontend</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">9s</td>
-        <td class="when hide-sm">2h ago</td>
-        <td class="note hide-sm">localStorage · Playwright</td>
-        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
-      </tr>
-    </tbody>
-  </table>
-
   <div class="foot">
     <span>Routine: <span id="kv-trigger" style="font-family: var(--mono)">claude-agent-demo</span> · playground cluster · namespace shop</span>
     <button class="link" id="reset" type="button" title="Clears the in-progress state. The edited ticket id and title are kept.">Reset demo state</button>
@@ -401,7 +348,6 @@
   var status = document.getElementById('status-live');
   var note = document.getElementById('note-live');
   var feedback = document.getElementById('feedback-live');
-  var resetLive = document.getElementById('reset-live');
   var pill = document.getElementById('api-pill');
   var pillText = document.getElementById('api-pill-text');
   var TICKET = ticketEl.textContent.trim();
@@ -454,7 +400,6 @@
     btn.className = 'btn quiet';
     btn.textContent = 'Running';
     btn.dataset.href = '';
-    resetLive.hidden = false;
     if (state.url) {
       var a = document.createElement('a'); a.href = state.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'open run'; a.style.marginLeft = '8px';
       note.appendChild(document.createTextNode(' · ')); note.appendChild(a);
@@ -515,7 +460,6 @@
       btn.dataset.href = target || '';
     }
     if (r.status !== 'running') save(KEY, null);
-    resetLive.hidden = r.status !== 'running';
   }
   function pollResult(onEmpty) {
     fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { cache: 'no-store' })
@@ -551,7 +495,6 @@
   var bugBtn = document.getElementById('bug-debug');
   var bugStatus = document.getElementById('bug-status');
   var bugNote = document.getElementById('bug-note');
-  var bugReset = document.getElementById('bug-reset');
   function setDebugging(state) {
     bugStatus.className = 'status running';
     bugStatus.innerHTML = SPIN + '<span>Debugging</span>';
@@ -559,9 +502,7 @@
     bugBtn.className = 'btn quiet';
     bugBtn.textContent = 'In progress';
     bugBtn.disabled = true;
-    bugReset.hidden = false;
   }
-  bugReset.addEventListener('click', function () { save(BUG_KEY, null); location.reload(); });
   bugBtn.addEventListener('click', function () {
     var state = { startedAt: new Date().toISOString() };
     save(BUG_KEY, state);
@@ -592,20 +533,19 @@
         setTimeout(function () {
           st.className = 'status done'; st.innerHTML = CHECK + '<span>Passed</span>';
           if (noteEl) noteEl.textContent = 'all steps green · ' + hhmmss(new Date());
-          b.textContent = 'View run'; b.disabled = false; b.className = 'btn'; b.dataset.href = './';
+          b.textContent = 'View run'; b.disabled = false; b.className = 'btn'; b.dataset.href = 'https://github.com/metalbear-co/playground/actions/runs/35616740409';
         }, 9000);
       }
     });
   });
 
-  // Clears the live run in the browser and on the server, then reloads. The row
-  // link clears only the run; the footer link also clears the bug demo state.
-  function clearRun(alsoBug) {
-    save(KEY, null); if (alsoBug) save(BUG_KEY, null);
+  // Clears the live run in the browser and on the server, plus the bug demo
+  // state, then reloads. The footer link is the only reset on the page.
+  function clearRun() {
+    save(KEY, null); save(BUG_KEY, null);
     fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
   }
-  resetLive.addEventListener('click', function () { clearRun(false); });
-  document.getElementById('reset').addEventListener('click', function () { clearRun(true); });
+  document.getElementById('reset').addEventListener('click', clearRun);
 
   var prior = load(KEY);
   if (prior && prior.startedAt) { setInProgress(prior); startPolling(); }
