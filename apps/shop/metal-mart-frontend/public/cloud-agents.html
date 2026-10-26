@@ -425,12 +425,19 @@
 
   // Completion: the agent posts {ticket, url, pr_url, status} to CALLBACK. While a
   // run is in progress the row polls for it, and on load it checks once so any
-  // browser shows the finished state. Links render on the live row; the button
-  // turns into "Open preview".
+  // browser shows the finished state. The poll asks for the latest result of any
+  // ticket, not the one typed into the row: the agent picks whichever Linear
+  // issue carries the demo label, so the row adopts the ticket the agent reports.
+  // Links render on the live row; the button turns into "Open preview".
   var pollTimer = null;
   function link(href, text) { var a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text; return a; }
   function renderResult(r) {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (r.ticket && r.ticket !== TICKET) {
+      applyLabel({ ticket: r.ticket });
+      var l = load(LABEL_KEY) || {};
+      save(LABEL_KEY, { ticket: TICKET, title: l.title || titleEl.textContent.trim() });
+    }
     var when = hhmmss(new Date(r.received_at));
     if (r.status === 'failed') {
       status.className = 'status failed'; status.innerHTML = CROSS + '<span>Failed</span>';
@@ -462,7 +469,7 @@
     if (r.status !== 'running') save(KEY, null);
   }
   function pollResult(onEmpty) {
-    fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { cache: 'no-store' })
+    fetch(CALLBACK, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d && d.result) renderResult(d.result); else if (onEmpty) onEmpty(); })
       .catch(function () {});
@@ -539,11 +546,12 @@
     });
   });
 
-  // Clears the live run in the browser and on the server, plus the bug demo
-  // state, then reloads. The footer link is the only reset on the page.
+  // Clears the live run in the browser and every stored result on the server,
+  // plus the bug demo state, then reloads. The footer link is the only reset on
+  // the page.
   function clearRun() {
     save(KEY, null); save(BUG_KEY, null);
-    fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
+    fetch(CALLBACK, { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
   }
   document.getElementById('reset').addEventListener('click', clearRun);
 

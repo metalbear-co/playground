@@ -3,9 +3,12 @@
  *
  * A cloud agent posts its final links (preview share URL, PR URL) to
  * /api/cloud-agents/callback when it finishes; the dashboard polls that route
- * and renders them on the live row. The frontend runs as a single replica, so a
- * module-level map is enough for a demo. State is lost on pod restart, which is
- * acceptable: the next run posts fresh links.
+ * and renders them on the live row. The agent picks whichever Linear issue
+ * carries the demo label, so the ticket it reports is not known up front: the
+ * dashboard asks for the latest result (most recent received_at) rather than a
+ * ticket it guessed. The frontend runs as a single replica, so a module-level
+ * map is enough for a demo. State is lost on pod restart, which is acceptable:
+ * the next run posts fresh links.
  *
  * The map hangs off globalThis so Next.js dev hot reloads keep it.
  */
@@ -38,6 +41,20 @@ export function setResult(r: AgentResult): void {
   results.set(r.ticket, r);
 }
 
+export function getLatest(): AgentResult | null {
+  let latest: AgentResult | null = null;
+  for (const r of results.values()) {
+    if (!latest || r.received_at > latest.received_at) latest = r;
+  }
+  return latest;
+}
+
 export function clearResult(ticket: string): boolean {
   return results.delete(ticket);
+}
+
+export function clearAll(): number {
+  const n = results.size;
+  results.clear();
+  return n;
 }
