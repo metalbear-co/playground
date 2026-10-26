@@ -1,0 +1,42 @@
+# SOL-179 — Metal Mart V2 agent demo verification.
+# Run from the playground repo root:
+#   mirrord up -f mirrord-up-sol-179.yaml --key <session-key>
+# Split mode everywhere: only requests carrying `baggage: mirrord-session=<key>`
+# are stolen into the local processes; everything else keeps hitting the cluster.
+services:
+  order-service:
+    target: { path: deployment/order-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  chat-service:
+    target: { path: deployment/chat-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8083"                     # order-service already binds local port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8083, 80]]   # [local, remote]: steal target port 80 into local 8083
+        split_queues:                    # only support-chat messages with this key reach the local consumer
+          "*":
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target: { path: deployment/metal-mart-frontend, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir   # NEXT_PUBLIC_* is build-time; next dev does not pick up the remote value
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]
