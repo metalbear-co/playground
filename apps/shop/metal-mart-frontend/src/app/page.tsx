@@ -29,13 +29,16 @@ function ProductTile({
 
   if (variant === "featured") {
     return (
-      <Link
-        href={href}
+      <article
         className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
         {product.is_new && <NewBadge size="default" />}
-        <div className="absolute inset-0">
+        <Link
+          href={href}
+          aria-label={`View ${product.name}`}
+          className="absolute inset-0 rounded-2xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+        >
           {getPrimaryImageUrl(product) ? (
             <ProductImage
               src={getPrimaryImageUrl(product)!}
@@ -50,8 +53,8 @@ function ProductTile({
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        </div>
-        <div className="relative mt-auto p-6">
+        </Link>
+        <div className="pointer-events-none relative mt-auto p-6">
           <h2 className="text-2xl font-bold text-white drop-shadow-sm md:text-3xl">
             {product.name}
           </h2>
@@ -59,8 +62,14 @@ function ProductTile({
           <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
             Shop now →
           </span>
+          <Link
+            href={href}
+            className="pointer-events-auto mt-3 flex min-h-11 w-fit items-center rounded-lg bg-yellow-300 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-yellow-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            Limited
+          </Link>
         </div>
-      </Link>
+      </article>
     );
   }
 
@@ -139,6 +148,11 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const previewBanner = (
+    <div className="bg-yellow-300 px-4 py-3 text-center font-semibold text-slate-950">
+      This is a preview environment
+    </div>
+  );
 
   useEffect(() => {
     fetch(`${basePath}/api/products`)
@@ -151,6 +165,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        {previewBanner}
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +177,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        {previewBanner}
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +194,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      {previewBanner}
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
