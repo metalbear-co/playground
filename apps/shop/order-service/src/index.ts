@@ -253,7 +253,11 @@ async function createOrderDirect(
 
   await startOrderFulfillment({ orderId, baggage });
 
-  return { orderId, status: "confirmed" };
+  // SOL-178: the HTTP response status carries an agent marker with the
+  // request timestamp so the change is visible on every /orders call.
+  const responseStatus = `confirmed test-agent-${new Date().toISOString()}`;
+  console.log("[Order] Order %d response status: %s", orderId, responseStatus);
+  return { orderId, status: responseStatus };
 }
 
 app.post("/orders", async (req, res) => {
