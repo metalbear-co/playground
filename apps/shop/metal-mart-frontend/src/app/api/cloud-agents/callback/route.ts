@@ -2,13 +2,18 @@
  * Completion callback for the Cloud Agents dashboard.
  *
  * A cloud agent calls POST at the end of its run with the links it produced; the
- * dashboard polls GET and shows them on the live row. DELETE clears a ticket
- * (used by "Reset demo state").
+ * dashboard polls GET and shows them on the live row. Without a ticket, GET
+ * returns the most recent result of any ticket: the agent chooses the issue it
+ * works on, so the dashboard cannot know the ticket ahead of time. DELETE
+ * clears one ticket, or every result when no ticket is given (used by
+ * "Reset demo state").
  *
  *   POST {ticket, url?, pr_url?, status?, message?}
  *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
  *   GET  ?ticket=SOL-175      -> {ticket, result: AgentResult | null}
- *   DELETE ?ticket=SOL-175    -> {ticket, cleared}
+ *   GET                       -> {ticket: <latest ticket> | null, result: AgentResult | null}
+ *   DELETE ?ticket=SOL-175    -> {ticket, cleared: boolean}
+ *   DELETE                    -> {ticket: null, cleared: <number removed>}
  *
  * Configuration (server-side env):
  *   CLOUD_AGENTS_CALLBACK_TOKEN - shared secret the agent must present. POST is
@@ -19,7 +24,9 @@
 import {
   type AgentResult,
   type AgentStatus,
+  clearAll,
   clearResult,
+  getLatest,
   getResult,
   normalizeTicket,
   setResult,
@@ -47,14 +54,24 @@ function authorized(req: Request): boolean {
 }
 
 export async function GET(req: Request) {
-  const ticket = normalizeTicket(new URL(req.url).searchParams.get("ticket"));
-  if (!ticket) return Response.json({ error: "ticket query param required, e.g. SOL-175" }, { status: 400 });
-  return Response.json({ ticket, result: getResult(ticket) }, { headers: { "Cache-Control": "no-store" } });
+  const raw = new URL(req.url).searchParams.get("ticket");
+  const headers = { "Cache-Control": "no-store" };
+  if (raw === null || raw.trim() === "") {
+    const latest = getLatest();
+    return Response.json({ ticket: latest?.ticket ?? null, result: latest }, { headers });
+  }
+  const ticket = normalizeTicket(raw);
+  if (!ticket) return Response.json({ error: "ticket must look like SOL-175" }, { status: 400 });
+  return Response.json({ ticket, result: getResult(ticket) }, { headers });
 }
 
 export async function DELETE(req: Request) {
-  const ticket = normalizeTicket(new URL(req.url).searchParams.get("ticket"));
-  if (!ticket) return Response.json({ error: "ticket query param required" }, { status: 400 });
+  const raw = new URL(req.url).searchParams.get("ticket");
+  if (raw === null || raw.trim() === "") {
+    return Response.json({ ticket: null, cleared: clearAll() });
+  }
+  const ticket = normalizeTicket(raw);
+  if (!ticket) return Response.json({ error: "ticket must look like SOL-175" }, { status: 400 });
   return Response.json({ ticket, cleared: clearResult(ticket) });
 }
 
