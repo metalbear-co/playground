@@ -253,7 +253,10 @@ async function createOrderDirect(
 
   await startOrderFulfillment({ orderId, baggage });
 
-  return { orderId, status: "confirmed" };
+  // SOL-179: the HTTP response carries a per-request test marker; the stored
+  // order, Kafka/Pub/Sub events and notifications keep the plain "confirmed".
+  const timestamp = new Date().toISOString();
+  return { orderId, status: `confirmed test-agent-${timestamp}` };
 }
 
 app.post("/orders", async (req, res) => {

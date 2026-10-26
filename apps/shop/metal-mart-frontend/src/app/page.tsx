@@ -135,6 +135,26 @@ function ProductTile({
   );
 }
 
+/** SOL-179: red banner at the top of the home page with the render date and time. */
+function AgentChangeBanner() {
+  const [renderedAt, setRenderedAt] = useState<string | null>(null);
+
+  // Set on the client after mount so the server and client markup match.
+  useEffect(() => {
+    setRenderedAt(new Date().toLocaleString());
+  }, []);
+
+  return (
+    <div
+      role="status"
+      data-testid="agent-change-banner"
+      className="w-full bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white"
+    >
+      AI Agent change {renderedAt ?? ""}
+    </div>
+  );
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +171,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <AgentChangeBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +183,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <AgentChangeBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +200,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <AgentChangeBanner />
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
