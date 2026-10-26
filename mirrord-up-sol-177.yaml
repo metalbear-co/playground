@@ -1,0 +1,45 @@
+# SOL-177 verification: run from the playground repo root with
+#   mirrord up -f mirrord-up-sol-177.yaml --key <session-key>
+# All services run in split mode: only requests / Kafka messages carrying
+# `baggage: mirrord-session=<key>` reach the local processes.
+services:
+  order-service:
+    target:
+      path: deployment/order-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  chat-service:
+    target:
+      path: deployment/chat-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    # Only support-chat Kafka messages whose `baggage` header carries the
+    # session key are consumed locally (same filter as apps/shop/chat-service/mirrord.json).
+    config_patch:
+      feature:
+        split_queues:
+          support-chat:
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target:
+      path: deployment/metal-mart-frontend
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      exclude: NODE_ENV
+      override:
+        # NEXT_PUBLIC_* is baked at build time; next dev needs it in the local env.
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]

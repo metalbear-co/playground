@@ -253,7 +253,9 @@ async function createOrderDirect(
 
   await startOrderFulfillment({ orderId, baggage });
 
-  return { orderId, status: "confirmed" };
+  // SOL-177 demo: tag the HTTP response status with the agent run timestamp.
+  // Persisted/queued status stays "confirmed" so downstream consumers are unaffected.
+  return { orderId, status: `confirmed test-agent-${new Date().toISOString()}` };
 }
 
 app.post("/orders", async (req, res) => {
