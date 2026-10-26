@@ -71,6 +71,7 @@ app.get("/health", (_req, res) => {
 
 app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
+   console.log("[Inventory] Fetching Products");
   try {
     const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
     res.json(rows);
