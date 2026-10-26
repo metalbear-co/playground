@@ -1,5 +1,5 @@
 /**
- * Back-office endpoint for the Cloud Agents dashboard (public/cloud-agents.html).
+ * Back-office endpoint for the Cloud Agents dashboard (public/cloud-agents.html, served at /cloud-agents).
  *
  * POST fires the Claude Code cloud routine that picks up Linear issues
  * labelled "claude-agent-demo" and opens a mirrord-verified preview PR.
