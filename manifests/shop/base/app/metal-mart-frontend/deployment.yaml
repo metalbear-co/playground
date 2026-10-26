@@ -40,6 +40,12 @@ spec:
                   name: cloud-agents
                   key: CLAUDE_CODE_OAUTH_TOKEN
                   optional: true
+            - name: CLOUD_AGENTS_CALLBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENTS_CALLBACK_TOKEN
+                  optional: true
           ports:
             - containerPort: 3000
               protocol: TCP
