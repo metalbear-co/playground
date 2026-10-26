@@ -29,11 +29,15 @@ function ProductTile({
 
   if (variant === "featured") {
     return (
-      <Link
-        href={href}
+      <div
         className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
+        <Link
+          href={href}
+          aria-label={`View ${product.name}`}
+          className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#6a4ff5]"
+        />
         {product.is_new && <NewBadge size="default" />}
         <div className="absolute inset-0">
           {getPrimaryImageUrl(product) ? (
@@ -59,8 +63,14 @@ function ProductTile({
           <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
             Shop now →
           </span>
+          <Link
+            href={href}
+            className="relative z-20 mt-3 block w-fit rounded-lg bg-yellow-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-yellow-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+          >
+            Limited
+          </Link>
         </div>
-      </Link>
+      </div>
     );
   }
 
