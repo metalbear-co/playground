@@ -2,7 +2,9 @@
  * Back-office endpoint for the Cloud Agents dashboard (public/cloud-agents.html, served at /cloud-agents).
  *
  * POST fires the Claude Code cloud routine that picks up Linear issues
- * labelled "claude-agent-demo" and opens a mirrord-verified preview PR.
+ * labelled "claude-agent-demo" and opens a mirrord-verified preview PR. The body
+ * may carry {ticket} so a stale result from an earlier run of that ticket is
+ * cleared before the new one reports back through /api/cloud-agents/callback.
  * GET reports whether the endpoint is configured, so the dashboard can show it.
  *
  * Configuration (server-side env):
@@ -11,6 +13,8 @@
  *   CLOUD_AGENT_TRIGGER_ID   - routine id to run (trig_...).
  *   ANTHROPIC_BASE_URL       - optional API host override.
  */
+
+import { clearResult, normalizeTicket } from "@/lib/cloud-agents-store";
 
 const API_BASE = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
 const TRIGGER_ID = process.env.CLOUD_AGENT_TRIGGER_ID ?? "trig_01YSsN4xAz2bf3W7Mcb4FBPF";
@@ -28,7 +32,7 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   const oauth = token();
   if (!oauth) {
     return Response.json(
@@ -36,6 +40,14 @@ export async function POST() {
       { status: 503 }
     );
   }
+
+  let ticket: string | null = null;
+  try {
+    ticket = normalizeTicket(((await req.json()) as { ticket?: unknown }).ticket);
+  } catch {
+    ticket = null;
+  }
+  if (ticket) clearResult(ticket);
 
   const res = await fetch(`${API_BASE}/v1/claude_code/routines/${TRIGGER_ID}/fire`, {
     method: "POST",
@@ -63,6 +75,7 @@ export async function POST() {
       status: res.status,
       trigger_id: TRIGGER_ID,
       started_at: new Date().toISOString(),
+      ticket,
       result: data,
     },
     { status: res.ok ? 200 : res.status }

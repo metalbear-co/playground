@@ -93,15 +93,3 @@ Without `CLOUDINARY_CLOUD_NAME`, the header logo, product images, and mascot wil
 ## URLs
 
 - Shop: `https://playground.metalbear.dev/shop`
-
-## Cloud agents table (`/shop/cloud-agents`, internal)
-
-Static internal R&D page at `metal-mart-frontend/public/cloud-agents.html`: two tables (cloud-agent tickets, QA reported urgent bugs) with status. Every row is decorative except **SOL-175** in the first table: its button calls `POST /api/cloud-agents/run`, which starts the Claude Code cloud routine that implements the ticket and opens a mirrord-verified preview PR. The route needs two env vars on the frontend:
-
-```bash
-CLAUDE_CODE_OAUTH_TOKEN=<token from `claude setup-token`> \
-CLOUD_AGENT_TRIGGER_ID=<routine id, trig_...> \
-NEXT_BASE_PATH= npm run dev   # then open http://localhost:3000/cloud-agents
-```
-
-Without the token the page shows `api: not configured` and the button reports the error instead of starting a run. "Reset demo state" in the footer clears the in-progress state stored in the browser. Double-click the ticket id or title to edit them (Enter saves, Esc cancels; no visible control, so the audience does not see it); the values persist in the browser so each demo can point at a fresh Linear issue.

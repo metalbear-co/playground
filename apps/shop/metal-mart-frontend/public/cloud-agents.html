@@ -46,13 +46,19 @@
   th, td { padding: 11px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
   th { font: 600 11px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey-500); background: var(--purple-mid); }
   tr:last-child td { border-bottom: 0; }
-  tr.live td { background: #F3F2FE; }
   td.ticket { font: 500 12.5px/1 var(--mono); white-space: nowrap; }
   td.ticket a { text-decoration: none; }
   td.title { font-weight: 500; color: #000; }
   td.services { font: 400 12px/1.6 var(--mono); color: var(--grey-700); }
   td.action { text-align: right; white-space: nowrap; }
   td.note { color: var(--grey-500); font-size: 12.5px; }
+  td.flow { font: 400 12px/1.6 var(--mono); color: var(--grey-700); white-space: nowrap; }
+  td.flow i { font-style: normal; color: var(--purple-shadow); padding-right: 5px; }
+  td.title.e2e { min-width: 220px; }
+  td.dur, td.when { font: 500 12px/1 var(--mono); color: var(--grey-500); white-space: nowrap; }
+  .totals { display: inline-flex; gap: 8px; margin-left: 10px; vertical-align: middle; }
+  .totals b { font: 600 11px/1 var(--body); padding: 4px 8px; border-radius: 100px; }
+  .totals .p { color: var(--ok); background: var(--ok-bg); } .totals .f { color: var(--bad); background: var(--bad-bg); } .totals .r { color: var(--purple-deep); background: #fff; border: 1.5px solid var(--purple-shadow); }
 
   .status { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--body); padding: 6px 9px; border-radius: 100px; border: 1.5px solid transparent; white-space: nowrap; }
   .status svg { width: 12px; height: 12px; }
@@ -65,14 +71,27 @@
   .spin { animation: spin 1s linear infinite; transform-origin: 50% 50%; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .btn { display: inline-flex; align-items: center; gap: 6px; font: 600 12.5px/1 var(--body); padding: 9px 14px; border-radius: 8px; border: 1.5px solid var(--ink); cursor: pointer; background: var(--purple-hover); color: #fff; box-shadow: 3px 4px 0 var(--ink); transition: transform 120ms, box-shadow 120ms; }
-  .btn:hover { transform: translate(-1px,-1px); box-shadow: 4px 5px 0 var(--ink); }
-  .btn:disabled { cursor: progress; background: var(--purple-shadow); transform: none; box-shadow: 2px 3px 0 var(--ink); }
-  .btn.quiet { background: var(--cream); color: var(--grey-500); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
-  .btn.quiet:hover { transform: none; }
+  /* One button style for every row. Interactive and placeholder buttons look
+     identical; only the cursor and hover state tell them apart. */
+  .btn { display: inline-flex; align-items: center; gap: 6px; font: 600 12.5px/1 var(--body); padding: 9px 14px; border-radius: 8px; border: 1.5px solid var(--ink); cursor: pointer; background: var(--cream); color: #000; transition: background 120ms; }
+  .btn:hover:not(:disabled) { background: var(--purple-mid); }
+  .btn:disabled, .btn.quiet { cursor: not-allowed; border-color: var(--line); color: var(--grey-500); background: var(--cream); }
   .link { font: 600 12.5px/1 var(--body); color: var(--purple-deep); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 
-  [contenteditable="true"] { outline: 2px dashed var(--purple); outline-offset: 2px; border-radius: 3px; background: #fff; cursor: text; }
+  td.title.editable { cursor: text; }
+  .pencil { display: inline-flex; vertical-align: middle; margin-left: 6px; padding: 2px; border: 0; background: none; color: var(--grey-500); cursor: pointer; border-radius: 4px; opacity: 0.55; }
+  .pencil:hover { opacity: 1; background: var(--purple-mid); color: #000; }
+  .pencil svg { width: 13px; height: 13px; }
+
+  dialog { border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); background: var(--cream); color: var(--grey-700); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(35, 33, 65, 0.35); }
+  dialog h3 { font: 700 15px/1.2 var(--display); color: #000; margin: 0 0 14px; }
+  dialog label { display: block; font: 600 11px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey-500); margin: 12px 0 6px; }
+  dialog input { width: 100%; font: 500 14px/1.3 var(--body); padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; color: #000; }
+  dialog input.mono { font-family: var(--mono); text-transform: uppercase; }
+  dialog input:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-mid); }
+  dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  dialog .hint { margin: 4px 0 0; font-size: 12px; color: var(--grey-500); }
 
   .error { margin-top: 8px; font: 500 12px/1.45 var(--mono); color: var(--bad); background: var(--bad-bg); border-radius: 6px; padding: 8px 10px; word-break: break-word; }
   .foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; font-size: 12px; color: var(--grey-500); flex-wrap: wrap; }
@@ -109,7 +128,10 @@
         <td class="ticket">
           <a id="ticket-live" href="https://linear.app/metalbear/issue/SOL-175" target="_blank" rel="noopener">SOL-175</a>
         </td>
-        <td class="title"><span id="title-live" spellcheck="false">Metal Mart V2</span><div id="feedback-live"></div></td>
+        <td class="title editable" id="title-cell-live" title="Double-click to edit">
+          <span id="title-live">Metal Mart V2</span><button class="pencil" id="edit-live" type="button" aria-label="Edit ticket and title"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M11.5 2.5l2 2L5 13H3v-2z"/></svg></button>
+          <div id="feedback-live"></div>
+        </td>
         <td class="services hide-sm">order-service<br />metal-mart-frontend<br />chat-service</td>
         <td><span class="status ready" id="status-live"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
         <td class="note hide-sm" id="note-live">routine claude-agent-demo</td>
@@ -139,7 +161,7 @@
         <td class="services hide-sm">metal-mart-frontend<br />chat-service</td>
         <td><span class="status review"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>In review</span></span></td>
         <td class="note hide-sm">preview env live · waiting on Han</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Open preview</button></td>
+        <td class="action"><button class="btn" type="button" data-href="./">Open preview</button></td>
       </tr>
       <tr>
         <td class="ticket">SOL-170</td>
@@ -147,7 +169,7 @@
         <td class="services hide-sm">fulfillment-worker</td>
         <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg><span>Failed</span></span></td>
         <td class="note hide-sm">Playwright screenshot step · 2 attempts</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Retry</button></td>
+        <td class="action"><button class="btn" type="button" data-demo="run">Retry</button></td>
       </tr>
       <tr>
         <td class="ticket">SOL-173</td>
@@ -155,7 +177,7 @@
         <td class="services hide-sm">metal-mart-frontend</td>
         <td><span class="status queued"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg><span>Queued</span></span></td>
         <td class="note hide-sm">position 1</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Run agent</button></td>
+        <td class="action"><button class="btn" type="button" data-demo="run">Run agent</button></td>
       </tr>
       <tr>
         <td class="ticket">SOL-162</td>
@@ -171,7 +193,7 @@
         <td class="services hide-sm">receipt-service<br />order-service</td>
         <td><span class="status queued"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg><span>Queued</span></span></td>
         <td class="note hide-sm">position 2</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Run agent</button></td>
+        <td class="action"><button class="btn" type="button" data-demo="run">Run agent</button></td>
       </tr>
     </tbody>
   </table>
@@ -200,7 +222,7 @@
         <td class="sev s1">S1</td>
         <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
         <td class="note hide-sm">reported 5h ago · 14 failed orders</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Debug in staging</button></td>
+        <td class="action"><button class="btn" type="button" data-demo="debug">Debug in staging</button></td>
       </tr>
       <tr>
         <td class="ticket">BUG-097</td>
@@ -209,7 +231,7 @@
         <td class="sev s2">S2</td>
         <td><span class="status review"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg><span>Investigating</span></span></td>
         <td class="note hide-sm">Areg · mirrord session on delivery-service</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Debug in staging</button></td>
+        <td class="action"><button class="btn" type="button" data-demo="debug">Debug in staging</button></td>
       </tr>
       <tr>
         <td class="ticket">BUG-095</td>
@@ -218,7 +240,7 @@
         <td class="sev s2">S2</td>
         <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
         <td class="note hide-sm">reported yesterday · Cloudinary transform</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Debug in staging</button></td>
+        <td class="action"><button class="btn" type="button" data-demo="debug">Debug in staging</button></td>
       </tr>
       <tr>
         <td class="ticket">BUG-093</td>
@@ -227,7 +249,119 @@
         <td class="sev s3">S3</td>
         <td><span class="status running"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Fix in review</span></span></td>
         <td class="note hide-sm">PR #561 · preview env live</td>
-        <td class="action"><button class="btn quiet" type="button" disabled>Open preview</button></td>
+        <td class="action"><button class="btn" type="button" data-href="./">Open preview</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>End-to-end tests</h2>
+  <p class="sub">Shop scenarios run against the playground cluster on every merge to main. Each scenario drives the storefront through a full order cycle and checks every service on the path.
+    <span class="totals"><b class="p">7 passed</b><b class="f">2 failed</b><b class="r">1 running</b></span></p>
+
+  <table>
+    <thead>
+      <tr><th>Scenario</th><th>Title</th><th class="hide-sm">Flow</th><th>Status</th><th>Duration</th><th class="hide-sm">Last run</th><th class="hide-sm">Notes</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="ticket">E2E-01</td>
+        <td class="title e2e">Guest checkout, single product</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>fulfillment-worker<br /><i>↳</i>delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">48s</td>
+        <td class="when hide-sm">6 min ago</td>
+        <td class="note hide-sm">order → paid → fulfilled → delivered</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-02</td>
+        <td class="title e2e">Checkout with email, receipt generated</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>receipt-service</td>
+        <td><span class="status running"><svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg><span>Running</span></span></td>
+        <td class="dur">31s</td>
+        <td class="when hide-sm">now</td>
+        <td class="note hide-sm">step 5/7 · waiting for receipt</td>
+        <td class="action"><button class="btn quiet" type="button" disabled>Running</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-03</td>
+        <td class="title e2e">Multi-item cart, stock decremented per line</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">39s</td>
+        <td class="when hide-sm">14 min ago</td>
+        <td class="note hide-sm">3 lines · stock matches</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-04</td>
+        <td class="title e2e">Out-of-stock product rejected at checkout</td>
+        <td class="flow hide-sm">order-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">12s</td>
+        <td class="when hide-sm">14 min ago</td>
+        <td class="note hide-sm">409 returned · cart kept</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-05</td>
+        <td class="title e2e">Payment declined, order failed, stock restored</td>
+        <td class="flow hide-sm">order-service<br /><i>↳</i>payment-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg><span>Failed</span></span></td>
+        <td class="dur">27s</td>
+        <td class="when hide-sm">22 min ago</td>
+        <td class="note hide-sm">stock not restored for 1 line</td>
+        <td class="action"><button class="btn" type="button" data-demo="run">Re-run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-06</td>
+        <td class="title e2e">Order tracking page follows delivery events</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">55s</td>
+        <td class="when hide-sm">41 min ago</td>
+        <td class="note hide-sm">preparing → shipped → delivered</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-07</td>
+        <td class="title e2e">Fulfillment retries after an activity timeout</td>
+        <td class="flow hide-sm">fulfillment-worker</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">1m 20s</td>
+        <td class="when hide-sm">1h ago</td>
+        <td class="note hide-sm">Temporal retry · 2 attempts</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-08</td>
+        <td class="title e2e">Delivery consumed once after a Kafka rebalance</td>
+        <td class="flow hide-sm">delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">44s</td>
+        <td class="when hide-sm">1h ago</td>
+        <td class="note hide-sm">no duplicate deliveries</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-09</td>
+        <td class="title e2e">Receipt total includes shipping</td>
+        <td class="flow hide-sm">receipt-service<br /><i>↳</i>order-service</td>
+        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg><span>Failed</span></span></td>
+        <td class="dur">18s</td>
+        <td class="when hide-sm">2h ago</td>
+        <td class="note hide-sm">off by shipping · see BUG-093</td>
+        <td class="action"><button class="btn" type="button" data-demo="run">Re-run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-10</td>
+        <td class="title e2e">Cart survives reload and NEW badge renders</td>
+        <td class="flow hide-sm">metal-mart-frontend</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">9s</td>
+        <td class="when hide-sm">2h ago</td>
+        <td class="note hide-sm">localStorage · Playwright</td>
+        <td class="action"><button class="btn" type="button" data-href="./">View run</button></td>
       </tr>
     </tbody>
   </table>
@@ -238,11 +372,28 @@
   </div>
 </div>
 
+<dialog id="edit-dialog">
+  <form method="dialog" id="edit-form">
+    <h3>Edit live ticket</h3>
+    <label for="edit-ticket">Linear ticket</label>
+    <input id="edit-ticket" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="SOL-175" required pattern="[A-Za-z]+-\d+" />
+    <label for="edit-title">Title</label>
+    <input id="edit-title" type="text" autocomplete="off" placeholder="Metal Mart V2" required />
+    <p class="hint">Saved in this browser only. Reset demo state keeps it.</p>
+    <div class="row">
+      <button class="btn quiet" type="button" id="edit-cancel" style="cursor:pointer">Cancel</button>
+      <button class="btn" type="submit" id="edit-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 (function () {
   var KEY = 'metal-mart-cloud-agents:run';
   var LABEL_KEY = 'metal-mart-cloud-agents:label';
   var API = 'api/cloud-agents/run'; // relative, so it works under the /shop base path too
+  var CALLBACK = 'api/cloud-agents/callback'; // the agent posts its links here when it finishes
+  var POLL_MS = 5000;
 
   var ticketEl = document.getElementById('ticket-live');
   var titleEl = document.getElementById('title-live');
@@ -256,37 +407,41 @@
 
   var SPIN = '<svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg>';
   var CROSS = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+  var CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>';
 
   function hhmmss(d) { return d.toTimeString().slice(0, 8); }
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
   function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
 
-  // Editable ticket id + title, so each demo can point at a fresh Linear issue.
-  // Hidden trigger: double-click the ticket id or title. Enter saves, Esc cancels.
-  var editing = false;
-  var locked = false; // no edits once a run is in progress
+  // The live row's ticket id + title are editable so each demo can point at a
+  // fresh Linear issue. Double-click the title cell (or click the pencil) to open
+  // the dialog; Save stores the label in localStorage, Esc or Cancel discards.
+  var dlg = document.getElementById('edit-dialog');
+  var inTicket = document.getElementById('edit-ticket');
+  var inTitle = document.getElementById('edit-title');
   function applyLabel(l) {
     if (l && l.ticket) { TICKET = l.ticket.trim().toUpperCase(); ticketEl.textContent = TICKET; }
     if (l && l.title) titleEl.textContent = l.title.trim();
     ticketEl.href = 'https://linear.app/metalbear/issue/' + encodeURIComponent(TICKET);
     document.title = 'Cloud agents · ' + TICKET + ' · MetalMart R&D';
   }
-  function setEditing(on, focusEl) {
-    if (on && locked) return;
-    editing = on;
-    [ticketEl, titleEl].forEach(function (el) { el.contentEditable = on ? 'true' : 'false'; });
-    if (on) { var f = focusEl || titleEl; f.focus(); document.getSelection().selectAllChildren(f); }
-    else { applyLabel({ ticket: ticketEl.textContent, title: titleEl.textContent }); save(LABEL_KEY, { ticket: TICKET, title: titleEl.textContent.trim() }); }
+  function openEditor() {
+    inTicket.value = TICKET;
+    inTitle.value = titleEl.textContent.trim();
+    dlg.showModal();
+    inTitle.focus(); inTitle.select();
   }
-  ticketEl.addEventListener('click', function (e) { if (ticketEl.isContentEditable) e.preventDefault(); });
-  [ticketEl, titleEl].forEach(function (el) {
-    el.addEventListener('dblclick', function (e) { if (!editing) { e.preventDefault(); setEditing(true, el); } });
-    el.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); setEditing(false); }
-      if (e.key === 'Escape') { e.preventDefault(); applyLabel(load(LABEL_KEY)); setEditing(false); }
-    });
-    el.addEventListener('paste', function (e) { e.preventDefault(); document.execCommand('insertText', false, (e.clipboardData || window.clipboardData).getData('text').replace(/\s+/g, ' ')); });
+  document.getElementById('edit-live').addEventListener('click', openEditor);
+  document.getElementById('title-cell-live').addEventListener('dblclick', function (e) { e.preventDefault(); openEditor(); });
+  document.getElementById('edit-cancel').addEventListener('click', function () { dlg.close(); });
+  document.getElementById('edit-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var l = { ticket: inTicket.value.trim().toUpperCase(), title: inTitle.value.trim() };
+    if (!l.ticket || !l.title) return;
+    applyLabel(l);
+    save(LABEL_KEY, l);
+    dlg.close();
   });
   applyLabel(load(LABEL_KEY));
 
@@ -297,12 +452,12 @@
     btn.disabled = true;
     btn.className = 'btn quiet';
     btn.textContent = 'Running';
+    btn.dataset.href = '';
     if (state.url) {
       var a = document.createElement('a'); a.href = state.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'open run'; a.style.marginLeft = '8px';
       note.appendChild(document.createTextNode(' · ')); note.appendChild(a);
     }
     feedback.innerHTML = '';
-    locked = true;
   }
 
   function setFailed(message) {
@@ -321,13 +476,55 @@
     return null;
   }
 
+  // Completion: the agent posts {ticket, url, pr_url, status} to CALLBACK. While a
+  // run is in progress the row polls for it, and on load it checks once so any
+  // browser shows the finished state. Links render on the live row; the button
+  // turns into "Open preview".
+  var pollTimer = null;
+  function link(href, text) { var a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text; return a; }
+  function renderResult(r) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    var when = hhmmss(new Date(r.received_at));
+    if (r.status === 'failed') {
+      status.className = 'status failed'; status.innerHTML = CROSS + '<span>Failed</span>';
+      note.textContent = 'agent reported failure · ' + when;
+    } else if (r.status === 'running') {
+      status.className = 'status running'; status.innerHTML = SPIN + '<span>In progress</span>';
+      note.textContent = (r.message || 'agent update') + ' · ' + when;
+    } else {
+      status.className = 'status done'; status.innerHTML = CHECK + '<span>Done</span>';
+      note.textContent = 'preview ready · ' + when;
+    }
+    if (r.url || r.pr_url) {
+      note.appendChild(document.createTextNode(' · '));
+      if (r.url) note.appendChild(link(r.url, 'preview env'));
+      if (r.url && r.pr_url) note.appendChild(document.createTextNode(' · '));
+      if (r.pr_url) note.appendChild(link(r.pr_url, 'PR'));
+    }
+    if (r.message && r.status !== 'running') feedback.innerHTML = '<div class="' + (r.status === 'failed' ? 'error' : 'note') + '">' + esc(r.message) + '</div>';
+    var target = r.url || r.pr_url;
+    btn.className = 'btn';
+    btn.disabled = !target;
+    btn.textContent = r.status === 'failed' ? 'Retry' : target ? (r.url ? 'Open preview' : 'Open PR') : 'Done';
+    btn.dataset.href = target || '';
+    if (r.status === 'failed') { btn.dataset.href = ''; btn.disabled = false; }
+    if (r.status !== 'running') save(KEY, null);
+  }
+  function pollResult(onEmpty) {
+    fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.result) renderResult(d.result); else if (onEmpty) onEmpty(); })
+      .catch(function () {});
+  }
+  function startPolling() { if (!pollTimer) pollTimer = setInterval(pollResult, POLL_MS); }
+
   btn.addEventListener('click', function () {
-    if (editing) setEditing(false);
+    if (btn.dataset.href) { window.open(btn.dataset.href, '_blank', 'noopener'); return; }
     btn.disabled = true;
     btn.innerHTML = SPIN + ' Starting…';
     feedback.innerHTML = '';
 
-    fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: TICKET }) })
       .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
       .then(function (r) {
         if (!r.ok) {
@@ -337,6 +534,7 @@
         var state = { startedAt: r.data.started_at || new Date().toISOString(), url: findUrl(r.data.result), trigger: r.data.trigger_id };
         save(KEY, state);
         setInProgress(state);
+        startPolling();
       })
       .catch(function (err) { setFailed(err.message || String(err)); });
   });
@@ -362,10 +560,42 @@
   var priorBug = load(BUG_KEY);
   if (priorBug && priorBug.startedAt) setDebugging(priorBug);
 
-  document.getElementById('reset').addEventListener('click', function () { save(KEY, null); save(BUG_KEY, null); location.reload(); });
+  // Placeholder action buttons: Run/Retry/Re-run flip the row to Running, Debug
+  // flips it to Debugging, and link buttons open the storefront as the preview.
+  // Nothing is persisted; a reload restores the static state.
+  Array.prototype.forEach.call(document.querySelectorAll('.btn[data-demo], .btn[data-href]'), function (b) {
+    b.addEventListener('click', function () {
+      if (b.dataset.href) { window.open(b.dataset.href, '_blank', 'noopener'); return; }
+      var row = b.closest('tr');
+      var st = row.querySelector('.status');
+      var noteEl = row.querySelector('.note');
+      var isDebug = b.dataset.demo === 'debug';
+      var isE2E = /^E2E-/.test(row.querySelector('.ticket').textContent.trim());
+      st.className = 'status running';
+      st.innerHTML = SPIN + '<span>' + (isDebug ? 'Debugging' : 'Running') + '</span>';
+      if (noteEl) noteEl.textContent = (isDebug ? 'mirrord session' : isE2E ? 'step 1/7' : 'step 1/6 · branch') + ' · started ' + hhmmss(new Date());
+      b.className = 'btn quiet';
+      b.textContent = isDebug ? 'In progress' : 'Running';
+      b.disabled = true;
+      if (isE2E) {
+        var t = row.querySelector('.when'); if (t) t.textContent = 'now';
+        setTimeout(function () {
+          st.className = 'status done'; st.innerHTML = CHECK + '<span>Passed</span>';
+          if (noteEl) noteEl.textContent = 'all steps green · ' + hhmmss(new Date());
+          b.textContent = 'View run'; b.disabled = false; b.className = 'btn'; b.dataset.href = './';
+        }, 9000);
+      }
+    });
+  });
+
+  document.getElementById('reset').addEventListener('click', function () {
+    save(KEY, null); save(BUG_KEY, null);
+    fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
+  });
 
   var prior = load(KEY);
-  if (prior && prior.startedAt) setInProgress(prior);
+  if (prior && prior.startedAt) { setInProgress(prior); startPolling(); }
+  pollResult();
 
   fetch(API, { method: 'GET' })
     .then(function (r) { return r.json(); })
