@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: main
-          image: ghcr.io/metalbear-co/playground-metal-mart-frontend:daec723f837107e461d9c3470d7a10b6309a30e2
+          image: ghcr.io/metalbear-co/playground-metal-mart-frontend:5aca11f40751fb8be4640fb9d590d5b1afa8efd5
           imagePullPolicy: Always
           env:
             - name: PORT
