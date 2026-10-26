@@ -10,6 +10,24 @@ import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+/** SOL-176: red banner at the top of the home page, stamped with today's date and time. */
+function AgentChangeBanner() {
+  // The timestamp is set after mount so server and client markup match.
+  const [now, setNow] = useState<string | null>(null);
+  useEffect(() => {
+    setNow(new Date().toLocaleString("en-US", { timeZoneName: "short" }));
+  }, []);
+  return (
+    <div
+      role="status"
+      data-testid="agent-change-banner"
+      className="w-full bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-md"
+    >
+      AI Agent change {now ?? "…"}
+    </div>
+  );
+}
+
 function ProductTile({
   product,
   variant,
@@ -151,6 +169,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <AgentChangeBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +181,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <AgentChangeBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +198,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <AgentChangeBanner />
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
