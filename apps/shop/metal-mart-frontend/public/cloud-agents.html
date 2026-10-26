@@ -51,6 +51,9 @@
   td.title { font-weight: 500; color: #000; }
   td.services { font: 400 12px/1.6 var(--mono); color: var(--grey-700); }
   td.action { text-align: right; white-space: nowrap; }
+  td.action .link { display: block; margin: 6px 4px 0 auto; font-size: 11.5px; color: var(--grey-500); }
+  td.action .link[hidden] { display: none; }
+  td.action .link:hover { color: var(--purple-deep); }
   td.note { color: var(--grey-500); font-size: 12.5px; }
   td.flow { font: 400 12px/1.6 var(--mono); color: var(--grey-700); white-space: nowrap; }
   td.flow i { font-style: normal; color: var(--purple-shadow); padding-right: 5px; }
@@ -79,9 +82,6 @@
   .link { font: 600 12.5px/1 var(--body); color: var(--purple-deep); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 
   td.title.editable { cursor: text; }
-  .pencil { display: inline-flex; vertical-align: middle; margin-left: 6px; padding: 2px; border: 0; background: none; color: var(--grey-500); cursor: pointer; border-radius: 4px; opacity: 0.55; }
-  .pencil:hover { opacity: 1; background: var(--purple-mid); color: #000; }
-  .pencil svg { width: 13px; height: 13px; }
 
   dialog { border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); background: var(--cream); color: var(--grey-700); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(35, 33, 65, 0.35); }
@@ -129,13 +129,13 @@
           <a id="ticket-live" href="https://linear.app/metalbear/issue/SOL-175" target="_blank" rel="noopener">SOL-175</a>
         </td>
         <td class="title editable" id="title-cell-live" title="Double-click to edit">
-          <span id="title-live">Metal Mart V2</span><button class="pencil" id="edit-live" type="button" aria-label="Edit ticket and title"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M11.5 2.5l2 2L5 13H3v-2z"/></svg></button>
+          <span id="title-live">Metal Mart V2</span>
           <div id="feedback-live"></div>
         </td>
         <td class="services hide-sm">order-service<br />metal-mart-frontend<br />chat-service</td>
         <td><span class="status ready" id="status-live"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
         <td class="note hide-sm" id="note-live">routine claude-agent-demo</td>
-        <td class="action"><button class="btn" id="run-live" type="button">Run agent</button></td>
+        <td class="action"><button class="btn" id="run-live" type="button">Run agent</button><button class="link" id="reset-live" type="button" hidden title="Clear this run's state here and on the server">reset run</button></td>
       </tr>
 
       <!-- Dummy rows -->
@@ -401,6 +401,7 @@
   var status = document.getElementById('status-live');
   var note = document.getElementById('note-live');
   var feedback = document.getElementById('feedback-live');
+  var resetLive = document.getElementById('reset-live');
   var pill = document.getElementById('api-pill');
   var pillText = document.getElementById('api-pill-text');
   var TICKET = ticketEl.textContent.trim();
@@ -415,8 +416,9 @@
   function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
 
   // The live row's ticket id + title are editable so each demo can point at a
-  // fresh Linear issue. Double-click the title cell (or click the pencil) to open
-  // the dialog; Save stores the label in localStorage, Esc or Cancel discards.
+  // fresh Linear issue. Double-click the title cell to open the dialog (no visible
+  // control, so the audience does not see it); Save stores the label in
+  // localStorage, Esc or Cancel discards.
   var dlg = document.getElementById('edit-dialog');
   var inTicket = document.getElementById('edit-ticket');
   var inTitle = document.getElementById('edit-title');
@@ -432,7 +434,6 @@
     dlg.showModal();
     inTitle.focus(); inTitle.select();
   }
-  document.getElementById('edit-live').addEventListener('click', openEditor);
   document.getElementById('title-cell-live').addEventListener('dblclick', function (e) { e.preventDefault(); openEditor(); });
   document.getElementById('edit-cancel').addEventListener('click', function () { dlg.close(); });
   document.getElementById('edit-form').addEventListener('submit', function (e) {
@@ -453,6 +454,7 @@
     btn.className = 'btn quiet';
     btn.textContent = 'Running';
     btn.dataset.href = '';
+    resetLive.hidden = false;
     if (state.url) {
       var a = document.createElement('a'); a.href = state.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'open run'; a.style.marginLeft = '8px';
       note.appendChild(document.createTextNode(' · ')); note.appendChild(a);
@@ -503,12 +505,17 @@
     }
     if (r.message && r.status !== 'running') feedback.innerHTML = '<div class="' + (r.status === 'failed' ? 'error' : 'note') + '">' + esc(r.message) + '</div>';
     var target = r.url || r.pr_url;
-    btn.className = 'btn';
-    btn.disabled = !target;
-    btn.textContent = r.status === 'failed' ? 'Retry' : target ? (r.url ? 'Open preview' : 'Open PR') : 'Done';
-    btn.dataset.href = target || '';
-    if (r.status === 'failed') { btn.dataset.href = ''; btn.disabled = false; }
+    btn.dataset.href = '';
+    if (r.status === 'running') {
+      btn.className = 'btn quiet'; btn.disabled = true; btn.textContent = 'Running';
+    } else if (r.status === 'failed') {
+      btn.className = 'btn'; btn.disabled = false; btn.textContent = 'Retry';
+    } else {
+      btn.className = 'btn'; btn.disabled = !target; btn.textContent = target ? (r.url ? 'Open preview' : 'Open PR') : 'Done';
+      btn.dataset.href = target || '';
+    }
     if (r.status !== 'running') save(KEY, null);
+    resetLive.hidden = r.status !== 'running';
   }
   function pollResult(onEmpty) {
     fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { cache: 'no-store' })
@@ -588,10 +595,14 @@
     });
   });
 
-  document.getElementById('reset').addEventListener('click', function () {
-    save(KEY, null); save(BUG_KEY, null);
+  // Clears the live run in the browser and on the server, then reloads. The row
+  // link clears only the run; the footer link also clears the bug demo state.
+  function clearRun(alsoBug) {
+    save(KEY, null); if (alsoBug) save(BUG_KEY, null);
     fetch(CALLBACK + '?ticket=' + encodeURIComponent(TICKET), { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
-  });
+  }
+  resetLive.addEventListener('click', function () { clearRun(false); });
+  document.getElementById('reset').addEventListener('click', function () { clearRun(true); });
 
   var prior = load(KEY);
   if (prior && prior.startedAt) { setInProgress(prior); startPolling(); }
