@@ -213,7 +213,7 @@
         <td class="sev s1">S1</td>
         <td><span class="status failed" id="bug-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
         <td class="note hide-sm" id="bug-note">reported 2h ago · product tiles and detail page</td>
-        <td class="action"><button class="btn" id="bug-debug" type="button">Debug in staging</button></td>
+        <td class="action"><button class="btn" id="bug-debug" type="button">Debug in staging</button><button class="link" id="bug-reset" type="button" hidden title="Clear the debugging state">reset</button></td>
       </tr>
       <tr>
         <td class="ticket">BUG-098</td>
@@ -551,6 +551,7 @@
   var bugBtn = document.getElementById('bug-debug');
   var bugStatus = document.getElementById('bug-status');
   var bugNote = document.getElementById('bug-note');
+  var bugReset = document.getElementById('bug-reset');
   function setDebugging(state) {
     bugStatus.className = 'status running';
     bugStatus.innerHTML = SPIN + '<span>Debugging</span>';
@@ -558,7 +559,9 @@
     bugBtn.className = 'btn quiet';
     bugBtn.textContent = 'In progress';
     bugBtn.disabled = true;
+    bugReset.hidden = false;
   }
+  bugReset.addEventListener('click', function () { save(BUG_KEY, null); location.reload(); });
   bugBtn.addEventListener('click', function () {
     var state = { startedAt: new Date().toISOString() };
     save(BUG_KEY, state);
