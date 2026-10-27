@@ -506,11 +506,23 @@
   }
   document.getElementById('reset').addEventListener('click', clearRun);
 
-  // The heading greets by time of day; the page is each developer's landing view.
+  // The heading greets by time of day and, when known, by name: the page is each
+  // developer's landing view. The name arrives once in the URL as #dev=<name>
+  // (`mm dashboard` opens the page that way, taking the name from the developer's
+  // machine), is kept in this browser, and is removed from the URL so the link
+  // stays shareable. Reset demo state keeps it.
+  var DEV_KEY = 'metal-mart-cloud-agents:dev';
   (function () {
+    var m = /[#&?]dev=([^&]+)/.exec(location.hash) || /[?&]dev=([^&]+)/.exec(location.search);
+    if (m) {
+      var name = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
+      if (name) save(DEV_KEY, name);
+      try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    }
+    var dev = load(DEV_KEY);
     var h = new Date().getHours();
     var g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    document.getElementById('greeting').textContent = g + ', your tasks for today';
+    document.getElementById('greeting').textContent = dev ? g + ', ' + dev + '. Your tasks for today' : g + ', your tasks for today';
   })();
 
   var prior = load(KEY);

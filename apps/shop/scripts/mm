@@ -43,6 +43,7 @@
 #   mm cleanup <id|--mine>  Kill one operator session (or every session you own)
 #   mm doctor               Check every prerequisite and report OK/FAIL
 #   mm extension            Open the mirrord browser-extension install page
+#   mm dashboard            Open your tasks dashboard, greeted by name
 #
 set -euo pipefail
 
@@ -91,6 +92,10 @@ MIRRORD_TAP_FORMULA='metalbear-co/mirrord/mirrord'
 # session key so the operator routes only *their* requests to their laptop.
 EXTENSION_URL='https://chromewebstore.google.com/detail/mirrord/bijejadnnfgjkfdocgocklekjhnhkhkf'
 
+# Per-developer tasks dashboard. `mm dashboard` opens it with the developer's
+# name in the URL fragment; the page keeps the name in the browser after that.
+DASHBOARD_URL='https://playground.metalbear.dev/shop/cloud-agents.html'
+
 # Session key. `mirrord up --key` sets it; mirrord derives the HTTP steal filter
 # (baggage: .*mirrord-session=<key>.*) and the queue-split filters from it, and
 # exposes it to the config file as the `key` template variable. It defaults to
@@ -134,6 +139,7 @@ Commands:
   cleanup <id>    Kill one operator session by ID (or --mine for all of yours)
   doctor          Verify every prerequisite (gcloud, kubectl, mirrord, cluster, config)
   extension       Open the mirrord browser extension install page
+  dashboard       Open your tasks dashboard in the browser, greeted by your name
 
 Options for `run`:
   --key <name>        Session key used in the traffic filters (default: your username)
@@ -689,6 +695,56 @@ cmd_extension() {
   fi
 }
 
+# The dashboard greets whoever opens it, so the name has to come from the
+# developer's own machine: the OS account's full name (macOS `id -F`, Linux
+# GECOS), or the active gcloud account's mailbox when the OS has no full name.
+# gcloud and kubectl only carry the e-mail, never a display name.
+developer_name() {
+  local name=''
+  if [[ "$(uname -s)" == 'Darwin' ]]; then
+    name="$(id -F 2>/dev/null || true)"
+  elif have getent; then
+    name="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f5 | cut -d, -f1)"
+  fi
+  if [[ -z "$name" ]]; then
+    local account
+    account="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null | head -1)"
+    name="${account%%@*}"
+  fi
+  echo "$name"
+}
+
+# Percent-encodes one string for a URL fragment. Pure bash, so `mm dashboard`
+# needs no jq or python.
+urlencode() {
+  local s="$1" out='' i c
+  for (( i = 0; i < ${#s}; i++ )); do
+    c="${s:i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) out+="$c" ;;
+      *) out+="$(printf '%%%02X' "'$c")" ;;
+    esac
+  done
+  echo "$out"
+}
+
+cmd_dashboard() {
+  ensure_gcloud_auth
+  local name url
+  name="$(developer_name)"
+  url="$DASHBOARD_URL"
+  if [[ -n "$name" ]]; then
+    url="${DASHBOARD_URL}#dev=$(urlencode "$name")"
+    note "opening your dashboard as: $name"
+  else
+    note 'could not work out your name; opening the dashboard without it'
+  fi
+  if have open; then open "$url"
+  elif have xdg-open; then xdg-open "$url"
+  else echo "$url"
+  fi
+}
+
 # Non-mutating health report: checks every prerequisite `mm run` relies on and
 # prints OK/FAIL per item, so support requests start with `mm doctor` output.
 cmd_doctor() {
@@ -805,6 +861,7 @@ main() {
     cleanup)   cmd_cleanup "$@" ;;
     doctor)    cmd_doctor "$@" ;;
     extension) cmd_extension "$@" ;;
+    dashboard) cmd_dashboard "$@" ;;
     *)
       # `run` is deliberately the only way to start a service — one canonical
       # form, no shortcut. Redirect anyone who types a bare service name.
