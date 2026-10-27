@@ -140,7 +140,7 @@
         <td class="title">Uppercase inventory: product names should be capital case</td>
         <td class="services hide-sm">inventory-service</td>
         <td><span class="kind bug s1">Bug · S1</span></td>
-        <td><span class="status failed" id="bug-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
+        <td><span class="status ready" id="bug-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
         <td class="note hide-sm" id="bug-note">reported 2h ago · product names returned by GET /products</td>
         <td class="action"><button class="btn" id="bug-debug" type="button">Run agent</button> <button class="btn" type="button" data-resolve>Resolved</button></td>
       </tr>
@@ -167,7 +167,7 @@
         <td class="title">Checkout returns 500 when the cart has a discontinued product</td>
         <td class="services hide-sm">order-service</td>
         <td><span class="kind bug s1">Bug · S1</span></td>
-        <td><span class="status failed"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/></svg><span>Open</span></span></td>
+        <td><span class="status ready"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
         <td class="note hide-sm">reported 5h ago · 14 failed orders</td>
         <td class="action"><button class="btn" type="button" data-demo="run">Run agent</button> <button class="btn" type="button" data-resolve>Resolved</button></td>
       </tr>
@@ -422,14 +422,14 @@
       .catch(function (err) { setFailed(err.message || String(err)); });
   });
 
-  // Bug rows: the live one flips to "Debugging" locally; the rest are static.
+  // Bug rows: the live one flips to "Running" locally; the rest are static.
   var BUG_KEY = 'metal-mart-cloud-agents:bug';
   var bugBtn = document.getElementById('bug-debug');
   var bugStatus = document.getElementById('bug-status');
   var bugNote = document.getElementById('bug-note');
   function setDebugging(state) {
     bugStatus.className = 'status running';
-    bugStatus.innerHTML = SPIN + '<span>Debugging</span>';
+    bugStatus.innerHTML = SPIN + '<span>Running</span>';
     bugNote.textContent = 'mirrord session on inventory-service · started ' + hhmmss(new Date(state.startedAt));
     bugBtn.className = 'btn quiet';
     bugBtn.textContent = 'Run agent';
@@ -444,7 +444,7 @@
   if (priorBug && priorBug.startedAt && !isResolved('BUG-101')) setDebugging(priorBug);
 
   // Placeholder action buttons: Run/Retry/Re-run flip the row to Running, Debug
-  // flips it to Debugging, and link buttons open the storefront as the preview.
+  // flips it to Running with a mirrord-session note, and link buttons open the storefront as the preview.
   // Nothing is persisted; a reload restores the static state.
   Array.prototype.forEach.call(document.querySelectorAll('.btn[data-demo], .btn[data-href]'), function (b) {
     b.addEventListener('click', function () {
@@ -455,7 +455,7 @@
       var isDebug = b.dataset.demo === 'debug';
       var isE2E = /^E2E-/.test(row.querySelector('.ticket').textContent.trim());
       st.className = 'status running';
-      st.innerHTML = SPIN + '<span>' + (isDebug ? 'Debugging' : 'Running') + '</span>';
+      st.innerHTML = SPIN + '<span>Running</span>';
       if (noteEl) noteEl.textContent = (isDebug ? 'mirrord session' : isE2E ? 'step 1/7' : 'step 1/6 · branch') + ' · started ' + hhmmss(new Date());
       b.className = 'btn quiet';
       b.textContent = isDebug ? 'In progress' : 'Running';
