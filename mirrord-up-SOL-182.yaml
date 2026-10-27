@@ -1,0 +1,58 @@
+# SOL-182 Metal Mart V2 — local code for order, chat and frontend against the shop cluster.
+# Run from this checkout's root:  mirrord up -f mirrord-up-SOL-182.yaml --key <key>
+# split mode (default): only requests whose baggage header carries mirrord-session=<key>
+# are stolen; everything else keeps hitting the deployed pods.
+#
+# Local ports are offset (8090/8091/3001) so this session can run next to the
+# SOL-181 session (80/8083/3000) on the same machine. port_mapping is [[local, remote]].
+services:
+  order-service:
+    target: { path: deployment/order-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8090"                     # local 8090 <- target port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8090, 80]]   # [local, remote]
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  chat-service:
+    target: { path: deployment/chat-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8091"                     # local 8091 <- target port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8091, 80]]   # [local, remote]
+        split_queues:                    # only support-chat messages with this key reach the local consumer
+          "*":
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target: { path: deployment/metal-mart-frontend, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "3001"                     # local 3001 <- target port 3000
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir   # NEXT_PUBLIC_* is build-time; remote value is not picked up by next dev
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[3001, 3000]] # [local, remote]
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3001"]
