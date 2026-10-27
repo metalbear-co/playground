@@ -1,0 +1,204 @@
+
+* Local mirrord daemon already running
+* Daemon PID:
+ -> 1035
+
+* Web UI:
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
+* API token:
+ -> x-auth-token: <redacted>
+
+* mirrord session monitor ready!
+
+metal-mart-frontend: requesting DB branching
+order-service: requesting DB branching
+chat-service: requesting DB branching
+metal-mart-frontend: no DB branch definitions, running against the source DB
+order-service: no DB branch definitions, running against the source DB
+chat-service: no DB branch definitions, running against the source DB
+metal-mart-frontend: mirrord exec (cli version 3.279.1)
+metal-mart-frontend: Detected `mirrord exec` running with a CI token.
+metal-mart-frontend: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+metal-mart-frontend: mirrord ci start (cli version 3.279.1)
+chat-service: mirrord exec (cli version 3.279.1)
+chat-service: Detected `mirrord exec` running with a CI token.
+chat-service: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+chat-service: mirrord ci start (cli version 3.279.1)
+metal-mart-frontend: version check
+order-service: mirrord exec (cli version 3.279.1)
+order-service: Detected `mirrord exec` running with a CI token.
+order-service: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+order-service: mirrord ci start (cli version 3.279.1)
+order-service: version check
+chat-service: version check
+order-service: preparing to launch process
+order-service: checking if target binary is dynamically linked
+order-service: target binary is dynamically linked
+order-service: extracting layer
+order-service: layer extracted
+order-service: checking operator
+chat-service: preparing to launch process
+chat-service: checking if target binary is dynamically linked
+chat-service: target binary is dynamically linked
+chat-service: extracting layer
+chat-service: layer extracted
+chat-service: checking operator
+metal-mart-frontend: preparing to launch process
+metal-mart-frontend: checking if target binary is dynamically linked
+metal-mart-frontend: target binary is dynamically linked
+metal-mart-frontend: extracting layer
+metal-mart-frontend: layer extracted
+metal-mart-frontend: checking operator
+order-service: checking license
+order-service: Operator license is valid for 69 more days.
+order-service: operator license valid
+order-service: preparing user credentials
+order-service: user credentials prepared
+order-service: starting session
+chat-service: checking license
+chat-service: Operator license is valid for 69 more days.
+chat-service: operator license valid
+chat-service: preparing user credentials
+chat-service: user credentials prepared
+chat-service: starting session
+metal-mart-frontend: checking license
+metal-mart-frontend: Operator license is valid for 69 more days.
+metal-mart-frontend: operator license valid
+metal-mart-frontend: preparing user credentials
+metal-mart-frontend: user credentials prepared
+metal-mart-frontend: starting session
+chat-service: connecting to the target
+metal-mart-frontend: connecting to the target
+order-service: connecting to the target
+chat-service: connected to the target
+chat-service: session started
+chat-service: using operator
+order-service: connected to the target
+order-service: session started
+order-service: using operator
+metal-mart-frontend: connected to the target
+metal-mart-frontend: session started
+metal-mart-frontend: using operator
+chat-service: session ID: 34E87C27FF1474F
+order-service: session ID: D233FC414F8DD31A
+metal-mart-frontend: session ID: BEE5E605638D0091
+chat-service: ready to launch process
+chat-service: config summary
+chat-service: Running command: npm --prefix apps/shop/chat-service run dev
+chat-service: mirrord will target: deployment/chat-service, no configuration file was loaded
+chat-service: mirrord will run with the mirrord Operator
+chat-service: env: all remote environment variables will be fetched
+chat-service: fs: file operations will default to read from the remote
+chat-service: incoming: incoming traffic will be stolen
+chat-service: outgoing: forwarding is enabled on TCP and UDP
+chat-service: dns: DNS will be resolved remotely
+chat-service: internal proxy: logs will be written to /tmp/mirrord-intproxy-1793102464-5QTTQTf.log
+chat-service: Session key: sol-182-20261027-120104
+chat-service: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+chat-service: config summary
+chat-service: running process
+chat-service: Ready!
+chat-service: 
+chat-service: > chat-service@1.0.0 dev
+chat-service: > tsx watch src/index.ts
+chat-service: 
+metal-mart-frontend: ready to launch process
+metal-mart-frontend: config summary
+metal-mart-frontend: Running command: npm --prefix apps/shop/metal-mart-frontend run dev -- -p 3001
+metal-mart-frontend: mirrord will target: deployment/metal-mart-frontend, no configuration file was loaded
+metal-mart-frontend: mirrord will run with the mirrord Operator
+metal-mart-frontend: env: all remote environment variables will be fetched
+metal-mart-frontend: fs: file operations will default to read from the remote
+metal-mart-frontend: incoming: incoming traffic will be stolen
+metal-mart-frontend: outgoing: forwarding is enabled on TCP and UDP
+metal-mart-frontend: dns: DNS will be resolved remotely
+metal-mart-frontend: internal proxy: logs will be written to /tmp/mirrord-intproxy-1793102464-5QTTQTf.log
+metal-mart-frontend: Session key: sol-182-20261027-120104
+metal-mart-frontend: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+metal-mart-frontend: config summary
+metal-mart-frontend: running process
+metal-mart-frontend: Ready!
+order-service: ready to launch process
+order-service: config summary
+order-service: Running command: npm --prefix apps/shop/order-service run dev
+order-service: mirrord will target: deployment/order-service, no configuration file was loaded
+order-service: mirrord will run with the mirrord Operator
+order-service: env: all remote environment variables will be fetched
+order-service: fs: file operations will default to read from the remote
+order-service: incoming: incoming traffic will be stolen
+order-service: outgoing: forwarding is enabled on TCP and UDP
+order-service: dns: DNS will be resolved remotely
+order-service: internal proxy: logs will be written to /tmp/mirrord-intproxy-1793102464-5QTTQTf.log
+order-service: Session key: sol-182-20261027-120104
+order-service: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+order-service: config summary
+order-service: running process
+order-service: Ready!
+metal-mart-frontend: 
+metal-mart-frontend: > metal-mart-frontend@0.1.0 dev
+metal-mart-frontend: > next dev -p 3001
+metal-mart-frontend: 
+order-service: 
+order-service: > order-service@1.0.0 dev
+order-service: > tsx watch src/index.ts
+order-service: 
+chat-service: {"level":"WARN","timestamp":"2026-10-27T12:01:10.305Z","logger":"kafkajs","message":"KafkaJS v2.0.0 switched default partitioner. To retain the same partitioning behavior as in previous versions, create the producer with the option \"createPartitioner: Partitioners.LegacyPartitioner\". See the migration guide at https://kafka.js.org/docs/migration-guide-v2.0.0#producer-new-default-partitioner for details. Silence this warning by setting the environment variable \"KAFKAJS_NO_PARTITIONER_WARNING=1\""}
+metal-mart-frontend:  ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+chat-service: Chat service listening on port 8091
+chat-service: {"level":"ERROR","timestamp":"2026-10-27T12:01:11.249Z","logger":"kafkajs","message":"[Connection] Response CreateTopics(key: 19, version: 3)","broker":"kafka.infra.svc.cluster.local:9092","clientId":"chat-service","error":"Topic creation errors","correlationId":2,"size":112}
+chat-service: {"level":"INFO","timestamp":"2026-10-27T12:01:11.821Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"chat-service"}
+metal-mart-frontend: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+metal-mart-frontend:    ▲ Next.js 16.0.0 (Turbopack)
+metal-mart-frontend:    - Local:        http://localhost:3001
+metal-mart-frontend:    - Network:      http://192.0.2.2:3001
+metal-mart-frontend: 
+metal-mart-frontend:  ✓ Starting...
+order-service: {"level":"WARN","timestamp":"2026-10-27T12:01:14.860Z","logger":"kafkajs","message":"KafkaJS v2.0.0 switched default partitioner. To retain the same partitioning behavior as in previous versions, create the producer with the option \"createPartitioner: Partitioners.LegacyPartitioner\". See the migration guide at https://kafka.js.org/docs/migration-guide-v2.0.0#producer-new-default-partitioner for details. Silence this warning by setting the environment variable \"KAFKAJS_NO_PARTITIONER_WARNING=1\""}
+chat-service: {"level":"INFO","timestamp":"2026-10-27T12:01:17.218Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"chat-service","memberId":"chat-service-cabc5cf6-93ae-4f15-9c9d-3ff1cbbf9750","leaderId":"chat-service-acf1f024-ef26-4267-9c8e-7ebd0d28782e","isLeader":false,"memberAssignment":{"mirrord-tmp-ypfqkutxsw-support-chat":[0]},"groupProtocol":"range","duration":5395}
+order-service: [Order] Starting
+metal-mart-frontend:  ○ Compiling instrumentation Node.js ...
+order-service: Response file loaded: /app/banner.txt
+order-service: [Order] Listening on port 8090
+metal-mart-frontend:  ✓ Ready in 9.8s
+order-service: Order request: {
+order-service:   "baggage": "mirrord-session=sol-182-20261027-120104",
+order-service:   "total_cents": 499,
+order-service:   "customer_email": "preview-verification-bot@metalbear.dev",
+order-service:   "items": [
+order-service:     {
+order-service:       "productId": 1,
+order-service:       "quantity": 1
+order-service:     }
+order-service:   ]
+order-service: }
+order-service: [Order] JWT created for order 2277 (baggage=mirrord-session=sol-182-20261027-120104): <redacted-jwt>
+order-service: [Order/Rabbit] published notification for order 2277
+order-service: [Order/PubSub] publish failed (order still ok): Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
+order-service:     at GoogleAuth.getApplicationDefaultAsync (/home/user/playground-sol182/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:287:15)
+order-service:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+order-service:     at async GoogleAuth._GoogleAuth_determineClient (/home/user/playground-sol182/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:834:32)
+order-service:     at async GoogleAuth.getClient (/home/user/playground-sol182/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:698:20)
+order-service:     at async GrpcClient._getCredentials (/home/user/playground-sol182/apps/shop/order-service/node_modules/google-gax/src/grpc.ts:209:20)
+order-service:     at async GrpcClient.createStub (/home/user/playground-sol182/apps/shop/order-service/node_modules/google-gax/src/grpc.ts:426:19)
+order-service: (node:1596) MetadataLookupWarning: received unexpected error = request to http://169.254.169.254/computeMetadata/v1/instance failed, reason: read ECONNRESET code = ECONNRESET
+order-service: (Use `node --trace-warnings ...` to show where the warning was created)
+order-service: [Order/Temporal] started orderFulfillment for order 2277
+order-service: Order response: {
+order-service:   "orderId": 2277,
+order-service:   "status": "confirmed",
+order-service:   "time": "2026-10-27T12:02:45.726Z"
+order-service: }
+metal-mart-frontend:  POST /api/orders 201 in 4.9s (compile: 913ms, render: 4.0s)
+metal-mart-frontend: {"level":"WARN","timestamp":"2026-10-27T12:02:47.924Z","logger":"kafkajs","message":"KafkaJS v2.0.0 switched default partitioner. To retain the same partitioning behavior as in previous versions, create the producer with the option \"createPartitioner: Partitioners.LegacyPartitioner\". See the migration guide at https://kafka.js.org/docs/migration-guide-v2.0.0#producer-new-default-partitioner for details. Silence this warning by setting the environment variable \"KAFKAJS_NO_PARTITIONER_WARNING=1\""}
+metal-mart-frontend:  POST /api/chat/messages 202 in 2.1s (compile: 1701ms, render: 350ms)
+chat-service: [mirrord-tmp-ypfqkutxsw-support-chat] customer message in sol-182-20261027-120104 { partition: 0, offset: '0' }
+chat-service: [mirrord-tmp-ypfqkutxsw-support-chat] bot message in sol-182-20261027-120104 { partition: 0, offset: '1' }
+chat-service: GET /conversations/sol-182-20261027-120104/messages
+metal-mart-frontend:  GET /api/chat/conversations/sol-182-20261027-120104/messages 200 in 1940ms (compile: 1656ms, render: 284ms)
+metal-mart-frontend:  ○ Compiling / ...
+metal-mart-frontend:  GET / 200 in 8.1s (compile: 7.7s, render: 445ms)
+metal-mart-frontend:  ⚠ Cross origin request detected from playground.metalbear.dev to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+metal-mart-frontend: Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+metal-mart-frontend:  GET /api/products 200 in 482ms (compile: 256ms, render: 226ms)
+order-service: Response file loaded: /app/banner.txt
+metal-mart-frontend:  GET /api/banner 200 in 835ms (compile: 209ms, render: 626ms)
