@@ -108,9 +108,12 @@ export async function POST(req: Request) {
       chaos,
       started_at: new Date().toISOString(),
       runs_url: `https://github.com/${REPO}/actions/workflows/${WORKFLOW}`,
-      error: res.ok ? undefined : (detail as { message?: string } | null)?.message ?? `GitHub returned ${res.status}`,
+      error: res.ok ? undefined : `GitHub: ${(detail as { message?: string } | null)?.message ?? `returned ${res.status}`}`,
       result: detail,
     },
-    { status: res.ok ? 200 : res.status }
+    // A GitHub failure is an upstream error here. Its own status is in the
+    // body; forwarding it would make a rejected dispatch token look like a
+    // rejected dashboard token (401) to the page.
+    { status: res.ok ? 200 : 502 }
   );
 }
