@@ -175,7 +175,7 @@
   </table>
 
   <h2>End-to-end tests</h2>
-  <p class="sub">Shop scenarios run against the playground cluster on every merge to main. Each scenario drives the storefront through a full order cycle and checks every service on the path.
+  <p class="sub">Shop scenarios run against the live playground cluster. No cluster is built: the services on the order path run on the CI runner under <code>mirrord up</code>, and the scenario drives the real storefront through a full order cycle with a per-run session key.
     <span class="totals"><b class="p">5 passed</b></span></p>
 
   <table>
@@ -183,15 +183,15 @@
       <tr><th>Scenario</th><th>Title</th><th class="hide-sm">Flow</th><th>Status</th><th>Duration</th><th class="hide-sm">Last run</th><th class="hide-sm">Notes</th><th></th></tr>
     </thead>
     <tbody>
-      <tr>
+      <tr id="e2e-live">
         <td class="ticket">E2E-01</td>
         <td class="title e2e">Guest checkout, single product</td>
-        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>fulfillment-worker<br /><i>↳</i>delivery-service</td>
-        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
-        <td class="dur">48s</td>
-        <td class="when hide-sm">6 min ago</td>
-        <td class="note hide-sm">order → paid → fulfilled → delivered</td>
-        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>receipt-service<br /><i>↳</i>delivery-service</td>
+        <td><span class="status done" id="e2e-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur" id="e2e-dur">—</td>
+        <td class="when hide-sm" id="e2e-when">—</td>
+        <td class="note hide-sm" id="e2e-note">order → paid → receipt → delivery · order, payment, delivery under mirrord up</td>
+        <td class="action"><button class="btn" id="e2e-run" type="button">Run</button> <button class="btn quiet" id="e2e-chaos" type="button" title="Same run, with .mirrord/chaos/02-db-connection-drop.json applied to the order-service session">Run with chaos</button></td>
       </tr>
       <tr>
         <td class="ticket">E2E-03</td>
@@ -443,6 +443,87 @@
   var priorBug = load(BUG_KEY);
   if (priorBug && priorBug.startedAt && !isResolved('BUG-101')) setDebugging(priorBug);
 
+  // End-to-end row E2E-01. "Run" dispatches the shop-e2e-mirrord.yml workflow
+  // through api/e2e/run. GitHub returns no run id for a dispatch, so the
+  // workflow itself posts its run URL while running and its outcome when done
+  // to the cloud-agents callback under ticket E2E-01, and the row polls that
+  // ticket. "Run with chaos" is the same run with a DB connection-drop rule on
+  // the order-service session, so the audience sees a real failure and the
+  // local stack trace in the run's logs.
+  var E2E_KEY = 'metal-mart-cloud-agents:e2e';
+  var E2E_API = 'api/e2e/run';
+  var E2E_TICKET = 'E2E-01';
+  var E2E_CHAOS_RULE = '02-db-connection-drop';
+  var e2eBtn = document.getElementById('e2e-run');
+  var e2eChaosBtn = document.getElementById('e2e-chaos');
+  var e2eStatus = document.getElementById('e2e-status');
+  var e2eNote = document.getElementById('e2e-note');
+  var e2eDur = document.getElementById('e2e-dur');
+  var e2eWhen = document.getElementById('e2e-when');
+  var e2eTimer = null;
+  function e2eRunning(state) {
+    e2eStatus.className = 'status running'; e2eStatus.innerHTML = SPIN + '<span>Running</span>';
+    var what = state.message || (state.chaos && state.chaos !== 'none' ? 'chaos ' + state.chaos + ' · dispatching workflow' : 'dispatching workflow');
+    e2eNote.textContent = what + ' · started ' + hhmmss(new Date(state.startedAt));
+    if (state.url) { e2eNote.appendChild(document.createTextNode(' · ')); e2eNote.appendChild(link(state.url, 'open run')); }
+    e2eWhen.textContent = 'now'; e2eDur.textContent = '…';
+    e2eBtn.className = 'btn quiet'; e2eBtn.disabled = true; e2eBtn.textContent = 'Running'; e2eBtn.dataset.href = '';
+    e2eChaosBtn.disabled = true;
+  }
+  function e2eFinished(r, state) {
+    if (e2eTimer) { clearInterval(e2eTimer); e2eTimer = null; }
+    var ok = r.status !== 'failed';
+    e2eStatus.className = ok ? 'status done' : 'status failed';
+    e2eStatus.innerHTML = (ok ? CHECK : CROSS) + '<span>' + (ok ? 'Passed' : 'Failed') + '</span>';
+    e2eNote.textContent = (r.message || (ok ? 'all steps green' : 'see run')) + ' · ' + hhmmss(new Date(r.received_at));
+    e2eWhen.textContent = 'just now';
+    if (state && state.startedAt) e2eDur.textContent = Math.max(1, Math.round((new Date(r.received_at) - new Date(state.startedAt)) / 1000)) + 's';
+    e2eBtn.className = 'btn'; e2eBtn.disabled = false; e2eBtn.textContent = r.url ? 'View run' : 'Run'; e2eBtn.dataset.href = r.url || '';
+    e2eChaosBtn.disabled = false;
+    save(E2E_KEY, null);
+  }
+  function e2ePoll() {
+    var state = load(E2E_KEY) || {};
+    fetch(CALLBACK + '?ticket=' + E2E_TICKET, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.result) return;
+        if (d.result.status === 'running') {
+          state.url = d.result.url || state.url; state.message = d.result.message; state.startedAt = state.startedAt || d.result.received_at;
+          save(E2E_KEY, state); e2eRunning(state);
+          if (!e2eTimer) e2eTimer = setInterval(e2ePoll, POLL_MS);
+        } else {
+          e2eFinished(d.result, state);
+        }
+      })
+      .catch(function () {});
+  }
+  function e2eStart(chaos) {
+    e2eBtn.disabled = true; e2eChaosBtn.disabled = true; e2eBtn.innerHTML = SPIN + ' Starting…';
+    fetch(E2E_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario: E2E_TICKET, chaos: chaos }) })
+      .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
+        var state = { startedAt: r.data.started_at || new Date().toISOString(), chaos: chaos, url: r.data.runs_url };
+        save(E2E_KEY, state); e2eRunning(state);
+        if (!e2eTimer) e2eTimer = setInterval(e2ePoll, POLL_MS);
+      })
+      .catch(function (err) {
+        e2eStatus.className = 'status failed'; e2eStatus.innerHTML = CROSS + '<span>Failed to start</span>';
+        e2eNote.textContent = err.message || String(err);
+        e2eBtn.className = 'btn'; e2eBtn.disabled = false; e2eBtn.textContent = 'Retry'; e2eBtn.dataset.href = '';
+        e2eChaosBtn.disabled = false;
+      });
+  }
+  e2eBtn.addEventListener('click', function () {
+    if (e2eBtn.dataset.href) { window.open(e2eBtn.dataset.href, '_blank', 'noopener'); return; }
+    e2eStart('none');
+  });
+  e2eChaosBtn.addEventListener('click', function () { e2eStart(E2E_CHAOS_RULE); });
+  var priorE2E = load(E2E_KEY);
+  if (priorE2E && priorE2E.startedAt) { e2eRunning(priorE2E); e2eTimer = setInterval(e2ePoll, POLL_MS); }
+  e2ePoll();
+
   // Placeholder action buttons: Run/Retry/Re-run flip the row to Running, Debug
   // flips it to Running with a mirrord-session note, and link buttons open the storefront as the preview.
   // Nothing is persisted; a reload restores the static state.
@@ -501,6 +582,7 @@
   // plus the bug demo state, then reloads. The footer link is the only reset on
   // the page.
   function clearRun() {
+    save(E2E_KEY, null);
     save(KEY, null); save(BUG_KEY, null); save(RESOLVED_KEY, null);
     fetch(CALLBACK, { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
   }

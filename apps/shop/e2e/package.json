@@ -1,0 +1,13 @@
+{
+  "name": "metal-mart-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end shop scenarios that run against the live playground cluster, with the changed services running under mirrord up in CI.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "22.10.2"
+  }
+}

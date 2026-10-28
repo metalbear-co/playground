@@ -1,0 +1,62 @@
+# mirrord up file for the "Shop E2E - mirrord CI" workflow.
+#
+# One `mirrord up` run starts the three changed services on the CI runner, each
+# attached to its deployment in the playground cluster. Only traffic that carries
+# this run's session key reaches the local processes; everything else keeps
+# flowing to the deployed pods. The key comes from `mirrord up --key` (or
+# MIRRORD_KEY) and is rendered into `{{ key }}` before the file is parsed.
+#
+# With MIRRORD_CI_API_KEY set, every child session registers with the operator as
+# a CI session instead of a user seat.
+#
+# Run it locally with the same key the browser test sends in its baggage header:
+#   MIRRORD_KEY=e2e-local-1 mirrord up -f .mirrord/ci/mirrord-up.yaml
+
+common:
+  operator: true
+
+services:
+  # HTTP steal, split by the baggage header the browser test sends.
+  order-service:
+    target:
+      path: deployment/order-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    run:
+      command: ["node", "apps/shop/order-service/dist/index.js"]
+
+  # Consumes the SQS "payments" queue. The session key travels inside the
+  # payment JWT (a message attribute), so the split filter decodes the JWT
+  # payload and matches the baggage claim.
+  payment-service:
+    target:
+      path: deployment/payment-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    config_patch:
+      feature:
+        split_queues:
+          payments:
+            queue_type: SQS
+            jq_filter: '.MessageAttributes.jwt.StringValue | split(".") | .[1] | gsub("-"; "+") | gsub("_"; "/") | . as $s | $s + ("=" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .baggage | test("mirrord-session={{ key }}")'
+    run:
+      command: ["node", "apps/shop/payment-service/dist/index.js"]
+
+  # Consumes the Kafka "orders" topic; the baggage header is a Kafka message header.
+  delivery-service:
+    target:
+      path: deployment/delivery-service
+      namespace: shop
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    config_patch:
+      feature:
+        split_queues:
+          orders:
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["node", "apps/shop/delivery-service/dist/index.js"]

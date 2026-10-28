@@ -41,3 +41,5 @@ apps/ci-lab/**/target/
 apps/ci-lab/login-app/dist/
 apps/ci-lab/login-app/test-results/
 apps/ci-lab/login-app/playwright-report/
+apps/shop/e2e/test-results/
+apps/shop/e2e/playwright-report/
