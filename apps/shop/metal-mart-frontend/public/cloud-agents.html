@@ -187,11 +187,11 @@
         <td class="ticket">E2E-01</td>
         <td class="title e2e">Guest checkout, single product</td>
         <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>receipt-service<br /><i>↳</i>delivery-service</td>
-        <td><span class="status done" id="e2e-status"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td><span class="status queued" id="e2e-status"><span>Checking…</span></span></td>
         <td class="dur" id="e2e-dur">—</td>
         <td class="when hide-sm" id="e2e-when">—</td>
         <td class="note hide-sm" id="e2e-note">order → paid → receipt → delivery · order, payment, delivery under mirrord up</td>
-        <td class="action"><button class="btn" id="e2e-run" type="button">Run</button> <button class="btn quiet" id="e2e-chaos" type="button" title="Same run, with .mirrord/chaos/02-db-connection-drop.json applied to the order-service session">Run with chaos</button></td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/workflows/shop-e2e-mirrord.yml" title="Opens the workflow on GitHub. Run workflow there; the chaos input applies a rule from .mirrord/chaos to the order-service session">Run on GitHub</button> <button class="btn quiet" id="e2e-view" type="button" hidden>View run</button></td>
       </tr>
       <tr>
         <td class="ticket">E2E-03</td>
@@ -474,86 +474,56 @@
   var priorBug = load(BUG_KEY);
   if (priorBug && priorBug.startedAt && !isResolved('BUG-101')) setDebugging(priorBug);
 
-  // End-to-end row E2E-01. "Run" dispatches the shop-e2e-mirrord.yml workflow
-  // through api/e2e/run. GitHub returns no run id for a dispatch, so the
-  // workflow itself posts its run URL while running and its outcome when done
-  // to the cloud-agents callback under ticket E2E-01, and the row polls that
-  // ticket. "Run with chaos" is the same run with a DB connection-drop rule on
-  // the order-service session, so the audience sees a real failure and the
-  // local stack trace in the run's logs.
-  var E2E_KEY = 'metal-mart-cloud-agents:e2e';
-  var E2E_API = 'api/e2e/run';
-  var E2E_TICKET = 'E2E-01';
-  var E2E_CHAOS_RULE = '02-db-connection-drop';
-  var e2eBtn = document.getElementById('e2e-run');
-  var e2eChaosBtn = document.getElementById('e2e-chaos');
+  // End-to-end row E2E-01. The run is started on GitHub: "Run on GitHub" opens
+  // the workflow page, where "Run workflow" takes the chaos input. The row shows
+  // the latest run of that workflow, read from the public GitHub API with no
+  // token (the repository is public and the API allows cross-origin reads). One
+  // read per page load; while a run is in progress the row refreshes every
+  // 30 s, well inside the unauthenticated rate limit.
+  var E2E_RUNS_API = 'https://api.github.com/repos/metalbear-co/playground/actions/workflows/shop-e2e-mirrord.yml/runs?per_page=1';
+  var E2E_POLL_MS = 30000;
   var e2eStatus = document.getElementById('e2e-status');
   var e2eNote = document.getElementById('e2e-note');
   var e2eDur = document.getElementById('e2e-dur');
   var e2eWhen = document.getElementById('e2e-when');
+  var e2eView = document.getElementById('e2e-view');
   var e2eTimer = null;
-  function e2eRunning(state) {
-    e2eStatus.className = 'status running'; e2eStatus.innerHTML = SPIN + '<span>Running</span>';
-    var what = state.message || (state.chaos && state.chaos !== 'none' ? 'chaos ' + state.chaos + ' · dispatching workflow' : 'dispatching workflow');
-    e2eNote.textContent = what + ' · started ' + hhmmss(new Date(state.startedAt));
-    if (state.url) { e2eNote.appendChild(document.createTextNode(' · ')); e2eNote.appendChild(link(state.url, 'open run')); }
-    e2eWhen.textContent = 'now'; e2eDur.textContent = '…';
-    e2eBtn.className = 'btn quiet'; e2eBtn.disabled = true; e2eBtn.textContent = 'Running'; e2eBtn.dataset.href = '';
-    e2eChaosBtn.disabled = true;
+  function ago(d) {
+    var s = Math.round((Date.now() - d) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) return Math.round(s / 3600) + 'h ago';
+    return Math.round(s / 86400) + 'd ago';
   }
-  function e2eFinished(r, state) {
-    if (e2eTimer) { clearInterval(e2eTimer); e2eTimer = null; }
-    var ok = r.status !== 'failed';
-    e2eStatus.className = ok ? 'status done' : 'status failed';
-    e2eStatus.innerHTML = (ok ? CHECK : CROSS) + '<span>' + (ok ? 'Passed' : 'Failed') + '</span>';
-    e2eNote.textContent = (r.message || (ok ? 'all steps green' : 'see run')) + ' · ' + hhmmss(new Date(r.received_at));
-    e2eWhen.textContent = 'just now';
-    if (state && state.startedAt) e2eDur.textContent = Math.max(1, Math.round((new Date(r.received_at) - new Date(state.startedAt)) / 1000)) + 's';
-    e2eBtn.className = 'btn'; e2eBtn.disabled = false; e2eBtn.textContent = r.url ? 'View run' : 'Run'; e2eBtn.dataset.href = r.url || '';
-    e2eChaosBtn.disabled = false;
-    save(E2E_KEY, null);
+  function dur(ms) { var s = Math.max(1, Math.round(ms / 1000)); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; }
+  function e2eShow(run) {
+    var running = run.status !== 'completed';
+    var ok = run.conclusion === 'success';
+    var label = running ? 'Running' : ok ? 'Passed' : run.conclusion === 'cancelled' ? 'Cancelled' : 'Failed';
+    e2eStatus.className = running ? 'status running' : ok ? 'status done' : 'status failed';
+    e2eStatus.innerHTML = (running ? SPIN : ok ? CHECK : CROSS) + '<span>' + label + '</span>';
+    var started = new Date(run.run_started_at || run.created_at);
+    var ended = running ? new Date() : new Date(run.updated_at);
+    e2eDur.textContent = dur(ended - started);
+    e2eWhen.textContent = running ? 'now' : ago(ended);
+    var chaos = /chaos (\S+)/.exec(run.display_title || '');
+    e2eNote.textContent = 'run #' + run.run_number + (chaos ? ' · chaos ' + chaos[1] : '') + ' · order, payment, delivery under mirrord up';
+    e2eView.hidden = false; e2eView.dataset.href = run.html_url;
+    if (running && !e2eTimer) e2eTimer = setInterval(e2eLoad, E2E_POLL_MS);
+    if (!running && e2eTimer) { clearInterval(e2eTimer); e2eTimer = null; }
   }
-  function e2ePoll() {
-    var state = load(E2E_KEY) || {};
-    fetch(CALLBACK + '?ticket=' + E2E_TICKET, { cache: 'no-store' })
+  function e2eLoad() {
+    fetch(E2E_RUNS_API, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (!d || !d.result) return;
-        if (d.result.status === 'running') {
-          state.url = d.result.url || state.url; state.message = d.result.message; state.startedAt = state.startedAt || d.result.received_at;
-          save(E2E_KEY, state); e2eRunning(state);
-          if (!e2eTimer) e2eTimer = setInterval(e2ePoll, POLL_MS);
-        } else {
-          e2eFinished(d.result, state);
-        }
+        var run = d && d.workflow_runs && d.workflow_runs[0];
+        if (run) { e2eShow(run); return; }
+        e2eStatus.className = 'status queued'; e2eStatus.innerHTML = '<span>No run yet</span>';
       })
-      .catch(function () {});
+      .catch(function () { e2eStatus.className = 'status queued'; e2eStatus.innerHTML = '<span>GitHub unreachable</span>'; });
   }
-  function e2eStart(chaos) {
-    e2eBtn.disabled = true; e2eChaosBtn.disabled = true; e2eBtn.innerHTML = SPIN + ' Starting…';
-    authFetch(E2E_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario: E2E_TICKET, chaos: chaos }) })
-      .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
-      .then(function (r) {
-        if (!r.ok) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
-        var state = { startedAt: r.data.started_at || new Date().toISOString(), chaos: chaos, url: r.data.runs_url };
-        save(E2E_KEY, state); e2eRunning(state);
-        if (!e2eTimer) e2eTimer = setInterval(e2ePoll, POLL_MS);
-      })
-      .catch(function (err) {
-        e2eStatus.className = 'status failed'; e2eStatus.innerHTML = CROSS + '<span>Failed to start</span>';
-        e2eNote.textContent = err.message || String(err);
-        e2eBtn.className = 'btn'; e2eBtn.disabled = false; e2eBtn.textContent = 'Retry'; e2eBtn.dataset.href = '';
-        e2eChaosBtn.disabled = false;
-      });
-  }
-  e2eBtn.addEventListener('click', function () {
-    if (e2eBtn.dataset.href) { window.open(e2eBtn.dataset.href, '_blank', 'noopener'); return; }
-    e2eStart('none');
-  });
-  e2eChaosBtn.addEventListener('click', function () { e2eStart(E2E_CHAOS_RULE); });
-  var priorE2E = load(E2E_KEY);
-  if (priorE2E && priorE2E.startedAt) { e2eRunning(priorE2E); e2eTimer = setInterval(e2ePoll, POLL_MS); }
-  e2ePoll();
+  e2eView.addEventListener('click', function () { if (e2eView.dataset.href) window.open(e2eView.dataset.href, '_blank', 'noopener'); });
+  e2eLoad();
 
   // Placeholder action buttons: Run/Retry/Re-run flip the row to Running, Debug
   // flips it to Running with a mirrord-session note, and link buttons open the storefront as the preview.
@@ -613,7 +583,6 @@
   // plus the bug demo state, then reloads. The footer link is the only reset on
   // the page.
   function clearRun() {
-    save(E2E_KEY, null);
     save(KEY, null); save(BUG_KEY, null); save(RESOLVED_KEY, null);
     authFetch(CALLBACK, { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
   }

@@ -46,12 +46,6 @@ spec:
                   name: cloud-agents
                   key: CLOUD_AGENTS_CALLBACK_TOKEN
                   optional: true
-            - name: GITHUB_E2E_DISPATCH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: cloud-agents
-                  key: GITHUB_E2E_DISPATCH_TOKEN
-                  optional: true
           ports:
             - containerPort: 3000
               protocol: TCP
