@@ -54,7 +54,8 @@ const AGENT_DISPLAY_USERNAME = "agent";
 const MIRRORD_CI_K8S_USERNAMES = new Set([
   "github-gke-deployer@playground-383912.iam.gserviceaccount.com",
 ]);
-const MIRRORD_CI_HOSTNAMES = new Set(["runnervmeorf1"]);
+/** GitHub-hosted runners get a random `runnervm<id>` hostname per job. */
+const MIRRORD_CI_HOSTNAME_PREFIX = "runnervm";
 
 /**
  * Custom data payload carried by each React Flow node rendered in the visualization.
@@ -499,8 +500,8 @@ const DEFAULT_NODE_POSITIONS: Record<string, { x: number; y: number }> = {
   "receipt-service": { x: 2640, y: 55 },
   "postgres-deliveries": { x: 2640, y: 305 },
   // Pinned to the lower-left corner of the cluster zone. Dynamic agent nodes
-  // stack in a column directly above it; CI runner and preview-env nodes stack
-  // in a column to its left.
+  // stack in a column directly above it; preview-env nodes stack in a column
+  // to its left. CI runner nodes sit outside the cluster, in the GitHub column.
   "mirrord-operator": { x: 300, y: 1500 },
 };
 
@@ -605,8 +606,20 @@ const DYNAMIC_AGENT_SPACING_Y = 220;
 /** Mid-diagram vertical anchor for SQS/RMQ split-queue nodes (static mirrord-agent row). */
 const QUEUE_SPLIT_BASE_Y =
   adjustedNodes.find((n) => n.id === "mirrord-agent")?.position.y ?? 0;
-/** X of the CI runner / preview-env column, to the left of the operator. */
+/** X of the preview-env column, to the left of the operator (inside the cluster zone). */
 const OPERATOR_LEFT_COLUMN_X = operatorBasePosition.x - nodeWidth - 200;
+/**
+ * X of the GitHub Actions column. CI runners live outside the GKE cluster, so the column sits
+ * left of the cluster zone, aligned with the external user node.
+ */
+const GITHUB_COLUMN_X =
+  adjustedNodes.find((n) => n.id === "user")?.position.x ?? OPERATOR_LEFT_COLUMN_X - nodeWidth - 200;
+/** Zone colors for the GitHub Actions box — same teal as the CI runner nodes it wraps. */
+const GITHUB_ZONE_STYLE = {
+  border: "#0D9488",
+  background: "rgba(204, 251, 241, 0.4)",
+  accent: "#0D9488",
+};
 
 const localProcessBasePos =
   adjustedNodes.find((n) => n.id === "local-process")?.position ?? { x: 0, y: 0 };
@@ -629,7 +642,7 @@ const sanitizeHostname = (hostname: string) =>
 const isMirrordCiOwner = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   (owner.k8sUsername !== undefined && MIRRORD_CI_K8S_USERNAMES.has(owner.k8sUsername)) ||
   owner.username === "runner" ||
-  (owner.hostname !== undefined && MIRRORD_CI_HOSTNAMES.has(owner.hostname));
+  (owner.hostname !== undefined && owner.hostname.startsWith(MIRRORD_CI_HOSTNAME_PREFIX));
 
 const formatMirrordOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
@@ -780,6 +793,20 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
 /**
  * Presentational node used for cluster/local zones. Rendered as a non-interactive background card.
  */
+/** GitHub mark (Octicon `mark-github`), used on CI runner nodes. */
+const GitHubMark = ({ size = 16 }: { size?: number }) => (
+  <svg
+    viewBox="0 0 16 16"
+    width={size}
+    height={size}
+    fill="currentColor"
+    aria-hidden
+    className="pointer-events-none shrink-0 select-none"
+  >
+    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+  </svg>
+);
+
 const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   <div
     className="flex flex-col justify-between rounded-[40px] border border-dashed px-8 py-6"
@@ -2820,9 +2847,9 @@ export default function VisualizationPage() {
 
     return ciRunnerSessions.map((session, index) => {
       const nodeId = `ci-runner-${sanitizeHostname(session.sessionId)}`;
-      // Column to the left of the operator, stacked upward from the operator's row.
+      // GitHub Actions column outside the cluster zone, stacked upward from the operator's row.
       const position = dynamicNodePositions.get(nodeId) ?? {
-        x: OPERATOR_LEFT_COLUMN_X,
+        x: GITHUB_COLUMN_X,
         y:
           operatorBasePosition.y -
           (ciRunnerSessions.length - index) * (nodeHeight + 40),
@@ -2835,7 +2862,8 @@ export default function VisualizationPage() {
           group: "mirrord" as const,
           label: (
             <div className="flex flex-col gap-1 text-left">
-              <span className="text-sm font-bold text-slate-900">
+              <span className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                <GitHubMark size={16} />
                 CI Runner
               </span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -2869,6 +2897,43 @@ export default function VisualizationPage() {
       };
     });
   }, [ciRunnerSessions, dynamicNodePositions]);
+
+  // Zone overlay wrapping every CI runner node: the GitHub Actions box outside the cluster.
+  const githubZoneNode = useMemo((): ClusterZoneNode | null => {
+    if (ciRunnerNodes.length === 0) return null;
+    const padding = 80;
+    // Extra headroom so the two-line zone header clears the topmost runner card.
+    const paddingTop = 130;
+    const minX = Math.min(...ciRunnerNodes.map((n) => n.position.x));
+    const minY = Math.min(...ciRunnerNodes.map((n) => n.position.y));
+    const maxX = Math.max(...ciRunnerNodes.map((n) => n.position.x + nodeWidth));
+    const maxY = Math.max(...ciRunnerNodes.map((n) => n.position.y + nodeHeight));
+    const zoneWidth = maxX - minX + padding * 2;
+    const zoneHeight = maxY - minY + paddingTop + padding;
+
+    return {
+      id: "zone-github",
+      type: "zone",
+      position: { x: minX - padding, y: minY - paddingTop },
+      data: {
+        label: "GitHub Actions",
+        description: "Hosted runner executing the test job with mirrord CI attached, outside the cluster.",
+        background: GITHUB_ZONE_STYLE.background,
+        border: GITHUB_ZONE_STYLE.border,
+        accent: GITHUB_ZONE_STYLE.accent,
+        zoneWidth,
+        zoneHeight,
+      },
+      style: {
+        width: zoneWidth,
+        height: zoneHeight,
+        zIndex: 1,
+        pointerEvents: "none",
+      },
+      draggable: false,
+      selectable: false,
+    };
+  }, [ciRunnerNodes]);
 
   // Build dynamic nodes for PgBranchDatabase resources.
   // Each branch is positioned to the right of its target deployment's postgres data node.
@@ -3282,13 +3347,14 @@ export default function VisualizationPage() {
   // Recompute the cluster zone overlay to encompass dynamic agent nodes.
   const dynamicClusterZoneNode = useMemo(() => {
     if (!clusterZoneNode) return null;
-    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && temporalQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0 && ciRunnerNodes.length === 0) return clusterZoneNode;
+    if (dynamicAgentNodes.length === 0 && kafkaTopicNodes.length === 0 && sqsQueueNodes.length === 0 && rmqQueueNodes.length === 0 && temporalQueueNodes.length === 0 && pgBranchNodes.length === 0 && previewSessionNodes.length === 0) return clusterZoneNode;
 
     const clusterStaticNodes = adjustedNodes.filter((n) => {
       const zone = nodeZoneIndex.get(n.id);
       return zone === "cluster" && !SESSION_NODE_IDS.has(n.id);
     });
-    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...temporalQueueNodes, ...pgBranchNodes, ...previewSessionNodes, ...ciRunnerNodes];
+    // CI runner nodes are deliberately excluded: they run on GitHub Actions, outside the cluster.
+    const allClusterNodes = [...clusterStaticNodes, ...dynamicAgentNodes, ...kafkaTopicNodes, ...sqsQueueNodes, ...rmqQueueNodes, ...temporalQueueNodes, ...pgBranchNodes, ...previewSessionNodes];
     const padding = 48;
     const xs = allClusterNodes.map((n) => n.position.x);
     const ys = allClusterNodes.map((n) => n.position.y);
@@ -3322,7 +3388,7 @@ export default function VisualizationPage() {
         height: newHeight,
       },
     };
-  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, temporalQueueNodes, pgBranchNodes, previewSessionNodes, ciRunnerNodes, previewSessionZoneNodes, sortedAgentGroups]);
+  }, [dynamicAgentNodes, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, temporalQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, sortedAgentGroups]);
 
   // Compute how much the dynamic cluster zone grew compared to the static one,
   // then shift local nodes/zone down by the same amount to maintain the gap.
@@ -3342,6 +3408,9 @@ export default function VisualizationPage() {
     const nodes: Node<NodeData | ZoneNodeData>[] = [];
     if (dynamicClusterZoneNode) {
       nodes.push(dynamicClusterZoneNode);
+    }
+    if (githubZoneNode) {
+      nodes.push(githubZoneNode);
     }
     if (hasDynamicLocalMachines) {
       // Use dynamic local zone overlays instead of the static one
@@ -3461,7 +3530,7 @@ export default function VisualizationPage() {
     }
     nodes.push(...ciRunnerNodes);
     return nodes;
-  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, temporalQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasLocalShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, localOperatorSessions, ciRunnerNodes]);
+  }, [visibleArchitectureNodes, dynamicAgentNodes, dynamicClusterZoneNode, githubZoneNode, localYShift, kafkaTopicNodes, sqsQueueNodes, rmqQueueNodes, temporalQueueNodes, pgBranchNodes, previewSessionNodes, previewSessionZoneNodes, hasDynamicLocalMachines, hasLocalShopSessions, dynamicLocalMachineNodes, dynamicLocalZoneNodes, scaleDownTargets, sortedAgentGroups, localOperatorSessions, ciRunnerNodes]);
 
   const snapshotBaseUrl = useMemo(() => {
     const base =
