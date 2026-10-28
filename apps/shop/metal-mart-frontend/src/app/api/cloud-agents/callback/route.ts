@@ -14,13 +14,17 @@
  *   GET                       -> {ticket: <latest ticket> | null, result: AgentResult | null}
  *   DELETE ?ticket=SOL-175    -> {ticket, cleared: boolean}
  *   DELETE                    -> {ticket: null, cleared: <number removed>}
+ *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
  *
  * Configuration (server-side env):
- *   CLOUD_AGENTS_CALLBACK_TOKEN - shared secret the agent must present. POST is
- *                                 refused with 503 while it is unset, so the
- *                                 public endpoint never accepts anonymous links.
+ *   CLOUD_AGENTS_CALLBACK_TOKEN - shared secret the agent and the dashboard
+ *                                 must present (see lib/cloud-agents-auth).
+ *                                 POST and DELETE are refused with 503 while it
+ *                                 is unset, so the public endpoint never
+ *                                 accepts anonymous writes.
  */
 
+import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
 import {
   type AgentResult,
   type AgentStatus,
@@ -45,14 +49,6 @@ function httpsUrl(raw: unknown): string | undefined {
   }
 }
 
-function authorized(req: Request): boolean {
-  const expected = process.env.CLOUD_AGENTS_CALLBACK_TOKEN;
-  if (!expected) return false;
-  const header = req.headers.get("authorization") ?? "";
-  const presented = header.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-callback-token") || "";
-  return presented === expected;
-}
-
 export async function GET(req: Request) {
   const raw = new URL(req.url).searchParams.get("ticket");
   const headers = { "Cache-Control": "no-store" };
@@ -66,6 +62,8 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const denied = denyUnlessAuthorized(req);
+  if (denied) return denied;
   const raw = new URL(req.url).searchParams.get("ticket");
   if (raw === null || raw.trim() === "") {
     return Response.json({ ticket: null, cleared: clearAll() });
@@ -76,12 +74,8 @@ export async function DELETE(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!process.env.CLOUD_AGENTS_CALLBACK_TOKEN) {
-    return Response.json({ ok: false, error: "CLOUD_AGENTS_CALLBACK_TOKEN is not set on the frontend service" }, { status: 503 });
-  }
-  if (!authorized(req)) {
-    return Response.json({ ok: false, error: "invalid or missing callback token" }, { status: 401 });
-  }
+  const denied = denyUnlessAuthorized(req);
+  if (denied) return denied;
 
   const text = await req.text();
   if (text.length > MAX_BODY) return Response.json({ ok: false, error: "body too large" }, { status: 413 });

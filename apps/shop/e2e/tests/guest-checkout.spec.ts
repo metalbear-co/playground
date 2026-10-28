@@ -76,7 +76,7 @@ test("E2E-01 guest checkout, single product", async ({ page }) => {
     const idText = (await page.getByText(/Order ID:/).textContent()) || "";
     orderId = Number((idText.match(/(\d+)/) || [])[1]);
     expect(orderId, `order id from "${idText}"`).toBeGreaterThan(0);
-    record("checkout: order placed", true, `order ${orderId}, email ${EMAIL}`);
+    record("checkout: order placed", true, `order ${orderId}`);
 
     await page.getByRole("link", { name: /track order/i }).click();
     await page.waitForURL(new RegExp(`/orders/${orderId}`), { timeout: 30_000 });

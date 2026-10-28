@@ -53,7 +53,6 @@ env:
   MIRRORD_SHA256: 34b89237b8af334d7b1e284be7bc7c0bf43d62f121e4b72cc4e1968db68446f9
   SHOP_URL: https://playground.metalbear.dev/shop
   CALLBACK_URL: https://playground.metalbear.dev/shop/api/cloud-agents/callback
-  E2E_SESSION_KEY: e2e-${{ github.run_id }}
   MIRRORD_UP_LOG: /tmp/mirrord/up.log
   MIRRORD_UP_PID: /tmp/mirrord/up.pid
   E2E_RESULTS_FILE: /tmp/e2e/results.json
@@ -70,6 +69,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate the per-run session key
+        # The key is the only thing that routes traffic into this run's local
+        # processes. A random part keeps it unguessable while the run is live
+        # (run ids and logs are public), and masking keeps it out of the logs.
+        run: |
+          set -euo pipefail
+          key="e2e-${{ github.run_id }}-$(openssl rand -hex 6)"
+          echo "::add-mask::$key"
+          echo "E2E_SESSION_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Tell the dashboard the run started
         if: inputs.notify_dashboard
@@ -137,7 +146,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$(dirname "$MIRRORD_UP_LOG")"
-          echo "session key: $E2E_SESSION_KEY"
           # `mirrord up` stays in the foreground until a child session exits, so
           # it runs in its own process group and the cleanup step terminates
           # the group. Each child's output is prefixed with its service name.

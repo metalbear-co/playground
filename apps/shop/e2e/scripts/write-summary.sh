@@ -16,7 +16,6 @@ if [ ! -f "$RESULTS" ]; then
 fi
 
 ORDER_ID="$(jq -r '.orderId // "—"' "$RESULTS")"
-KEY="$(jq -r '.sessionKey' "$RESULTS")"
 BADGE="✅ passed"; [ "$OUTCOME" = "success" ] || BADGE="❌ failed"
 
 hop_row() {
@@ -36,9 +35,9 @@ hop_row() {
   echo "## E2E-01 guest checkout: ${BADGE}"
   echo
   if [ "$ORDER_ID" = "—" ]; then
-    echo "No order was placed. The browser flow ran against the live storefront with \`baggage: mirrord-session=${KEY}\` and failed before checkout completed."
+    echo "No order was placed. The browser flow ran against the live storefront with this run's session key in the \`baggage\` header and failed before checkout completed."
   else
-    echo "Order **${ORDER_ID}** placed on the live storefront with \`baggage: mirrord-session=${KEY}\`."
+    echo "Order **${ORDER_ID}** placed on the live storefront with this run's session key in the \`baggage\` header."
   fi
   echo "No cluster was created. The changed services ran on this runner under \`mirrord up\`; everything else stayed in the playground cluster."
   if [ "$CHAOS" != "none" ]; then

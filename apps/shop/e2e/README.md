@@ -11,8 +11,8 @@ Playwright scenarios that run against the **live playground cluster**. Nothing i
 Workflow: [`.github/workflows/shop-e2e-mirrord.yml`](../../../.github/workflows/shop-e2e-mirrord.yml) (`workflow_dispatch`).
 
 1. Build order, payment and delivery (`npm ci && npm run build`).
-2. `mirrord up -f .mirrord/ci/mirrord-up.yaml --key e2e-<run_id>` ([config](../../../.mirrord/ci/mirrord-up.yaml)): one run starts the three services, each as a split-mode session with the header filter and the SQS/Kafka queue split keyed to the run. `MIRRORD_CI_API_KEY` is set, so every child session registers as a CI session, not a user seat.
-3. `npx playwright test` with `E2E_SESSION_KEY=e2e-<run_id>`: home, product, cart, checkout, order tracking until the delivery row appears.
+2. `mirrord up -f .mirrord/ci/mirrord-up.yaml --key e2e-<run_id>-<random>` ([config](../../../.mirrord/ci/mirrord-up.yaml)): one run starts the three services, each as a split-mode session with the header filter and the SQS/Kafka queue split keyed to the run. `MIRRORD_CI_API_KEY` is set, so every child session registers as a CI session, not a user seat.
+3. `npx playwright test` with `E2E_SESSION_KEY=e2e-<run_id>-<random>` (generated and masked at the start of the job): home, product, cart, checkout, order tracking until the delivery row appears.
 4. `scripts/assert-local-logs.sh` proves each hop ran on the runner by finding the order id in the `mirrord up` log (`/tmp/mirrord/up.log`), where every line is prefixed with its service name.
 5. `scripts/write-summary.sh` renders the job summary: browser steps, then one row per hop with where it ran and the evidence.
 6. Stop `mirrord up` (its process group), upload the log and the Playwright report, and report the outcome to the dashboard.
@@ -22,6 +22,8 @@ Inputs: `chaos` applies a rule from `.mirrord/chaos/` to the order-service sessi
 ## Triggering from the dashboard
 
 `/shop/cloud-agents` row **E2E-01** has *Run* and *Run with chaos*. They call `POST /api/e2e/run`, which dispatches the workflow. The workflow reports its run URL and outcome to `/api/cloud-agents/callback` under ticket `E2E-01`, and the row polls that ticket.
+
+The page is public, so every write (run a scenario, start an agent, reset) sends the dashboard token as `Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>`. The page asks for it once per browser session; a wrong token clears it and asks again. Reads (polling) need no token.
 
 ## Secrets and config
 

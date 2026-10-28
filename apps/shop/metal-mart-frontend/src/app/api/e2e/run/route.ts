@@ -9,6 +9,9 @@
  * polls that route for the row. Any stored result for the scenario is cleared
  * first so a stale outcome never shows as the new run's.
  * GET reports whether the endpoint is configured.
+ * POST requires the dashboard token (Authorization: Bearer
+ * <CLOUD_AGENTS_CALLBACK_TOKEN>): the page is public, and dispatching a
+ * workflow with the stored GitHub token must not be open to anonymous visitors.
  *
  * Configuration (server-side env):
  *   GITHUB_E2E_DISPATCH_TOKEN - fine-grained token with Actions: write on the repo.
@@ -17,6 +20,7 @@
  *   GITHUB_E2E_REF            - branch the workflow runs on, default main.
  */
 
+import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
 import { clearResult } from "@/lib/cloud-agents-store";
 
 const REPO = process.env.GITHUB_E2E_REPO ?? "metalbear-co/playground";
@@ -50,6 +54,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = denyUnlessAuthorized(req);
+  if (denied) return denied;
   const auth = token();
   if (!auth) {
     return Response.json(

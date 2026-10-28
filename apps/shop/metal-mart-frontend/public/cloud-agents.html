@@ -285,6 +285,37 @@
   function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
 
+  // Every write (start an agent, run a scenario, reset) needs the dashboard
+  // token: the page is public, so the server refuses anonymous writes. The
+  // token is asked for once per browser session and kept in sessionStorage;
+  // a 401 clears it and asks again.
+  var TOKEN_KEY = 'metal-mart-cloud-agents:token';
+  function dashToken(force) {
+    var t = null;
+    try { t = force ? null : sessionStorage.getItem(TOKEN_KEY); } catch (e) {}
+    if (!t) {
+      t = window.prompt('Dashboard token (CLOUD_AGENTS_CALLBACK_TOKEN)');
+      if (t === null) return null;
+      t = t.trim();
+      if (!t) return null;
+      try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {}
+    }
+    return t;
+  }
+  function authFetch(url, opts, retried) {
+    var t = dashToken(retried);
+    if (!t) return Promise.reject(new Error('a dashboard token is required'));
+    var o = Object.assign({}, opts || {});
+    o.headers = Object.assign({}, o.headers || {}, { Authorization: 'Bearer ' + t });
+    return fetch(url, o).then(function (res) {
+      if (res.status === 401 && !retried) {
+        try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        return authFetch(url, opts, true);
+      }
+      return res;
+    });
+  }
+
   // The live row's ticket id + title are editable so each demo can point at a
   // fresh Linear issue. Double-click the title cell to open the dialog (no visible
   // control, so the audience does not see it); Save stores the label in
@@ -407,7 +438,7 @@
     btn.innerHTML = SPIN + ' Starting…';
     feedback.innerHTML = '';
 
-    fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: TICKET }) })
+    authFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: TICKET }) })
       .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
       .then(function (r) {
         if (!r.ok) {
@@ -500,7 +531,7 @@
   }
   function e2eStart(chaos) {
     e2eBtn.disabled = true; e2eChaosBtn.disabled = true; e2eBtn.innerHTML = SPIN + ' Starting…';
-    fetch(E2E_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario: E2E_TICKET, chaos: chaos }) })
+    authFetch(E2E_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario: E2E_TICKET, chaos: chaos }) })
       .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
       .then(function (r) {
         if (!r.ok) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
@@ -584,7 +615,7 @@
   function clearRun() {
     save(E2E_KEY, null);
     save(KEY, null); save(BUG_KEY, null); save(RESOLVED_KEY, null);
-    fetch(CALLBACK, { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
+    authFetch(CALLBACK, { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
   }
   document.getElementById('reset').addEventListener('click', clearRun);
 
