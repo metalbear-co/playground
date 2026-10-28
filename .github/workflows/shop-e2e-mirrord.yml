@@ -1,0 +1,298 @@
+# E2E-01 "guest checkout" against the live playground cluster, with the
+# changed services running under `mirrord up`.
+#
+# Nothing is deployed and no cluster is created. The three services on the
+# order path (order, payment, delivery) are built on this runner and started
+# by one `mirrord up` run (.mirrord/ci/mirrord-up.yaml), each attached to its
+# deployment in namespace `shop`. With MIRRORD_CI_API_KEY set, every child
+# session registers with the operator as a CI session.
+# Playwright then drives the real storefront with
+# `baggage: mirrord-session=<key>`, so the header filter and the SQS/Kafka
+# queue splits route only this order to the runner's processes. Everything
+# else (frontend, inventory, receipt, Postgres, Kafka, SQS, RabbitMQ) is served
+# by the cluster as usual, and other users are not affected.
+#
+# Triggered from the MetalMart R&D dashboard (/shop/cloud-agents, row E2E-01)
+# through /api/e2e/run, or by hand. The run reports its URL and outcome to the
+# dashboard's cloud-agents callback under ticket E2E-01.
+name: Shop E2E - mirrord CI
+
+run-name: >-
+  E2E-01 guest checkout (mirrord up)${{ inputs.chaos != 'none' && format(' · chaos {0}', inputs.chaos) || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      chaos:
+        description: Chaos rule applied to the order-service session before the test (from .mirrord/chaos)
+        type: choice
+        default: none
+        options:
+          - none
+          - 01-db-slow
+          - 02-db-connection-drop
+          - 03-db-timeout
+          - 04-rabbitmq-drop
+          - 05-rabbitmq-slow
+          - 06-inventory-svc-slow
+      compare:
+        description: Also dispatch the kind baseline workflow (full environment build) for a side-by-side timing
+        type: boolean
+        default: false
+      notify_dashboard:
+        description: Post start and finish to the MetalMart dashboard callback
+        type: boolean
+        default: true
+
+concurrency:
+  group: shop-e2e-mirrord
+  cancel-in-progress: false
+
+env:
+  MIRRORD_VERSION: 3.258.0
+  MIRRORD_SHA256: 34b89237b8af334d7b1e284be7bc7c0bf43d62f121e4b72cc4e1968db68446f9
+  SHOP_URL: https://playground.metalbear.dev/shop
+  CALLBACK_URL: https://playground.metalbear.dev/shop/api/cloud-agents/callback
+  MIRRORD_UP_LOG: /tmp/mirrord/up.log
+  MIRRORD_UP_PID: /tmp/mirrord/up.pid
+  E2E_RESULTS_FILE: /tmp/e2e/results.json
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  e2e:
+    name: E2E-01 guest checkout (mirrord up)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate the per-run session key
+        # The key is the only thing that routes traffic into this run's local
+        # processes. A random part keeps it unguessable while the run is live
+        # (run ids and logs are public), and masking keeps it out of the logs.
+        run: |
+          set -euo pipefail
+          key="e2e-${{ github.run_id }}-$(openssl rand -hex 6)"
+          echo "::add-mask::$key"
+          echo "E2E_SESSION_KEY=$key" >> "$GITHUB_ENV"
+
+      - name: Tell the dashboard the run started
+        if: inputs.notify_dashboard
+        env:
+          TOKEN: ${{ secrets.CLOUD_AGENTS_CALLBACK_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "CLOUD_AGENTS_CALLBACK_TOKEN is not set; skipping dashboard update"; exit 0; fi
+          body="$(jq -nc --arg url "$RUN_URL" '{ticket:"E2E-01", status:"running", url:$url, message:"building services, starting mirrord up"}')"
+          curl -sS -X POST "$CALLBACK_URL" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" \
+            || echo "dashboard callback failed (not fatal)"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            apps/shop/order-service/package-lock.json
+            apps/shop/payment-service/package-lock.json
+            apps/shop/delivery-service/package-lock.json
+            apps/shop/e2e/package-lock.json
+
+      - name: Build the services on the order path
+        run: |
+          set -euo pipefail
+          for svc in order-service payment-service delivery-service; do
+            echo "::group::build $svc"
+            (cd "apps/shop/$svc" && npm ci && npm run build)
+            echo "::endgroup::"
+          done
+
+      - name: Install Playwright
+        working-directory: apps/shop/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: playground-cluster-1
+          location: us-central1-c
+          project_id: playground-383912
+
+      - name: Install mirrord ${{ env.MIRRORD_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o mirrord.zip "https://github.com/metalbear-co/mirrord/releases/download/${MIRRORD_VERSION}/mirrord_linux_x86_64.zip"
+          echo "${MIRRORD_SHA256}  mirrord.zip" | sha256sum -c
+          unzip -o mirrord.zip
+          sudo mv mirrord /usr/local/bin/mirrord
+          sudo chmod +x /usr/local/bin/mirrord
+          mirrord --version
+
+      - name: Start the services with mirrord up
+        env:
+          MIRRORD_CI_API_KEY: ${{ secrets.MIRRORD_CI_API_KEY }}
+          MIRRORD_CHECK_VERSION: "false"
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$MIRRORD_UP_LOG")"
+          # `mirrord up` stays in the foreground until a child session exits, so
+          # it runs in its own process group and the cleanup step terminates
+          # the group. Each child's output is prefixed with its service name.
+          setsid nohup mirrord up -f .mirrord/ci/mirrord-up.yaml --key "$E2E_SESSION_KEY" > "$MIRRORD_UP_LOG" 2>&1 &
+          echo $! > "$MIRRORD_UP_PID"
+          echo "mirrord up pid $(cat "$MIRRORD_UP_PID")"
+
+      - name: Wait for the local services to be ready
+        run: |
+          set -euo pipefail
+          wait_for() {
+            local marker="$1" deadline=$(( $(date +%s) + 180 ))
+            while [ "$(date +%s)" -lt "$deadline" ]; do
+              if grep -qF -- "$marker" "$MIRRORD_UP_LOG"; then echo "ready: $marker"; return 0; fi
+              if ! kill -0 "$(cat "$MIRRORD_UP_PID")" 2>/dev/null; then echo "mirrord up exited early"; cat "$MIRRORD_UP_LOG"; return 1; fi
+              sleep 2
+            done
+            echo "timed out waiting for: $marker"; cat "$MIRRORD_UP_LOG"; return 1
+          }
+          wait_for "order-service: [Order] Listening on port"
+          wait_for "payment-service: Payment service listening on port"
+          wait_for "delivery-service: Delivery service listening on port"
+          grep -F ": session ID:" "$MIRRORD_UP_LOG"
+
+      - name: Wait for the cluster queue consumers to settle
+        # Queue splitting makes the operator restart the cluster payment-service
+        # and delivery-service pods so they consume from their fallback queues.
+        # Until the old pods are gone they still read the original queue and
+        # would take this run's messages instead of the local services.
+        run: |
+          set -euo pipefail
+          kubectl rollout status -n shop deployment/payment-service  --timeout=180s
+          kubectl rollout status -n shop deployment/delivery-service --timeout=180s
+          for app in payment-service delivery-service; do
+            deadline=$(( $(date +%s) + 120 ))
+            while kubectl get pods -n shop -l "app=$app" -o jsonpath='{.items[*].metadata.deletionTimestamp}' | grep -q .; do
+              [ "$(date +%s)" -lt "$deadline" ] || { echo "old $app pods still terminating"; exit 1; }
+              sleep 3
+            done
+            echo "$app: only the patched pods remain"
+          done
+          kubectl get pods -n shop -l 'app in (payment-service,delivery-service)'
+
+      - name: Apply chaos rule to the order-service session
+        if: inputs.chaos != 'none'
+        env:
+          RULE: .mirrord/chaos/${{ inputs.chaos }}.json
+        run: |
+          set -euo pipefail
+          # `mirrord up` prints each child's operator session id, prefixed with
+          # the service name: "order-service: session ID: <id>".
+          SESSION_ID="$(grep -F 'order-service: session ID:' "$MIRRORD_UP_LOG" | head -n1 | awk '{print $NF}')"
+          [ -n "$SESSION_ID" ] || { echo "no order-service session id in $MIRRORD_UP_LOG"; cat "$MIRRORD_UP_LOG"; exit 1; }
+          echo "applying $RULE to session $SESSION_ID"
+          mirrord chaos add --session-id "$SESSION_ID" --file-path "$RULE"
+
+      - name: Run E2E-01 (Playwright against the live storefront)
+        id: e2e
+        working-directory: apps/shop/e2e
+        env:
+          PLAYWRIGHT_HTML_REPORT: /tmp/e2e/playwright-report
+          PLAYWRIGHT_OUTPUT_DIR: /tmp/e2e/test-results
+        run: npx playwright test
+
+      - name: Verify which hops ran on this runner
+        id: hops
+        if: always() && steps.e2e.outcome != 'skipped'
+        run: ./apps/shop/e2e/scripts/assert-local-logs.sh "$E2E_RESULTS_FILE"
+
+      - name: Stop mirrord up
+        if: always()
+        run: |
+          pid="$(cat "$MIRRORD_UP_PID" 2>/dev/null || true)"
+          if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            # Terminate the whole process group: mirrord up and its three services.
+            kill -TERM -- "-$pid" || true
+            for _ in $(seq 1 15); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+            kill -KILL -- "-$pid" 2>/dev/null || true
+          fi
+
+      - name: Write job summary
+        id: summary
+        if: always()
+        run: |
+          if [ "${{ steps.e2e.outcome }}" = "success" ] && [ "${{ steps.hops.outcome }}" = "success" ]; then
+            echo "outcome=success" >> "$GITHUB_OUTPUT"; outcome=success
+          else
+            echo "outcome=failure" >> "$GITHUB_OUTPUT"; outcome=failure
+          fi
+          ./apps/shop/e2e/scripts/write-summary.sh "$E2E_RESULTS_FILE" "$outcome" "${{ inputs.chaos }}"
+
+      - name: Upload the mirrord up log (local service output)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirrord-up-local-service-log
+          path: /tmp/mirrord
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright report and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-01-playwright
+          path: /tmp/e2e
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Tell the dashboard the run finished
+        if: always() && inputs.notify_dashboard
+        env:
+          TOKEN: ${{ secrets.CLOUD_AGENTS_CALLBACK_TOKEN }}
+          OUTCOME: ${{ steps.summary.outputs.outcome }}
+          CHAOS: ${{ inputs.chaos }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "CLOUD_AGENTS_CALLBACK_TOKEN is not set; skipping dashboard update"; exit 0; fi
+          order="$(jq -r '.orderId // empty' "$E2E_RESULTS_FILE" 2>/dev/null || true)"
+          if [ "$OUTCOME" = "success" ]; then
+            status=done; msg="order ${order:-?} placed, paid and delivery created · order, payment, delivery ran on the CI runner"
+          else
+            status=failed; msg="E2E-01 failed${order:+ (order $order)}"
+            [ "$CHAOS" = "none" ] || msg="$msg · chaos $CHAOS applied to order-service"
+          fi
+          body="$(jq -nc --arg url "$RUN_URL" --arg s "$status" --arg m "$msg" '{ticket:"E2E-01", status:$s, url:$url, message:$m}')"
+          curl -sS -X POST "$CALLBACK_URL" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" \
+            || echo "dashboard callback failed (not fatal)"
+
+  baseline:
+    name: Baseline (dispatch the full kind environment build)
+    if: inputs.compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the kind baseline workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run ci-demo-shop-mirrord-vs-baseline.yml --repo "${{ github.repository }}" --ref main
+          {
+            echo "## Baseline comparison"
+            echo
+            echo "Dispatched **CI Demo - Shop - mirrord vs Baseline**. Its \`Full Environment Setup\` job creates a kind cluster, deploys Postgres, Kafka and LocalStack, builds and loads images, seeds data, and only then runs a curl test."
+            echo
+            echo "Compare its duration with the \`e2e\` job of this run: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci-demo-shop-mirrord-vs-baseline.yml"
+          } >> "$GITHUB_STEP_SUMMARY"
