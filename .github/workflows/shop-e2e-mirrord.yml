@@ -12,9 +12,10 @@
 # else (frontend, inventory, receipt, Postgres, Kafka, SQS, RabbitMQ) is served
 # by the cluster as usual, and other users are not affected.
 #
-# Triggered from the MetalMart R&D dashboard (/shop/cloud-agents, row E2E-01)
-# through /api/e2e/run, or by hand. The run reports its URL and outcome to the
-# dashboard's cloud-agents callback under ticket E2E-01.
+# Started by hand: "Run workflow" on the Actions tab, or `gh workflow run
+# shop-e2e-mirrord.yml`. The MetalMart R&D dashboard (/shop/cloud-agents, row
+# E2E-01) shows the latest run of this workflow, read from the public GitHub
+# API, so the run needs no token for the dashboard.
 name: Shop E2E - mirrord CI
 
 run-name: >-
@@ -39,10 +40,6 @@ on:
         description: Also dispatch the kind baseline workflow (full environment build) for a side-by-side timing
         type: boolean
         default: false
-      notify_dashboard:
-        description: Post start and finish to the MetalMart dashboard callback
-        type: boolean
-        default: true
 
 concurrency:
   group: shop-e2e-mirrord
@@ -52,11 +49,9 @@ env:
   MIRRORD_VERSION: 3.258.0
   MIRRORD_SHA256: 34b89237b8af334d7b1e284be7bc7c0bf43d62f121e4b72cc4e1968db68446f9
   SHOP_URL: https://playground.metalbear.dev/shop
-  CALLBACK_URL: https://playground.metalbear.dev/shop/api/cloud-agents/callback
   MIRRORD_UP_LOG: /tmp/mirrord/up.log
   MIRRORD_UP_PID: /tmp/mirrord/up.pid
   E2E_RESULTS_FILE: /tmp/e2e/results.json
-  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
   e2e:
@@ -79,16 +74,6 @@ jobs:
           key="e2e-${{ github.run_id }}-$(openssl rand -hex 6)"
           echo "::add-mask::$key"
           echo "E2E_SESSION_KEY=$key" >> "$GITHUB_ENV"
-
-      - name: Tell the dashboard the run started
-        if: inputs.notify_dashboard
-        env:
-          TOKEN: ${{ secrets.CLOUD_AGENTS_CALLBACK_TOKEN }}
-        run: |
-          if [ -z "$TOKEN" ]; then echo "CLOUD_AGENTS_CALLBACK_TOKEN is not set; skipping dashboard update"; exit 0; fi
-          body="$(jq -nc --arg url "$RUN_URL" '{ticket:"E2E-01", status:"running", url:$url, message:"building services, starting mirrord up"}')"
-          curl -sS -X POST "$CALLBACK_URL" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" \
-            || echo "dashboard callback failed (not fatal)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -254,25 +239,6 @@ jobs:
           path: /tmp/e2e
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Tell the dashboard the run finished
-        if: always() && inputs.notify_dashboard
-        env:
-          TOKEN: ${{ secrets.CLOUD_AGENTS_CALLBACK_TOKEN }}
-          OUTCOME: ${{ steps.summary.outputs.outcome }}
-          CHAOS: ${{ inputs.chaos }}
-        run: |
-          if [ -z "$TOKEN" ]; then echo "CLOUD_AGENTS_CALLBACK_TOKEN is not set; skipping dashboard update"; exit 0; fi
-          order="$(jq -r '.orderId // empty' "$E2E_RESULTS_FILE" 2>/dev/null || true)"
-          if [ "$OUTCOME" = "success" ]; then
-            status=done; msg="order ${order:-?} placed, paid and delivery created · order, payment, delivery ran on the CI runner"
-          else
-            status=failed; msg="E2E-01 failed${order:+ (order $order)}"
-            [ "$CHAOS" = "none" ] || msg="$msg · chaos $CHAOS applied to order-service"
-          fi
-          body="$(jq -nc --arg url "$RUN_URL" --arg s "$status" --arg m "$msg" '{ticket:"E2E-01", status:$s, url:$url, message:$m}')"
-          curl -sS -X POST "$CALLBACK_URL" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" \
-            || echo "dashboard callback failed (not fatal)"
 
   baseline:
     name: Baseline (dispatch the full kind environment build)

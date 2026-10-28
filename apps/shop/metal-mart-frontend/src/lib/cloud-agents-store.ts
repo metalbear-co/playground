@@ -41,18 +41,10 @@ export function setResult(r: AgentResult): void {
   results.set(r.ticket, r);
 }
 
-/** End-to-end scenario rows (E2E-01, ...) report through the same callback
- * but belong to the "End-to-end tests" table, which polls by ticket. */
-export function isScenarioTicket(ticket: string): boolean {
-  return ticket.startsWith("E2E-");
-}
-
-/** Most recent agent result, ignoring scenario tickets so an E2E run never
- * renames the live agent row. */
+/** Most recent agent result. */
 export function getLatest(): AgentResult | null {
   let latest: AgentResult | null = null;
   for (const r of results.values()) {
-    if (isScenarioTicket(r.ticket)) continue;
     if (!latest || r.received_at > latest.received_at) latest = r;
   }
   return latest;
