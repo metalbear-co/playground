@@ -23,6 +23,18 @@ services:
       namespace: shop
     http_filter:
       header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    # The OTel SDK in order-service exports to localhost:4318 by default. No
+    # collector listens there on the runner (nor in the pod), so every export
+    # is a failed outgoing connect through mirrord. That churn can leave a
+    # stale descriptor entry in the mirrord layer, and the next local file
+    # read on that descriptor comes back empty (seen as body-parser's
+    # "unsupported charset" 415 when iconv-lite lazy-loads its encodings).
+    # Exporters off keeps the SDK and its baggage propagation active.
+    env:
+      override:
+        OTEL_TRACES_EXPORTER: none
+        OTEL_METRICS_EXPORTER: none
+        OTEL_LOGS_EXPORTER: none
     run:
       command: ["node", "apps/shop/order-service/dist/index.js"]
 
