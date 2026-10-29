@@ -317,7 +317,9 @@ jobs:
           # Prints one line per job per poll until both have finished.
           job_state() { # <run id> <job name> -> "<status> <conclusion> <startedAt> <completedAt>"
             gh run view "$1" --repo "$REPO" --json jobs \
-              | jq -r --arg name "$2" '.jobs[] | select(.name == $name) | "\(.status) \(.conclusion // "-") \(.startedAt // "-") \(.completedAt // "-")"'
+              | jq -r --arg name "$2" '.jobs[] | select(.name == $name)
+                  | [.status, .conclusion, .startedAt, .completedAt]
+                  | map(if . == null or . == "" or startswith("0001-") then "-" else . end) | join(" ")'
           }
           deadline=$(( $(date +%s) + 25 * 60 ))
           while :; do
