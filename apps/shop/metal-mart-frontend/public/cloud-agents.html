@@ -285,20 +285,34 @@
   function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
 
-  // Every write (start an agent, run a scenario, reset) needs the dashboard
-  // token: the page is public, so the server refuses anonymous writes. The
-  // token is asked for once per browser session and kept in sessionStorage;
-  // a 401 clears it and asks again.
+  // Every write (start an agent, reset) needs the dashboard token: the page
+  // is public, so the server refuses anonymous writes. The token is kept in
+  // localStorage, so a browser needs it once. It arrives in one of two ways:
+  //   - a link with the token in its fragment, /cloud-agents#token=<value>
+  //     (`mm dashboard` builds one from the cluster secret): the fragment never
+  //     leaves the browser (not sent to the server, not in access logs), it is
+  //     stored and removed from the address bar, other fragment fields stay;
+  //   - the prompt, when a write is attempted without a stored token.
+  // A 401 clears the stored token and asks again.
   var TOKEN_KEY = 'metal-mart-cloud-agents:token';
+  function storeToken(t) { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+  (function tokenFromLink() {
+    var fields = (location.hash || '').replace(/^#/, '').split('&').filter(Boolean);
+    var rest = [], token = null;
+    fields.forEach(function (f) { if (f.indexOf('token=') === 0) token = f.slice(6); else rest.push(f); });
+    if (token === null) return;
+    storeToken(decodeURIComponent(token).trim());
+    try { history.replaceState(null, '', location.pathname + location.search + (rest.length ? '#' + rest.join('&') : '')); } catch (e) {}
+  })();
   function dashToken(force) {
     var t = null;
-    try { t = force ? null : sessionStorage.getItem(TOKEN_KEY); } catch (e) {}
+    try { t = force ? null : localStorage.getItem(TOKEN_KEY); } catch (e) {}
     if (!t) {
-      t = window.prompt('Dashboard token (CLOUD_AGENTS_CALLBACK_TOKEN)');
+      t = window.prompt('Dashboard token. Paste it here, or open the dashboard link that carries it (#token=...). Ask the dashboard owner for either.');
       if (t === null) return null;
       t = t.trim();
       if (!t) return null;
-      try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {}
+      storeToken(t);
     }
     return t;
   }
@@ -309,7 +323,7 @@
     o.headers = Object.assign({}, o.headers || {}, { Authorization: 'Bearer ' + t });
     return fetch(url, o).then(function (res) {
       if (res.status === 401 && !retried) {
-        try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+        storeToken(null);
         return authFetch(url, opts, true);
       }
       return res;
