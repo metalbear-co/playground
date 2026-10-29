@@ -288,18 +288,21 @@
   // Every write (start an agent, reset) needs the dashboard token: the page
   // is public, so the server refuses anonymous writes. The token is kept in
   // localStorage, so a browser needs it once. It arrives in one of two ways:
-  //   - a link with the token in its fragment, /cloud-agents#token=<value>:
-  //     the fragment never leaves the browser (not sent to the server, not in
-  //     access logs), it is stored and removed from the address bar;
+  //   - a link with the token in its fragment, /cloud-agents#token=<value>
+  //     (`mm dashboard` builds one from the cluster secret): the fragment never
+  //     leaves the browser (not sent to the server, not in access logs), it is
+  //     stored and removed from the address bar, other fragment fields stay;
   //   - the prompt, when a write is attempted without a stored token.
   // A 401 clears the stored token and asks again.
   var TOKEN_KEY = 'metal-mart-cloud-agents:token';
   function storeToken(t) { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
   (function tokenFromLink() {
-    var m = /(?:^#|[#&])token=([^&]+)/.exec(location.hash || '');
-    if (!m) return;
-    storeToken(decodeURIComponent(m[1]).trim());
-    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+    var fields = (location.hash || '').replace(/^#/, '').split('&').filter(Boolean);
+    var rest = [], token = null;
+    fields.forEach(function (f) { if (f.indexOf('token=') === 0) token = f.slice(6); else rest.push(f); });
+    if (token === null) return;
+    storeToken(decodeURIComponent(token).trim());
+    try { history.replaceState(null, '', location.pathname + location.search + (rest.length ? '#' + rest.join('&') : '')); } catch (e) {}
   })();
   function dashToken(force) {
     var t = null;

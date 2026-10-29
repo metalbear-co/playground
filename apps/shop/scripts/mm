@@ -43,7 +43,7 @@
 #   mm cleanup <id|--mine>  Kill one operator session (or every session you own)
 #   mm doctor               Check every prerequisite and report OK/FAIL
 #   mm extension            Open the mirrord browser-extension install page
-#   mm dashboard            Open your tasks dashboard, greeted by name
+#   mm dashboard            Open your tasks dashboard, greeted by name, signed in
 #
 set -euo pipefail
 
@@ -93,8 +93,13 @@ MIRRORD_TAP_FORMULA='metalbear-co/mirrord/mirrord'
 EXTENSION_URL='https://chromewebstore.google.com/detail/mirrord/bijejadnnfgjkfdocgocklekjhnhkhkf'
 
 # Per-developer tasks dashboard. `mm dashboard` opens it with the developer's
-# name in the URL fragment; the page keeps the name in the browser after that.
+# name and the dashboard token in the URL fragment; the page keeps both in the
+# browser after that. The token gates the page's writes (Run agent, reset) and
+# lives in the cluster, so anyone with access to the namespace gets it here
+# instead of by hand.
 DASHBOARD_URL='https://playground.metalbear.dev/shop/cloud-agents.html'
+DASHBOARD_TOKEN_SECRET='cloud-agents'
+DASHBOARD_TOKEN_KEY='CLOUD_AGENTS_CALLBACK_TOKEN'
 
 # Session key. `mirrord up --key` sets it; mirrord derives the HTTP steal filter
 # (baggage: .*mirrord-session=<key>.*) and the queue-split filters from it, and
@@ -139,7 +144,8 @@ Commands:
   cleanup <id>    Kill one operator session by ID (or --mine for all of yours)
   doctor          Verify every prerequisite (gcloud, kubectl, mirrord, cluster, config)
   extension       Open the mirrord browser extension install page
-  dashboard       Open your tasks dashboard in the browser, greeted by your name
+  dashboard       Open your tasks dashboard in the browser, greeted by your name,
+                  with the dashboard token taken from the cluster (no prompt)
 
 Options for `run`:
   --key <name>        Session key used in the traffic filters (default: your username)
@@ -728,17 +734,31 @@ urlencode() {
   echo "$out"
 }
 
+# The dashboard token, decoded from the cluster secret; empty when the secret
+# cannot be read (no namespace access), in which case the page prompts for it.
+dashboard_token() {
+  kubectl get secret "$DASHBOARD_TOKEN_SECRET" -n "$DEFAULT_NAMESPACE" \
+    -o "jsonpath={.data.${DASHBOARD_TOKEN_KEY}}" 2>/dev/null | base64 --decode 2>/dev/null || true
+}
+
 cmd_dashboard() {
-  ensure_gcloud_auth
-  local name url
+  ensure_cluster_ready "$DEFAULT_NAMESPACE"
+  local name token fragment=''
   name="$(developer_name)"
-  url="$DASHBOARD_URL"
   if [[ -n "$name" ]]; then
-    url="${DASHBOARD_URL}#dev=$(urlencode "$name")"
+    fragment="dev=$(urlencode "$name")"
     note "opening your dashboard as: $name"
   else
     note 'could not work out your name; opening the dashboard without it'
   fi
+  token="$(dashboard_token)"
+  if [[ -n "$token" ]]; then
+    fragment="${fragment:+${fragment}&}token=$(urlencode "$token")"
+    note "dashboard token read from secret ${DEFAULT_NAMESPACE}/${DASHBOARD_TOKEN_SECRET}; the page keeps it"
+  else
+    note "could not read secret ${DEFAULT_NAMESPACE}/${DASHBOARD_TOKEN_SECRET}; the page will ask for the token"
+  fi
+  local url="${DASHBOARD_URL}${fragment:+#${fragment}}"
   if have open; then open "$url"
   elif have xdg-open; then xdg-open "$url"
   else echo "$url"
