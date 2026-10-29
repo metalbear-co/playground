@@ -18,7 +18,7 @@ Workflow: [`.github/workflows/shop-e2e-mirrord.yml`](../../../.github/workflows/
 6. `scripts/write-summary.sh` renders the job summary: browser steps, then one row per hop with where it ran and the evidence.
 7. Stop `mirrord up` (its process group), upload the mirrord logs and the Playwright report.
 
-Inputs: `chaos` applies a rule from `.mirrord/chaos/` to the order-service session before the test (a real failure demo); `compare` also dispatches the kind baseline workflow for a timing comparison.
+Inputs: `chaos` applies a rule from `.mirrord/chaos/` to the order-service session before the test (a real failure demo); `compare` also runs the kind baseline workflow (full environment build on a runner) and writes both job durations side by side into the summary.
 
 ## Starting a run
 

@@ -19,7 +19,7 @@
 name: Shop E2E - mirrord CI
 
 run-name: >-
-  E2E-01 guest checkout (mirrord up)${{ inputs.chaos != 'none' && format(' · chaos {0}', inputs.chaos) || '' }}
+  E2E-01 guest checkout (mirrord up)${{ inputs.chaos != 'none' && format(' · chaos {0}', inputs.chaos) || '' }}${{ inputs.compare && ' · vs kind baseline' || '' }}
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ on:
           - 05-rabbitmq-slow
           - 06-inventory-svc-slow
       compare:
-        description: Also dispatch the kind baseline workflow (full environment build) for a side-by-side timing
+        description: Also run the kind baseline workflow (full environment build) and put both durations in the summary
         type: boolean
         default: false
 
@@ -272,24 +272,84 @@ jobs:
           retention-days: 14
 
   baseline:
-    name: Baseline (dispatch the full kind environment build)
+    name: Baseline (full kind environment build)
+    # Starts the older demo workflow, whose `Full Environment Setup` job builds
+    # a kind cluster on its runner (Postgres, Kafka, LocalStack, images, seed
+    # data) before it runs one curl test, waits for it, and writes its duration
+    # next to the E2E-01 job's duration in this run's summary.
     if: inputs.compare
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     permissions:
       actions: write
       contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      BASELINE_WORKFLOW: ci-demo-shop-mirrord-vs-baseline.yml
+      BASELINE_JOB: Full Environment Setup
+      E2E_JOB: E2E-01 guest checkout (mirrord up)
     steps:
-      - name: Dispatch the kind baseline workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Start the kind baseline workflow
+        id: start
         run: |
           set -euo pipefail
-          gh workflow run ci-demo-shop-mirrord-vs-baseline.yml --repo "${{ github.repository }}" --ref main
+          before="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run "$BASELINE_WORKFLOW" --repo "$REPO" --ref main
+          # The dispatch call returns no run id: take the first dispatch run
+          # of that workflow created after the call.
+          run_id=""
+          for _ in $(seq 1 20); do
+            sleep 3
+            run_id="$(gh run list --repo "$REPO" --workflow "$BASELINE_WORKFLOW" --event workflow_dispatch --limit 5 --json databaseId,createdAt \
+              | jq -r --arg before "$before" '[.[] | select(.createdAt >= $before)] | first | .databaseId // empty')"
+            [ -n "$run_id" ] && break
+          done
+          [ -n "$run_id" ] || { echo "no run of $BASELINE_WORKFLOW appeared after the dispatch"; exit 1; }
+          echo "baseline run: https://github.com/$REPO/actions/runs/$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the baseline run and the E2E-01 job
+        env:
+          BASELINE_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          # Prints one line per job per poll until both have finished.
+          job_state() { # <run id> <job name> -> "<status> <conclusion> <startedAt> <completedAt>"
+            gh run view "$1" --repo "$REPO" --json jobs \
+              | jq -r --arg name "$2" '.jobs[] | select(.name == $name) | "\(.status) \(.conclusion // "-") \(.startedAt // "-") \(.completedAt // "-")"'
+          }
+          deadline=$(( $(date +%s) + 25 * 60 ))
+          while :; do
+            b="$(job_state "$BASELINE_RUN_ID" "$BASELINE_JOB")"
+            e="$(job_state "$GITHUB_RUN_ID" "$E2E_JOB")"
+            echo "$(date -u +%H:%M:%S)  kind baseline: ${b:-not started}   |   mirrord up: ${e:-not started}"
+            case "$b $e" in completed*completed*) break ;; esac
+            [ "$(date +%s)" -lt "$deadline" ] || { echo "timed out waiting for the jobs"; break; }
+            sleep 20
+          done
+          echo "BASELINE_STATE=$b" >> "$GITHUB_ENV"
+          echo "E2E_STATE=$e" >> "$GITHUB_ENV"
+
+      - name: Write the comparison into the summary
+        if: always() && steps.start.outputs.run_id != ''
+        env:
+          BASELINE_RUN_ID: ${{ steps.start.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          dur() { # <startedAt> <completedAt> -> "Xm YYs" or "-"
+            [ "$1" != "-" ] && [ "$2" != "-" ] || { echo "-"; return; }
+            local s=$(( $(date -u -d "$2" +%s) - $(date -u -d "$1" +%s) ))
+            printf '%dm %02ds' $(( s / 60 )) $(( s % 60 ))
+          }
+          read -r b_status b_conc b_start b_end <<< "${BASELINE_STATE:-- - - -}"
+          read -r e_status e_conc e_start e_end <<< "${E2E_STATE:-- - - -}"
+          b_dur="$(dur "$b_start" "$b_end")"; e_dur="$(dur "$e_start" "$e_end")"
           {
             echo "## Baseline comparison"
             echo
-            echo "Dispatched **CI Demo - Shop - mirrord vs Baseline**. Its \`Full Environment Setup\` job creates a kind cluster, deploys Postgres, Kafka and LocalStack, builds and loads images, seeds data, and only then runs a curl test."
-            echo
-            echo "Compare its duration with the \`e2e\` job of this run: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci-demo-shop-mirrord-vs-baseline.yml"
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "| Job | What it builds | Result | Duration |"
+            echo "|---|---|---|---|"
+            echo "| [$BASELINE_JOB](https://github.com/$REPO/actions/runs/$BASELINE_RUN_ID) | kind cluster on the runner: Postgres, Kafka, LocalStack, service images, seed data, then one curl test | $b_conc | **$b_dur** |"
+            echo "| $E2E_JOB (this run) | nothing: order, payment and delivery run on the runner under \`mirrord up\`, attached to the live cluster; the browser drives the real storefront | $e_conc | **$e_dur** |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
