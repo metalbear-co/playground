@@ -11,13 +11,14 @@ Playwright scenarios that run against the **live playground cluster**. Nothing i
 Workflow: [`.github/workflows/shop-e2e-mirrord.yml`](../../../.github/workflows/shop-e2e-mirrord.yml) (`workflow_dispatch`).
 
 1. Build order, payment and delivery (`npm ci && npm run build`).
-2. `mirrord up -f .mirrord/ci/mirrord-up.yaml --key e2e-<run_id>-<random>` ([config](../../../.mirrord/ci/mirrord-up.yaml)): one run starts the three services, each as a split-mode session with the header filter and the SQS/Kafka queue split keyed to the run. `MIRRORD_CI_API_KEY` is set, so every child session registers as a CI session, not a user seat.
-3. `npx playwright test` with `E2E_SESSION_KEY=e2e-<run_id>-<random>` (generated and masked at the start of the job): home, product, cart, checkout, order tracking until the delivery row appears.
+2. `mirrord up -f .mirrord/ci/mirrord-up.yaml --key e2e-<run_id>-<random>` ([config](../../../.mirrord/ci/mirrord-up.yaml)): one run starts the three services, each as a split-mode session with the header filter and the SQS/Kafka queue split keyed to the run. `MIRRORD_CI_API_KEY` is set, so every child session registers as a CI session, not a user seat. Once the services listen, the job log shows the whole `mirrord up` output so far (operator session and config summary per service).
+3. `npx playwright test` with `E2E_SESSION_KEY=e2e-<run_id>-<random>` (generated at the start of the job; the random part is masked in the logs): home, product, cart, checkout, order tracking until the delivery row appears.
 4. `scripts/assert-local-logs.sh` proves each hop ran on the runner by finding the order id in the `mirrord up` log (`/tmp/mirrord/up.log`), where every line is prefixed with its service name.
-5. `scripts/write-summary.sh` renders the job summary: browser steps, then one row per hop with where it ran and the evidence.
-6. Stop `mirrord up` (its process group), upload the log and the Playwright report.
+5. The job log then shows what mirrord did during the test: the local services' output for the order, and each service's internal proxy log (`/tmp/mirrord/intproxy-<service>.log`, rendered by `scripts/render-intproxy-log.sh`): the steal subscription with the header filter, every stolen request with its headers, outgoing connections to the cluster, and the agent's messages.
+6. `scripts/write-summary.sh` renders the job summary: browser steps, then one row per hop with where it ran and the evidence.
+7. Stop `mirrord up` (its process group), upload the mirrord logs and the Playwright report.
 
-Inputs: `chaos` applies a rule from `.mirrord/chaos/` to the order-service session before the test (a real failure demo); `compare` also dispatches the kind baseline workflow for a timing comparison.
+Inputs: `chaos` applies a rule from `.mirrord/chaos/` to the order-service session before the test (a real failure demo); `compare` also runs the kind baseline workflow (full environment build on a runner) and writes both job durations side by side into the summary.
 
 ## Starting a run
 

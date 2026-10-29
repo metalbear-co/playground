@@ -9,6 +9,11 @@
 # With MIRRORD_CI_API_KEY set, every child session registers with the operator as
 # a CI session instead of a user seat.
 #
+# Each service's internal proxy writes its log to /tmp/mirrord/intproxy-<service>.log
+# (operator session, steal subscription with the header filter, every stolen
+# request with its headers, agent messages). The workflow prints these logs
+# after the test and uploads them with the `mirrord up` output.
+#
 # Run it locally with the same key the browser test sends in its baggage header:
 #   MIRRORD_KEY=e2e-local-1 mirrord up -f .mirrord/ci/mirrord-up.yaml
 
@@ -35,6 +40,9 @@ services:
         OTEL_TRACES_EXPORTER: none
         OTEL_METRICS_EXPORTER: none
         OTEL_LOGS_EXPORTER: none
+    config_patch:
+      internal_proxy:
+        log_destination: /tmp/mirrord/intproxy-order-service.log
     run:
       command: ["node", "apps/shop/order-service/dist/index.js"]
 
@@ -53,6 +61,8 @@ services:
           payments:
             queue_type: SQS
             jq_filter: '.MessageAttributes.jwt.StringValue | split(".") | .[1] | gsub("-"; "+") | gsub("_"; "/") | . as $s | $s + ("=" * ((4 - ($s|length % 4)) % 4)) | @base64d | fromjson | .baggage | test("mirrord-session={{ key }}")'
+      internal_proxy:
+        log_destination: /tmp/mirrord/intproxy-payment-service.log
     run:
       command: ["node", "apps/shop/payment-service/dist/index.js"]
 
@@ -70,5 +80,7 @@ services:
             queue_type: Kafka
             message_filter:
               baggage: '.*mirrord-session={{ key }}.*'
+      internal_proxy:
+        log_destination: /tmp/mirrord/intproxy-delivery-service.log
     run:
       command: ["node", "apps/shop/delivery-service/dist/index.js"]
