@@ -8,9 +8,6 @@
  * body is only the one the dashboard displays), and a stale result from an
  * earlier run would otherwise surface as if it belonged to the new one.
  * GET reports whether the endpoint is configured, so the dashboard can show it.
- * POST requires the dashboard token (Authorization: Bearer
- * <CLOUD_AGENTS_CALLBACK_TOKEN>): the page is public, and firing the routine
- * must not be open to anonymous visitors.
  *
  * Configuration (server-side env):
  *   CLAUDE_CODE_OAUTH_TOKEN  - OAuth token for the claude.ai account that owns
@@ -19,7 +16,6 @@
  *   ANTHROPIC_BASE_URL       - optional API host override.
  */
 
-import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
 import { clearAll, normalizeTicket } from "@/lib/cloud-agents-store";
 
 const API_BASE = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
@@ -39,8 +35,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const denied = denyUnlessAuthorized(req);
-  if (denied) return denied;
   const oauth = token();
   if (!oauth) {
     return Response.json(
