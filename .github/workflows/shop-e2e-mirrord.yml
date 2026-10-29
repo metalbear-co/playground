@@ -225,7 +225,6 @@ jobs:
           set -euo pipefail
           echo "== local service output during the test"
           tail -n "+$(( ${MIRRORD_UP_STARTUP_LINES:-0} + 1 ))" "$MIRRORD_UP_LOG"
-          echo "MIRRORD_UP_TEST_LINES=$(wc -l < "$MIRRORD_UP_LOG")" >> "$GITHUB_ENV"
           for svc in order-service payment-service delivery-service; do
             echo
             echo "== mirrord internal proxy log: $svc"
@@ -242,8 +241,6 @@ jobs:
             for _ in $(seq 1 15); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
             kill -KILL -- "-$pid" 2>/dev/null || true
           fi
-          echo "== mirrord up: shutdown"
-          tail -n "+$(( ${MIRRORD_UP_TEST_LINES:-${MIRRORD_UP_STARTUP_LINES:-0}} + 1 ))" "$MIRRORD_UP_LOG" 2>/dev/null || true
 
       - name: Write job summary
         id: summary
