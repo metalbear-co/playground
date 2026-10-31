@@ -11,7 +11,6 @@ it only exists after you deploy it, and other demos do not depend on it.
 | `manifests/scylla-demo/scylla-demo.yaml` | Source Scylla, seed Job, and target workload |
 | `apps/scylla-demo/scylla-branch.json` | The mirrord config |
 | `apps/scylla-demo/demo.mjs` | Small client that runs under mirrord |
-| `apps/scylla-demo/local-test.sh` | Tests the Scylla flags and copy script on local Docker |
 
 ## Deploy and seed
 
@@ -67,15 +66,6 @@ skips the copy. To get a fresh copy, run `mirrord db-branches -n scylla-demo sto
   for `--memory 1G` under a 2Gi limit.
 - `--io-setup 0` skips the disk benchmark at boot.
 - The copy script sets replication to RF=1, because a branch has one node.
-
-## Test without a cluster
-
-```bash
-./apps/scylla-demo/local-test.sh
-```
-
-This boots two Scylla containers, seeds one, runs the real copy script, and runs `demo.mjs`
-against the copy. It does not exercise the operator.
 
 ## Using this on a real Scylla
 
