@@ -1,0 +1,58 @@
+{
+  "operator": true,
+  "target": {
+    "path": "deployment/scylla-demo-app",
+    "namespace": "scylla-demo"
+  },
+  "feature": {
+    "env": true,
+    "fs": "local",
+    "network": {
+      "incoming": "off",
+      "outgoing": true
+    },
+    "db_branches": [
+      {
+        "type": "generic",
+        "id": "scylla-demo",
+        "profile": "scylla",
+        "image": "scylladb/scylla:2026.3.4",
+        "port": 9042,
+        "ttl_secs": 900,
+        "creation_timeout_secs": 300,
+        "connection": {
+          "params": {
+            "host": "SCYLLA_HOST",
+            "port": "SCYLLA_PORT",
+            "keyspace": "SCYLLA_KEYSPACE",
+            "dc": "SCYLLA_DC"
+          }
+        },
+        "args": [
+          "--smp",
+          "1",
+          "--memory",
+          "1G",
+          "--reserve-memory",
+          "256M",
+          "--overprovisioned",
+          "1",
+          "--developer-mode",
+          "1",
+          "--io-setup",
+          "0",
+          "--dc",
+          "$(MIRRORD_PARAM_DC)"
+        ],
+        "copy": {
+          "image": "scylladb/scylla:2026.3.4",
+          "command": [
+            "sh",
+            "-c",
+            "set -eu\nKS=\"$MIRRORD_PARAM_KEYSPACE\"\nsrc() { cqlsh \"$MIRRORD_PARAM_HOST\" \"$MIRRORD_PARAM_PORT\" ${MIRRORD_PARAM_USER:+-u \"$MIRRORD_PARAM_USER\" -p \"$MIRRORD_PARAM_PASSWORD\"} \"$@\"; }\ndst() { cqlsh \"$MIRRORD_BRANCH_HOST\" \"$MIRRORD_BRANCH_PORT\" \"$@\"; }\nsrc -e \"DESCRIBE KEYSPACE $KS\" > /tmp/raw.cql\nsed -E \"s/(CREATE KEYSPACE [^ ]+ WITH replication = )\\{[^}]*\\}/\\1{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}/\" /tmp/raw.cql > /tmp/schema.cql\ndst -f /tmp/schema.cql\nsrc -e \"SELECT table_name FROM system_schema.tables WHERE keyspace_name = '$KS'\" > /tmp/tables.txt\nsed -n '/^---/,/^$/p' /tmp/tables.txt | sed -e '/^---/d' -e '/^$/d' -e 's/ //g' > /tmp/tables.list\nfor t in $$(cat /tmp/tables.list); do\n  src -e \"COPY $KS.$t TO '/tmp/$t.csv'\"\n  dst -e \"COPY $KS.$t FROM '/tmp/$t.csv'\"\ndone\necho \"copied keyspace $KS: $$(wc -l < /tmp/tables.list) tables\"\n"
+          ]
+        }
+      }
+    ]
+  }
+}

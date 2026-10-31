@@ -1,0 +1,8 @@
+{
+  "name": "scylla-branch-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cassandra-driver": "4.10.0"
+  }
+}

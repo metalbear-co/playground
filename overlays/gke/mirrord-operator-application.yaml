@@ -75,6 +75,19 @@ spec:
                     limits:
                       cpu: "1"
                       memory: "2Gi"
+              # Branches for apps/scylla-demo. The request keeps them off the 1.4Gi
+              # e2-small nodes, which cannot fit Scylla.
+              scylla:
+                dbPod:
+                  allowedImages:
+                    - "scylladb/scylla:*"
+                  resources:
+                    requests:
+                      cpu: "500m"
+                      memory: "1536Mi"
+                    limits:
+                      cpu: "2"
+                      memory: "2Gi"
           previewEnv: true
           topology: true
           shareIngress:

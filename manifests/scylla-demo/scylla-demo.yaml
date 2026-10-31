@@ -1,0 +1,121 @@
+# Source side of apps/scylla-demo: a one-node ScyllaDB holding a seeded keyspace, and a target
+# workload whose env tells mirrord where that database lives.
+#
+# No Argo CD Application points here. Deploy and seed with `kubectl apply -f manifests/scylla-demo/`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scylla-demo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scylla-source
+  namespace: scylla-demo
+spec:
+  selector:
+    app: scylla-source
+  ports:
+    - name: cql
+      port: 9042
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: scylla-source
+  namespace: scylla-demo
+spec:
+  serviceName: scylla-source
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scylla-source
+  template:
+    metadata:
+      labels:
+        app: scylla-source
+    spec:
+      containers:
+        - name: scylla
+          image: scylladb/scylla:2026.3.4
+          # Scylla reserves about 1.5GiB by default, which leaves no room for --memory 1G
+          # under a 2Gi limit, so --reserve-memory has to be explicit.
+          args: ["--smp", "1", "--memory", "1G", "--reserve-memory", "256M", "--overprovisioned", "1", "--developer-mode", "1", "--io-setup", "0", "--dc", "us-central1"]
+          ports:
+            - containerPort: 9042
+          readinessProbe:
+            tcpSocket:
+              port: 9042
+            periodSeconds: 3
+            failureThreshold: 60
+          # The request keeps this off the 1.4Gi e2-small nodes.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1536Mi
+            limits:
+              memory: 2Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: scylla-seed
+  namespace: scylla-demo
+spec:
+  # The source keeps its data on the pod, so a restart empties it. Removing the finished Job
+  # lets the same `kubectl apply` seed again.
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: scylladb/scylla:2026.3.4
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              until cqlsh scylla-source -e 'SELECT release_version FROM system.local' >/dev/null 2>&1; do sleep 3; done
+              cat > /tmp/seed.cql <<'CQL'
+              CREATE KEYSPACE IF NOT EXISTS metalmart WITH replication = {'class': 'NetworkTopologyStrategy', 'us-central1': 1};
+              CREATE TABLE IF NOT EXISTS metalmart.products (sku text PRIMARY KEY, name text, price_cents int, stock int);
+              CREATE TABLE IF NOT EXISTS metalmart.orders_by_customer (customer text, order_id timeuuid, sku text, qty int, PRIMARY KEY (customer, order_id)) WITH CLUSTERING ORDER BY (order_id DESC);
+              INSERT INTO metalmart.products (sku, name, price_cents, stock) VALUES ('MUG-001', 'Metal mug', 1800, 120);
+              INSERT INTO metalmart.products (sku, name, price_cents, stock) VALUES ('TEE-002', 'Bear t-shirt', 2500, 80);
+              INSERT INTO metalmart.products (sku, name, price_cents, stock) VALUES ('CAP-003', 'Mirror cap', 2200, 45);
+              INSERT INTO metalmart.products (sku, name, price_cents, stock) VALUES ('BAG-004', 'Canvas tote', 1500, 200);
+              INSERT INTO metalmart.orders_by_customer (customer, order_id, sku, qty) VALUES ('alice', now(), 'MUG-001', 2);
+              INSERT INTO metalmart.orders_by_customer (customer, order_id, sku, qty) VALUES ('bob', now(), 'TEE-002', 1);
+              CQL
+              cqlsh scylla-source -f /tmp/seed.cql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scylla-demo-app
+  namespace: scylla-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scylla-demo-app
+  template:
+    metadata:
+      labels:
+        app: scylla-demo-app
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sleep", "infinity"]
+          env:
+            - name: SCYLLA_HOST
+              value: scylla-source.scylla-demo.svc.cluster.local
+            - name: SCYLLA_PORT
+              value: "9042"
+            - name: SCYLLA_KEYSPACE
+              value: metalmart
+            - name: SCYLLA_DC
+              value: us-central1
