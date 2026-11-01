@@ -76,6 +76,8 @@ spec:
                     limits:
                       cpu: "1"
                       memory: "2Gi"
+              # Carries the whole ScyllaDB setup, so a mirrord.json only needs
+              # type, id, profile, and the connection host and port.
               scylla:
                 dbPod:
                   resources:
@@ -85,6 +87,53 @@ spec:
                     limits:
                       cpu: "1"
                       memory: "2Gi"
+                  branch:
+                    image: docker.io/scylladb/scylla:2026.3.4
+                    port: 9042
+                    # Under the 2Gi limit, --memory 1G fails at startup unless
+                    # --reserve-memory lowers the default reservation.
+                    args:
+                      - --smp
+                      - "1"
+                      - --memory
+                      - 1G
+                      - --reserve-memory
+                      - 256M
+                      - --overprovisioned
+                      - "1"
+                      - --developer-mode
+                      - "1"
+                      - --reactor-backend
+                      - epoll
+                    readiness:
+                      exec:
+                        command:
+                          - cqlsh
+                          - -e
+                          - SELECT now() FROM system.local
+                  # Kubernetes expands $(VAR) in args, so the script uses ${VAR} only.
+                  copy:
+                    image: docker.io/scylladb/scylla:2026.3.4
+                    command:
+                      - bash
+                      - -c
+                    args:
+                      - |
+                        set -euo pipefail
+                        ks=catalog
+                        src="${MIRRORD_PARAM_HOST} ${MIRRORD_PARAM_PORT}"
+                        dst="${MIRRORD_BRANCH_HOST} ${MIRRORD_BRANCH_PORT}"
+                        cqlsh $src -e "DESCRIBE KEYSPACE ${ks}" \
+                          | sed -E "/CREATE KEYSPACE/s/\{[^}]*\}/{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}/" \
+                          > /tmp/schema.cql
+                        cqlsh $dst -f /tmp/schema.cql
+                        cqlsh $src -e "SELECT table_name FROM system_schema.tables WHERE keyspace_name = '${ks}'" \
+                          | sed -E "1,3d; /^\s*$/d; /rows?\)/d; s/\s+//g" \
+                          > /tmp/tables
+                        while read -r t; do
+                          cqlsh $src -e "COPY ${ks}.${t} TO '/tmp/${t}.csv'"
+                          cqlsh $dst -e "COPY ${ks}.${t} FROM '/tmp/${t}.csv'"
+                        done < /tmp/tables
           previewEnv: true
           topology: true
           shareIngress:
