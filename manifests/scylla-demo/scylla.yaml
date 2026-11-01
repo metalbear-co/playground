@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scylla
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scylla
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scylla
+  template:
+    metadata:
+      labels:
+        app: scylla
+    spec:
+      serviceAccountName: scylla
+      automountServiceAccountToken: false
+      containers:
+        - name: scylla
+          image: docker.io/scylladb/scylla:2026.3.4
+          imagePullPolicy: IfNotPresent
+          # Under a 2Gi limit, --memory 1G fails at startup with "insufficient physical memory"
+          # unless --reserve-memory lowers the default reservation.
+          args:
+            - --smp
+            - "1"
+            - --memory
+            - 1G
+            - --reserve-memory
+            - 256M
+            - --overprovisioned
+            - "1"
+            - --developer-mode
+            - "1"
+            - --reactor-backend
+            - epoll
+          ports:
+            - name: cql
+              containerPort: 9042
+          # The pod has no volume, so this catalog disappears with the container.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - |
+                    for _ in $(seq 1 90); do
+                      cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1 && break
+                      sleep 2
+                    done
+                    cqlsh -e "CREATE KEYSPACE IF NOT EXISTS catalog WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}"
+                    cqlsh -e "CREATE TABLE IF NOT EXISTS catalog.product_reviews (product_id int, created_at timeuuid, author text, body text, PRIMARY KEY (product_id, created_at)) WITH CLUSTERING ORDER BY (created_at DESC)"
+                    cqlsh -e "INSERT INTO catalog.product_reviews (product_id, created_at, author, body) VALUES (1, now(), 'Dana', 'Great fit, the print held up after many washes.')"
+                    cqlsh -e "INSERT INTO catalog.product_reviews (product_id, created_at, author, body) VALUES (1, now(), 'Sam', 'Runs a little large.')"
+                    cqlsh -e "INSERT INTO catalog.product_reviews (product_id, created_at, author, body) VALUES (2, now(), 'Noa', 'Fast delivery and solid quality.')"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          readinessProbe:
+            tcpSocket:
+              port: cql
+            periodSeconds: 5
+            failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scylla
+spec:
+  selector:
+    app: scylla
+  ports:
+    - name: cql
+      port: 9042
+      targetPort: cql
