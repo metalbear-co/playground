@@ -9,6 +9,7 @@ resources:
   - shop-application.yaml
   - ci-lab-application.yaml
   - search-es-application.yaml
+  - scylla-demo-application.yaml
   - shop
   - visualization-application.yaml
   - visualization

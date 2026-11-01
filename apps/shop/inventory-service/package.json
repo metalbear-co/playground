@@ -10,6 +10,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "cassandra-driver": "^4.10.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.3.2",
     "pg": "^8.13.0"

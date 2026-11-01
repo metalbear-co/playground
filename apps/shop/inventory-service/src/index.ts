@@ -1,3 +1,4 @@
+import cassandra from "cassandra-driver";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { Pool } from "pg";
@@ -12,6 +13,17 @@ if (dbUrl && !/:\d+\/.+$/.test(dbUrl)) {
 }
 
 const pool = new Pool({ connectionString: dbUrl });
+
+// Reviews live in ScyllaDB and everything else in Postgres. The driver connects on first use,
+// so the service starts and serves products even when ScyllaDB is absent or unreachable.
+const scylla = process.env.SCYLLA_HOST
+  ? new cassandra.Client({
+      contactPoints: [process.env.SCYLLA_HOST],
+      protocolOptions: { port: parseInt(process.env.SCYLLA_PORT || "9042", 10) },
+      localDataCenter: process.env.SCYLLA_DATACENTER || "datacenter1",
+      keyspace: process.env.SCYLLA_KEYSPACE || "catalog",
+    })
+  : null;
 
 async function initDb() {
   const client = await pool.connect();
@@ -174,6 +186,49 @@ app.post("/products/:id/check-stock", async (req, res) => {
     res.json({ inStock, available: rows[0].stock });
   } catch (err) {
     console.error("Error checking stock:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/products/:id/reviews", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "Invalid product ID" });
+  }
+  if (!scylla) {
+    return res.status(503).json({ error: "Reviews are not configured" });
+  }
+  try {
+    const { rows } = await scylla.execute(
+      "SELECT toTimestamp(created_at) AS created_at, author, body FROM product_reviews WHERE product_id = ? LIMIT 50",
+      [id],
+      { prepare: true }
+    );
+    res.json(rows.map((row) => ({ created_at: row.created_at, author: row.author, body: row.body })));
+  } catch (err) {
+    console.error("Error fetching reviews:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/products/:id/reviews", writeLimiter, async (req, res) => {
+  const id = parseInt(req.params.id as string, 10);
+  const { author, body } = req.body;
+  if (isNaN(id) || typeof author !== "string" || !author || typeof body !== "string" || !body) {
+    return res.status(400).json({ error: "Invalid request" });
+  }
+  if (!scylla) {
+    return res.status(503).json({ error: "Reviews are not configured" });
+  }
+  try {
+    await scylla.execute(
+      "INSERT INTO product_reviews (product_id, created_at, author, body) VALUES (?, now(), ?, ?)",
+      [id, author, body],
+      { prepare: true }
+    );
+    res.status(201).json({ created: true });
+  } catch (err) {
+    console.error("Error creating review:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
