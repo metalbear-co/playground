@@ -29,8 +29,7 @@ function ProductTile({
 
   if (variant === "featured") {
     return (
-      <Link
-        href={href}
+      <div
         className={`group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#6a4ff5]/15 hover:border-[#6a4ff5]/30 animate-card-reveal ${elevatedClass}`}
         style={{ animationDelay: `${delay}s` }}
       >
@@ -56,11 +55,14 @@ function ProductTile({
             {product.name}
           </h2>
           <p className="mt-1 text-lg font-semibold text-white/90">{price}</p>
-          <span className="mt-3 inline-block text-sm font-medium text-white/90 underline-offset-2 group-hover:underline">
-            Shop now →
-          </span>
+          <Link
+            href={href}
+            className="mt-3 inline-flex rounded-lg bg-yellow-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-sm transition-colors hover:bg-yellow-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            Limited
+          </Link>
         </div>
-      </Link>
+      </div>
     );
   }
 
@@ -148,9 +150,16 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  const previewBanner = (
+    <div className="bg-yellow-300 px-4 py-2 text-center text-sm font-semibold text-slate-900">
+      This is a preview environment
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        {previewBanner}
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +171,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        {previewBanner}
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +188,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      {previewBanner}
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
