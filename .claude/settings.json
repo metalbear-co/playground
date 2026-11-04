@@ -9,7 +9,16 @@
       "Bash(mkdir -p /tmp/mirrord-run*)",
       "Bash(curl -sS * https://playground.metalbear.dev/*)",
       "Bash(until grep *)",
-      "Bash(ls *)"
+      "Bash(ls *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git fetch origin *)",
+      "Bash(git checkout -B claude/*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push -u origin claude/*)"
     ]
   }
 }
