@@ -123,7 +123,7 @@ class OrderError extends Error {
 /** Create order via direct path: inventory → payment → DB → Kafka. */
 async function createOrderDirect(
   input: OrderInput
-): Promise<{ orderId: number; status: string }> {
+): Promise<{ orderId: number; status: string; time: string }> {
   const { items, total_cents: totalCents, customer_email, baggage } = input;
 
   for (const item of items) {
@@ -253,7 +253,8 @@ async function createOrderDirect(
 
   await startOrderFulfillment({ orderId, baggage });
 
-  return { orderId, status: "confirmed" };
+  // SOL-189: the order response also carries the time the order was placed.
+  return { orderId, status: "confirmed", time: new Date().toISOString() };
 }
 
 app.post("/orders", async (req, res) => {
