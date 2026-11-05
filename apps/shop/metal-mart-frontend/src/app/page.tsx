@@ -10,6 +10,14 @@ import { getPrimaryImageUrl, type Product } from "@/lib/product";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+function PreviewBanner() {
+  return (
+    <div className="bg-yellow-300 px-4 py-3 text-center font-semibold text-slate-900">
+      This is a preview environment
+    </div>
+  );
+}
+
 function ProductTile({
   product,
   variant,
@@ -151,6 +159,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <PreviewBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +171,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <PreviewBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +188,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <PreviewBanner />
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
@@ -203,11 +214,17 @@ export default function Home() {
                     <div
                       className={
                         hasMultipleProducts
-                          ? "md:col-span-2 md:row-span-2 md:min-h-[360px]"
-                          : ""
+                          ? "relative md:col-span-2 md:row-span-2 md:min-h-[360px]"
+                          : "relative"
                       }
                     >
                       <ProductTile product={featured} variant="featured" delay={0} elevated />
+                      <Link
+                        href={`/products/${featured.id}`}
+                        className="absolute right-4 top-4 z-40 rounded-lg bg-yellow-300 px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-yellow-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                      >
+                        Limited
+                      </Link>
                     </div>
                   )}
                   {/* Side tiles - products 2 and 3 stacked on the right (or single tile spans 2 rows) */}
