@@ -1,17 +1,17 @@
-Apply the shop-drop demo when the developer types `/ld-demo` or says "demo nyc". Two product edits, then open a PR. Adna starts mirrord. You do not.
+Apply the KubeCon shop-drop demo when the developer types `/kubecon-demo` or says "demo kubecon". Two product edits, then open a PR. Adna starts mirrord. You do not.
 
 ## Ticket
 
-Two product changes for the demo shop drop. Only these files.
+Two product changes for the KubeCon demo shop drop. Only these files.
 
 1. `apps/shop/metal-mart-frontend/src/components/Header.tsx`  
-   Add a full-width sale banner **above** the nav (first thing in the sticky header): `DEMO NYC — hoodie on sale today`  
-   Generic high-visibility banner: background `#ff326e`, text `#0A0A46`. Large type (`text-lg` / `text-xl`), extra-bold, tall bar (`min-h-[6.5rem]`, `py-6` / `py-8`). Do not change the rest of the header.
+   Add a full-width sale banner **above** the nav (first thing in the sticky header): `KUBECON — hoodie on sale today`  
+   KubeCon high-visibility banner: background `#326CE5` (Kubernetes blue), text `#FFFFFF`. Large type (`text-lg` / `text-xl`), extra-bold, tall bar (`min-h-[6.5rem]`, `py-6` / `py-8`). Do not change the rest of the header.
 
 2. `apps/shop/order-service/src/index.ts`  
    In `createOrderDirect`, change only the return to:
 
-   `return { orderId, status: "confirmed ldx test" };`
+   `return { orderId, status: "confirmed kubecon test" };`
 
    Do not change the SQL `INSERT` status, schema, or any other file.
 
