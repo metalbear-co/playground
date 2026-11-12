@@ -1,0 +1,14 @@
+{
+  "target": {
+    "path": "serverless/onboarding-test",
+    "namespace": "demo-env"
+  },
+  "feature": {
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": { "header_filter": "^baggage: .*mirrord-session=onboarding-test.*$" }
+      }
+    }
+  }
+}
