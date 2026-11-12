@@ -1,0 +1,241 @@
+
+* New local mirrord daemon started
+* Daemon PID:
+ -> 682
+
+* Web UI:
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
+* API token:
+ -> x-auth-token: <redacted>
+
+* mirrord session monitor ready!
+ -> daemon log file: /tmp/mirrord/ui-3.286.0/stderr-1794511004
+
+inventory-service: requesting DB branching
+chat-service: requesting DB branching
+metal-mart-frontend: requesting DB branching
+inventory-service: no MirrordSplitConfig defines `dbBranches` for `deployment/inventory-service` in namespace `shop`, running against the source DB
+chat-service: no MirrordSplitConfig defines `dbBranches` for `deployment/chat-service` in namespace `shop`, running against the source DB
+metal-mart-frontend: no MirrordSplitConfig defines `dbBranches` for `deployment/metal-mart-frontend` in namespace `shop`, running against the source DB
+inventory-service: mirrord exec (cli version 3.286.0)
+inventory-service: Detected `mirrord exec` running with a CI token.
+inventory-service: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+inventory-service: mirrord ci start (cli version 3.286.0)
+chat-service: mirrord exec (cli version 3.286.0)
+chat-service: Detected `mirrord exec` running with a CI token.
+chat-service: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+chat-service: mirrord ci start (cli version 3.286.0)
+metal-mart-frontend: mirrord exec (cli version 3.286.0)
+metal-mart-frontend: Detected `mirrord exec` running with a CI token.
+metal-mart-frontend: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+metal-mart-frontend: mirrord ci start (cli version 3.286.0)
+chat-service: version check
+metal-mart-frontend: version check
+inventory-service: version check
+inventory-service: preparing to launch process
+inventory-service: checking if target binary is dynamically linked
+inventory-service: target binary is dynamically linked
+inventory-service: extracting layer
+inventory-service: layer extracted
+inventory-service: checking operator
+metal-mart-frontend: preparing to launch process
+metal-mart-frontend: checking if target binary is dynamically linked
+metal-mart-frontend: target binary is dynamically linked
+metal-mart-frontend: extracting layer
+metal-mart-frontend: layer extracted
+metal-mart-frontend: checking operator
+chat-service: preparing to launch process
+chat-service: checking if target binary is dynamically linked
+chat-service: target binary is dynamically linked
+chat-service: extracting layer
+chat-service: layer extracted
+chat-service: checking operator
+chat-service: checking license
+chat-service: Operator license is valid for 53 more days.
+chat-service: operator license valid
+chat-service: preparing user credentials
+chat-service: user credentials prepared
+chat-service: starting session
+inventory-service: checking license
+inventory-service: Operator license is valid for 53 more days.
+inventory-service: operator license valid
+inventory-service: preparing user credentials
+metal-mart-frontend: checking license
+metal-mart-frontend: Operator license is valid for 53 more days.
+metal-mart-frontend: operator license valid
+metal-mart-frontend: preparing user credentials
+inventory-service: user credentials prepared
+inventory-service: starting session
+metal-mart-frontend: user credentials prepared
+metal-mart-frontend: starting session
+chat-service: connecting to the target
+metal-mart-frontend: connecting to the target
+inventory-service: connecting to the target
+metal-mart-frontend: connected to the target
+metal-mart-frontend: session started
+metal-mart-frontend: using operator
+inventory-service: connected to the target
+inventory-service: session started
+inventory-service: using operator
+inventory-service: session ID: 9E109E309360DB99
+inventory-service: ready to launch process
+inventory-service: config summary
+inventory-service: Running command: npm --prefix apps/shop/inventory-service run dev
+inventory-service: mirrord will target: deployment/inventory-service, no configuration file was loaded
+inventory-service: mirrord will run with the mirrord Operator
+inventory-service: env: all remote environment variables will be fetched
+inventory-service: fs: file operations will default to read from the remote
+inventory-service: incoming: incoming traffic will be stolen
+inventory-service: outgoing: forwarding is enabled on TCP and UDP
+inventory-service: dns: DNS will be resolved remotely
+inventory-service: internal proxy: logs will be written to /tmp/mirrord-intproxy-1794511004-XyY7BEf.log
+inventory-service: Session key: sol-191-20261112-191644
+inventory-service: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+inventory-service: config summary
+inventory-service: running process
+inventory-service: Ready!
+metal-mart-frontend: session ID: DF2FE9969B01BB5A
+inventory-service: 
+inventory-service: > inventory-service@1.0.0 dev
+inventory-service: > tsx watch src/index.ts
+inventory-service: 
+metal-mart-frontend: ready to launch process
+metal-mart-frontend: config summary
+metal-mart-frontend: Running command: npm --prefix apps/shop/metal-mart-frontend run dev -- -p 3000
+metal-mart-frontend: mirrord will target: deployment/metal-mart-frontend, no configuration file was loaded
+metal-mart-frontend: mirrord will run with the mirrord Operator
+metal-mart-frontend: env: all remote environment variables will be fetched
+metal-mart-frontend: fs: file operations will default to read from the remote
+metal-mart-frontend: incoming: incoming traffic will be stolen
+metal-mart-frontend: outgoing: forwarding is enabled on TCP and UDP
+metal-mart-frontend: dns: DNS will be resolved remotely
+metal-mart-frontend: internal proxy: logs will be written to /tmp/mirrord-intproxy-1794511004-XyY7BEf.log
+metal-mart-frontend: Session key: sol-191-20261112-191644
+metal-mart-frontend: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+metal-mart-frontend: config summary
+metal-mart-frontend: running process
+metal-mart-frontend: Ready!
+metal-mart-frontend: 
+metal-mart-frontend: > metal-mart-frontend@0.1.0 dev
+metal-mart-frontend: > next dev -p 3000
+metal-mart-frontend: 
+metal-mart-frontend:  ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+inventory-service: [Inventory] DATABASE_URL: postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/inventory
+inventory-service: Inventory service listening on port 80
+chat-service: waiting for a target pod to restart with the split queues and become ready: pod `chat-service-fdd55c74b-26gsw`: container `main` is waiting: ContainerCreating
+metal-mart-frontend: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+metal-mart-frontend:    ▲ Next.js 16.0.0 (Turbopack)
+metal-mart-frontend:    - Local:        http://localhost:3000
+metal-mart-frontend:    - Network:      http://192.0.2.2:3000
+metal-mart-frontend: 
+metal-mart-frontend:  ✓ Starting...
+chat-service: waiting for a target pod to restart with the split queues and become ready: pod `chat-service-fdd55c74b-26gsw`: container `main` is running but not ready
+metal-mart-frontend:  ✓ Ready in 3.3s
+chat-service: connected to the target
+chat-service: session started
+chat-service: using operator
+chat-service: session ID: D7AC946EA139E73B
+chat-service: ready to launch process
+chat-service: config summary
+chat-service: Running command: npm --prefix apps/shop/chat-service run dev
+chat-service: mirrord will target: deployment/chat-service, no configuration file was loaded
+chat-service: mirrord will run with the mirrord Operator
+chat-service: env: all remote environment variables will be fetched
+chat-service: fs: file operations will default to read from the remote
+chat-service: incoming: incoming traffic will be stolen
+chat-service: outgoing: forwarding is enabled on TCP and UDP
+chat-service: dns: DNS will be resolved remotely
+chat-service: internal proxy: logs will be written to /tmp/mirrord-intproxy-1794511004-XyY7BEf.log
+chat-service: Session key: sol-191-20261112-191644
+chat-service: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+chat-service: config summary
+chat-service: running process
+chat-service: Ready!
+chat-service: 
+chat-service: > chat-service@1.0.0 dev
+chat-service: > tsx watch src/index.ts
+chat-service: 
+chat-service: {"level":"WARN","timestamp":"2026-11-12T19:17:07.572Z","logger":"kafkajs","message":"KafkaJS v2.0.0 switched default partitioner. To retain the same partitioning behavior as in previous versions, create the producer with the option \"createPartitioner: Partitioners.LegacyPartitioner\". See the migration guide at https://kafka.js.org/docs/migration-guide-v2.0.0#producer-new-default-partitioner for details. Silence this warning by setting the environment variable \"KAFKAJS_NO_PARTITIONER_WARNING=1\""}
+chat-service: Chat service listening on port 8083
+chat-service: {"level":"ERROR","timestamp":"2026-11-12T19:17:08.165Z","logger":"kafkajs","message":"[Connection] Response CreateTopics(key: 19, version: 3)","broker":"kafka.infra.svc.cluster.local:9092","clientId":"chat-service","error":"Topic creation errors","correlationId":2,"size":112}
+chat-service: {"level":"INFO","timestamp":"2026-11-12T19:17:08.612Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"chat-service"}
+chat-service: {"level":"INFO","timestamp":"2026-11-12T19:17:14.904Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"chat-service","memberId":"chat-service-cebff181-ae0a-4af7-b02d-54ba61cfa3a9","leaderId":"chat-service-01f84875-b2a0-4546-984d-6146fbe2e506","isLeader":false,"memberAssignment":{"mirrord-tmp-vpbwyrvzvk-support-chat":[0]},"groupProtocol":"range","duration":6291}
+metal-mart-frontend:  ○ Compiling / ...
+metal-mart-frontend:  GET / 200 in 3.8s (compile: 3.8s, render: 10ms)
+metal-mart-frontend:  GET / 200 in 3.1s (compile: 3.0s, render: 59ms)
+metal-mart-frontend:  GET / 200 in 41ms (compile: 4ms, render: 37ms)
+metal-mart-frontend:  GET / 200 in 157ms (compile: 4ms, render: 154ms)
+metal-mart-frontend:  ⚠ Cross origin request detected from playground.metalbear.dev to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+metal-mart-frontend: Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-4281515f36a6e5e43348b88e28ec7e5a-98b05cc0ea3b5373-01",
+inventory-service:   "baggage": "mirrord-session=sol-191-20261112-191644",
+inventory-service:   "mirrord-key": "sol-191-20261112-191644"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products
+metal-mart-frontend:  GET /api/banner 200 in 846ms (compile: 334ms, render: 512ms)
+metal-mart-frontend:  GET /api/products 200 in 945ms (compile: 353ms, render: 592ms)
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-428ac718c4821ef40df6a117d8646822-6a83bedc813bf48b-01",
+inventory-service:   "baggage": "mirrord-session=sol-191-20261112-191644",
+inventory-service:   "mirrord-key": "sol-191-20261112-191644"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products
+metal-mart-frontend:  GET /api/products 200 in 263ms (compile: 4ms, render: 259ms)
+inventory-service: [Inventory] GET /products/1 headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-e97ca44ce9b2dc2fe8f5dbd06d0accd8-7c4720cb4bcd33c0-01",
+inventory-service:   "baggage": "mirrord-session=sol-191-20261112-191644",
+inventory-service:   "mirrord-key": "sol-191-20261112-191644"
+inventory-service: }
+metal-mart-frontend:  GET /api/products/1 200 in 941ms (compile: 769ms, render: 172ms)
+metal-mart-frontend: {"level":"WARN","timestamp":"2026-11-12T19:17:47.251Z","logger":"kafkajs","message":"KafkaJS v2.0.0 switched default partitioner. To retain the same partitioning behavior as in previous versions, create the producer with the option \"createPartitioner: Partitioners.LegacyPartitioner\". See the migration guide at https://kafka.js.org/docs/migration-guide-v2.0.0#producer-new-default-partitioner for details. Silence this warning by setting the environment variable \"KAFKAJS_NO_PARTITIONER_WARNING=1\""}
+metal-mart-frontend:  POST /api/chat/messages 202 in 1125ms (compile: 808ms, render: 317ms)
+chat-service: GET /conversations/sol-191-20261112-191644/messages
+metal-mart-frontend:  GET /api/chat/conversations/sol-191-20261112-191644/messages 200 in 932ms (compile: 718ms, render: 214ms)
+chat-service: {"level":"ERROR","timestamp":"2026-11-12T19:18:00.936Z","logger":"kafkajs","message":"[Connection] Response Heartbeat(key: 12, version: 3)","broker":"kafka.infra.svc.cluster.local:9092","clientId":"chat-service","error":"The group is rebalancing, so a rejoin is needed","correlationId":12,"size":10}
+chat-service: {"level":"WARN","timestamp":"2026-11-12T19:18:00.937Z","logger":"kafkajs","message":"[Runner] The group is rebalancing, re-joining","groupId":"chat-service","memberId":"chat-service-cebff181-ae0a-4af7-b02d-54ba61cfa3a9","error":"The group is rebalancing, so a rejoin is needed"}
+chat-service: {"level":"INFO","timestamp":"2026-11-12T19:18:01.288Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"chat-service","memberId":"chat-service-cebff181-ae0a-4af7-b02d-54ba61cfa3a9","leaderId":"chat-service-cebff181-ae0a-4af7-b02d-54ba61cfa3a9","isLeader":true,"memberAssignment":{"mirrord-tmp-vpbwyrvzvk-support-chat":[0]},"groupProtocol":"range","duration":351}
+chat-service: [mirrord-tmp-vpbwyrvzvk-support-chat] customer message in sol-191-20261112-191644 { partition: 0, offset: '0' }
+chat-service: [mirrord-tmp-vpbwyrvzvk-support-chat] bot message in sol-191-20261112-191644 { partition: 0, offset: '1' }
+metal-mart-frontend:  GET /api/cloud-agents/callback 200 in 143ms (compile: 139ms, render: 5ms)
+chat-service: GET /conversations/sol-191-20261112-191644/messages
+metal-mart-frontend:  GET /api/chat/conversations/sol-191-20261112-191644/messages 200 in 243ms (compile: 32ms, render: 212ms)
+chat-service: GET /conversations
+metal-mart-frontend:  GET /api/chat/conversations 200 in 237ms (compile: 123ms, render: 114ms)
+metal-mart-frontend:  GET / 200 in 76ms (compile: 5ms, render: 71ms)
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-909ae3a890d3976903744a06853caa2d-c66d007dd25b7ead-01",
+inventory-service:   "baggage": "mirrord-session=sol-191-20261112-191644",
+inventory-service:   "mirrord-key": "sol-191-20261112-191644"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products
+metal-mart-frontend:  GET /api/banner 200 in 159ms (compile: 2ms, render: 157ms)
+metal-mart-frontend:  GET /api/products 200 in 554ms (compile: 3ms, render: 551ms)
