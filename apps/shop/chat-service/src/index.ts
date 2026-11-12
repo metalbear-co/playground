@@ -23,7 +23,7 @@ const app = express();
 const port = parseInt(process.env.PORT || "80", 10);
 
 const topic = process.env.KAFKA_TOPIC || "support-chat";
-const BOT_REPLY = "Thanks for reaching out — a support agent will be with you shortly.";
+const BOT_REPLY = "Thanks for reaching out - While you wait check out our new eye masks!";
 const SENDERS: Sender[] = ["customer", "agent", "bot"];
 const HEARTBEAT_MS = 15000;
 
