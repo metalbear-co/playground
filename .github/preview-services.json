@@ -33,7 +33,7 @@
       "deployment": "inventory-service",
       "namespace": "shop",
       "build_args": "",
-      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}},\"db_branches\":[{\"id\":\"{{ key }}\",\"type\":\"pg\",\"ttl_secs\":300,\"version\":\"16.0\",\"connection\":{\"url\":\"DATABASE_URL\"},\"copy\":{\"mode\":\"all\"}}]}}"
+      "extra_config": "{\"feature\":{\"preview\":{\"creation_timeout_secs\":600,\"labels\":{\"exclude\":[\"app\"]}}}}"
     },
     {
       "name": "payment-service",
