@@ -1,0 +1,10 @@
+{
+  "name": "onboarding-test",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal HTTP service for trying mirrord against an ECS task in the AWS playground",
+  "scripts": {
+    "start": "node server.js",
+    "mirrord": "mirrord exec -f mirrord.json -- node server.js"
+  }
+}

@@ -1,0 +1,72 @@
+name: ask-otto-local
+
+networks:
+  vpc-private:
+    internal: true
+  vpc-public: {}
+
+volumes:
+  rds-data: {}
+
+services:
+  rds:
+    image: postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
+    environment:
+      POSTGRES_DB: otto
+      POSTGRES_USER: otto
+      POSTGRES_PASSWORD: ${OTTO_DB_PASSWORD:?run make local-secret first}
+    networks: [vpc-private]
+    volumes:
+      - rds-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U otto -d otto"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    security_opt: ["no-new-privileges:true"]
+
+  ask-otto:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      platforms: [linux/amd64]
+    image: ask-otto:local
+    platform: linux/amd64
+    environment:
+      DB_HOST: rds
+      DB_PORT: "5432"
+      DB_NAME: otto
+      DB_USER: otto
+      DB_PASSWORD: ${OTTO_DB_PASSWORD:?run make local-secret first}
+      APP_INSTANCE: ecs
+      SEED_ON_START: "true"
+    networks: [vpc-private, vpc-public]
+    depends_on:
+      rds:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 0.5
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  alb:
+    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+    networks: [vpc-public]
+    ports:
+      - "127.0.0.1:8000:80"
+    volumes:
+      - ./alb.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      ask-otto:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run]
+    security_opt: ["no-new-privileges:true"]
