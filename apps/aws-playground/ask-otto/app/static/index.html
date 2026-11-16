@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ask Otto</title>
+  <style>
+    :root {
+      --paper: #fbf8f2;
+      --ink: #1a2330;
+      --muted: #6b7380;
+      --line: #e4ddd2;
+      --teal: #2db3a0;
+      --teal-2: #239686;
+      --coral: #e85d4c;
+      --card: #ffffff;
+      --cloud: #f0ece4;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .shell { max-width: 720px; margin: 0 auto; padding: 28px 20px 0; min-height: 100vh; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .robot {
+      width: 40px; height: 40px; flex: none;
+    }
+    .brand-name { font-size: 15px; font-weight: 650; }
+    .brand-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .env {
+      font-size: 12px; color: var(--muted); border: 1px solid var(--line);
+      background: var(--card); border-radius: 999px; padding: 6px 12px; white-space: nowrap;
+    }
+    .env[data-where="laptop"] { border-color: #b7e3da; color: var(--teal-2); background: #eefaf7; }
+    h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 650; letter-spacing: -.03em; margin: 0 0 8px; }
+    .lede { color: var(--muted); font-size: 16px; line-height: 1.5; margin: 0 0 24px; max-width: 44ch; }
+
+    .thread { display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
+    .empty p { margin: 0 0 14px; color: var(--muted); }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      appearance: none; border: 1px solid var(--line); background: var(--card);
+      color: var(--ink); border-radius: 999px; padding: 10px 14px; font: inherit; font-size: 14px;
+      cursor: pointer; text-align: left;
+    }
+    .pill:hover, .pill:focus-visible { border-color: var(--teal); outline: none; }
+
+    .msg { display: flex; gap: 10px; animation: in .25s ease; }
+    .msg.user { justify-content: flex-end; }
+    .avatar { width: 32px; height: 32px; flex: none; margin-top: 2px; }
+    .bubble {
+      max-width: min(540px, 86%); background: var(--card); border: 1px solid var(--line);
+      border-radius: 18px; padding: 14px 16px; line-height: 1.55;
+    }
+    .msg.user .bubble { background: var(--coral); color: #fff; border-color: var(--coral); }
+    .bubble p { margin: 0; }
+    .cite { margin-top: 10px; font-size: 12px; color: var(--muted); }
+    .msg.error .bubble { border-color: #f0c4bd; background: #fff6f4; }
+
+    .composer-wrap {
+      position: sticky; bottom: 0; flex: none; margin: 12px -20px 0; padding: 16px 20px 24px;
+      background: linear-gradient(transparent, var(--paper) 36%);
+    }
+    form.composer {
+      display: flex; gap: 8px; align-items: flex-end;
+      background: var(--card); border: 1px solid var(--line); border-radius: 22px;
+      padding: 8px 8px 8px 16px;
+    }
+    label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    textarea {
+      flex: 1; resize: none; border: 0; background: transparent; font: inherit; font-size: 16px;
+      line-height: 1.4; padding: 10px 0; max-height: 140px; color: var(--ink); outline: none;
+    }
+    button.send {
+      appearance: none; border: 0; background: var(--teal); color: #fff;
+      width: 44px; height: 44px; border-radius: 16px; cursor: pointer; font-size: 18px;
+    }
+    button.send:hover { background: var(--teal-2); }
+    button.send:disabled { opacity: .45; cursor: default; }
+    .hint { text-align: center; font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+    @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .msg { animation: none; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand">
+        <svg class="robot" viewBox="0 0 40 40" aria-hidden="true">
+          <rect x="8" y="12" width="24" height="20" rx="8" fill="#2db3a0"/>
+          <circle cx="16" cy="21" r="2" fill="#1a2330"/>
+          <circle cx="24" cy="21" r="2" fill="#1a2330"/>
+          <path d="M16 26h8" stroke="#1a2330" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M20 12V7" stroke="#1a2330" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="20" cy="6" r="2" fill="#e85d4c"/>
+          <path d="M8 20H5M35 20h-3" stroke="#2db3a0" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="brand-name">Ask Otto</div>
+          <div class="brand-sub">AI support · outdoor gear</div>
+        </div>
+      </div>
+      <div class="env" id="env">Checking status…</div>
+    </header>
+
+    <h1>How can I help?</h1>
+    <p class="lede">Otto reads the shop’s product guides and writes a friendly reply. Returns, warranties, tents in Iceland — ask away.</p>
+
+    <div class="thread" id="thread" aria-live="polite">
+      <div class="empty" id="empty">
+        <p>A few things people ask Otto</p>
+        <div class="pills">
+          <button class="pill" type="button" data-q="How do I return a sleeping bag?">How do I return a sleeping bag?</button>
+          <button class="pill" type="button" data-q="Will this tent survive a storm in Iceland?">Will this tent survive a storm in Iceland?</button>
+          <button class="pill" type="button" data-q="My hiking boots leaked after a month">My hiking boots leaked after a month</button>
+          <button class="pill" type="button" data-q="How waterproof is the rain jacket?">How waterproof is the rain jacket?</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer-wrap">
+      <form class="composer" id="form">
+        <label for="q">Your question</label>
+        <textarea id="q" name="question" rows="1" required placeholder="Ask Otto…"></textarea>
+        <button class="send" type="submit" id="send" aria-label="Send">↑</button>
+      </form>
+      <div class="hint">Otto answers from the shop’s guides. It does not place orders.</div>
+    </div>
+  </div>
+
+<script>
+  const thread = document.getElementById("thread");
+  const empty = document.getElementById("empty");
+  const form = document.getElementById("form");
+  const input = document.getElementById("q");
+  const send = document.getElementById("send");
+  const env = document.getElementById("env");
+  const robot = `<svg class="avatar" viewBox="0 0 40 40" aria-hidden="true"><rect x="8" y="12" width="24" height="20" rx="8" fill="#2db3a0"/><circle cx="16" cy="21" r="2" fill="#1a2330"/><circle cx="24" cy="21" r="2" fill="#1a2330"/><path d="M16 26h8" stroke="#1a2330" stroke-width="1.6" stroke-linecap="round"/><path d="M20 12V7" stroke="#1a2330" stroke-width="1.8" stroke-linecap="round"/><circle cx="20" cy="6" r="2" fill="#e85d4c"/></svg>`;
+
+  function setEnv(where) {
+    env.dataset.where = where || "";
+    env.textContent = where === "laptop" ? "Your laptop" : where === "ecs" ? "Staging" : "Ask Otto";
+  }
+
+  async function ping() {
+    try {
+      const r = await fetch("/healthz");
+      const j = await r.json();
+      setEnv(j.served_by);
+    } catch {
+      env.textContent = "Can't reach Otto";
+    }
+  }
+
+  function addUser(text) {
+    empty?.remove();
+    const row = document.createElement("div");
+    row.className = "msg user";
+    row.innerHTML = `<div class="bubble"><p></p></div>`;
+    row.querySelector("p").textContent = text;
+    thread.appendChild(row);
+  }
+
+  function addOtto(data, isError) {
+    const row = document.createElement("div");
+    row.className = "msg" + (isError ? " error" : "");
+    const cite = data.guide_product ? `Looked up the ${data.guide_product} guide` : "";
+    row.innerHTML = `${robot}<div class="bubble"><p></p>${cite ? '<div class="cite"></div>' : ""}</div>`;
+    row.querySelector("p").textContent = data.answer || "Something went wrong.";
+    const c = row.querySelector(".cite");
+    if (c) c.textContent = cite;
+    thread.appendChild(row);
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  async function ask(question) {
+    addUser(question);
+    send.disabled = true;
+    try {
+      const r = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const j = await r.json();
+      if (j.served_by) setEnv(j.served_by);
+      if (!r.ok) addOtto({ answer: "I can't reach the product guides right now. That's on me — try again in a moment." }, true);
+      else addOtto(j, false);
+    } catch {
+      addOtto({ answer: "I can't reach the product guides right now." }, true);
+    } finally {
+      send.disabled = false;
+    }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q) return;
+    input.value = "";
+    input.style.height = "auto";
+    ask(q);
+  });
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 140) + "px";
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+  document.querySelectorAll(".pill").forEach((b) => b.addEventListener("click", () => ask(b.dataset.q)));
+  ping();
+</script>
+</body>
+</html>

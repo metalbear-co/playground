@@ -1,0 +1,24 @@
+{
+  "key": "ask-otto",
+  "target": {
+    "path": "serverless/ask-otto",
+    "namespace": "staging"
+  },
+  "operator": false,
+  "feature": {
+    "env": {
+      "exclude": "APP_INSTANCE;SEED_ON_START;AWS_*"
+    },
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "^baggage: .*mirrord-session={{ key }}.*$"
+        }
+      }
+    }
+  },
+  "experimental": {
+    "browser_extension_config": false
+  }
+}
