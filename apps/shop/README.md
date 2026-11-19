@@ -17,6 +17,10 @@ Ecommerce demo app showcasing mirrord features: **HTTP Filtering**, **Queue Spli
 2. **Queue Splitting** – Delivery service filters Kafka messages by `baggage` header with `mirrord-session=<key>` (see `delivery-service/mirrord.json`). Fulfillment-worker splits Temporal task queue `order-fulfillment` the same way (see `fulfillment-worker/mirrord.json`). Playground operator currently has `OPERATOR_TEMPORAL_SPLITTING=false`; enable `operator.temporalSplitting=true` on the `mirrord-operator` Helm release in namespace `default` before cluster splits work.
 3. **DB Branching** – Order and Inventory services use isolated PostgreSQL branches (requires `operator.pgBranching=true` in mirrord-operator Helm chart)
 
+## Cloud Agents demo
+
+`/shop/cloud-agents` is an internal demo dashboard: it starts a Claude Code cloud agent that implements a Linear issue, verifies it with mirrord against the playground cluster and opens a preview PR.
+
 ## Local Development
 
 ### Start everything (Postgres + Kafka + RabbitMQ + shop app)

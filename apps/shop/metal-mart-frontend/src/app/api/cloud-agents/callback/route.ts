@@ -1,19 +1,20 @@
 /**
- * Completion callback for the Cloud Agents dashboard.
+ * Ticket records for the Cloud Agents dashboard.
  *
- * A cloud agent calls POST at the end of its run with the links it produced; the
- * dashboard polls GET and shows them on the live row. Without a ticket, GET
- * returns the most recent result of any ticket: the agent chooses the issue it
- * works on, so the dashboard cannot know the ticket ahead of time. DELETE
- * clears one ticket, or every result when no ticket is given (used by
- * "Reset demo state").
+ * A cloud agent calls POST while it works and at the end of its run, with the
+ * Linear ticket, the run id from its fire payload, and the links it produced
+ * (or status "failed" and a message when it could not finish). The dashboard
+ * polls GET for the tickets in its rows. There is one record per ticket (see
+ * lib/cloud-agents-store), so every presenter who has the ticket in a row sees
+ * the same status.
  *
- *   POST {ticket, url?, pr_url?, status?, message?}
+ *   POST {ticket, run_id?, title?, url?, pr_url?, status?, message?}
  *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
- *   GET  ?ticket=SOL-175      -> {ticket, result: AgentResult | null}
- *   GET                       -> {ticket: <latest ticket> | null, result: AgentResult | null}
- *   DELETE ?ticket=SOL-175    -> {ticket, cleared: boolean}
- *   DELETE                    -> {ticket: null, cleared: <number removed>}
+ *        A report with a run_id that is not the ticket's current run is refused
+ *        with 409, so a run that a newer run replaced cannot overwrite it.
+ *   GET  ?ticket=SOL-175            -> {ticket, active, result: TicketRecord | null}
+ *   GET  ?tickets=SOL-175,SOL-176   -> {results: {"SOL-175": TicketRecord | null, ...}}
+ *   DELETE ?ticket=SOL-175 | (none: every record)
  *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
  *
  * Configuration (server-side env):
@@ -26,18 +27,22 @@
 
 import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
 import {
-  type AgentResult,
   type AgentStatus,
+  type TicketRecord,
+  cleanText,
   clearAll,
-  clearResult,
-  getLatest,
-  getResult,
+  clearTicket,
+  getRecord,
+  isActive,
+  normalizeRunId,
   normalizeTicket,
-  setResult,
+  setRecord,
 } from "@/lib/cloud-agents-store";
 
 const MAX_BODY = 4 * 1024;
+const MAX_TICKETS = 25;
 const STATUSES: AgentStatus[] = ["done", "failed", "running"];
+const NO_STORE = { "Cache-Control": "no-store" };
 
 function httpsUrl(raw: unknown): string | undefined {
   if (typeof raw !== "string" || !raw.trim()) return undefined;
@@ -49,28 +54,41 @@ function httpsUrl(raw: unknown): string | undefined {
   }
 }
 
+function bad(error: string, status = 400) {
+  return Response.json({ ok: false, error }, { status });
+}
+
 export async function GET(req: Request) {
-  const raw = new URL(req.url).searchParams.get("ticket");
-  const headers = { "Cache-Control": "no-store" };
-  if (raw === null || raw.trim() === "") {
-    const latest = getLatest();
-    return Response.json({ ticket: latest?.ticket ?? null, result: latest }, { headers });
+  const params = new URL(req.url).searchParams;
+  const rawTickets = params.get("tickets");
+  const rawTicket = params.get("ticket");
+
+  if (rawTickets !== null && rawTickets.trim() !== "") {
+    const list = rawTickets.split(",").map(normalizeTicket);
+    if (list.length > MAX_TICKETS || list.some((t) => !t)) return bad(`tickets must be up to ${MAX_TICKETS} ids like SOL-175`);
+    const results: Record<string, TicketRecord | null> = {};
+    for (const t of list as string[]) results[t] = getRecord(t);
+    return Response.json({ results }, { headers: NO_STORE });
   }
-  const ticket = normalizeTicket(raw);
-  if (!ticket) return Response.json({ error: "ticket must look like SOL-175" }, { status: 400 });
-  return Response.json({ ticket, result: getResult(ticket) }, { headers });
+  if (rawTicket !== null && rawTicket.trim() !== "") {
+    const ticket = normalizeTicket(rawTicket);
+    if (!ticket) return bad("ticket must look like SOL-175");
+    const result = getRecord(ticket);
+    return Response.json({ ticket, active: isActive(result), result }, { headers: NO_STORE });
+  }
+  return bad("ticket or tickets is required");
 }
 
 export async function DELETE(req: Request) {
   const denied = denyUnlessAuthorized(req);
   if (denied) return denied;
-  const raw = new URL(req.url).searchParams.get("ticket");
-  if (raw === null || raw.trim() === "") {
-    return Response.json({ ticket: null, cleared: clearAll() });
+  const rawTicket = new URL(req.url).searchParams.get("ticket");
+  if (rawTicket !== null && rawTicket.trim() !== "") {
+    const ticket = normalizeTicket(rawTicket);
+    if (!ticket) return bad("ticket must look like SOL-175");
+    return Response.json({ ticket, cleared: clearTicket(ticket) });
   }
-  const ticket = normalizeTicket(raw);
-  if (!ticket) return Response.json({ error: "ticket must look like SOL-175" }, { status: 400 });
-  return Response.json({ ticket, cleared: clearResult(ticket) });
+  return Response.json({ ticket: null, cleared: clearAll() });
 }
 
 export async function POST(req: Request) {
@@ -78,26 +96,47 @@ export async function POST(req: Request) {
   if (denied) return denied;
 
   const text = await req.text();
-  if (text.length > MAX_BODY) return Response.json({ ok: false, error: "body too large" }, { status: 413 });
+  if (text.length > MAX_BODY) return bad("body too large", 413);
   let body: Record<string, unknown>;
   try {
     body = JSON.parse(text || "{}");
   } catch {
-    return Response.json({ ok: false, error: "body must be JSON" }, { status: 400 });
+    return bad("body must be JSON");
   }
 
   const ticket = normalizeTicket(body.ticket);
-  if (!ticket) return Response.json({ ok: false, error: "ticket must look like SOL-175" }, { status: 400 });
+  if (!ticket) return bad("ticket is required and must look like SOL-175");
+  const run_id = normalizeRunId(body.run_id) ?? undefined;
+  if (body.run_id && !run_id) return bad("run_id must be the id from the fire payload");
 
   const url = httpsUrl(body.url);
   const pr_url = httpsUrl(body.pr_url);
-  if (body.url && !url) return Response.json({ ok: false, error: "url must be https" }, { status: 400 });
-  if (body.pr_url && !pr_url) return Response.json({ ok: false, error: "pr_url must be https" }, { status: 400 });
+  if (body.url && !url) return bad("url must be https");
+  if (body.pr_url && !pr_url) return bad("pr_url must be https");
 
   const status: AgentStatus = STATUSES.includes(body.status as AgentStatus) ? (body.status as AgentStatus) : "done";
-  const message = typeof body.message === "string" ? body.message.slice(0, 300) : undefined;
+  const existing = getRecord(ticket);
+  if (run_id && existing?.run_id && existing.run_id !== run_id) {
+    return bad(`${ticket} now belongs to another run; this report was not stored`, 409);
+  }
 
-  const result: AgentResult = { ticket, status, url, pr_url, message, received_at: new Date().toISOString() };
-  setResult(result);
-  return Response.json({ ok: true, result });
+  // Updates of the same run merge into its record; a report without a known
+  // run (a scheduled run, or a record lost on pod restart) starts a new one.
+  const sameRun = Boolean(existing && (!run_id || existing.run_id === run_id));
+  const base: Partial<TicketRecord> = sameRun && existing ? existing : { title: existing?.title };
+  const now = new Date().toISOString();
+  const record: TicketRecord = {
+    ...base,
+    ticket,
+    status,
+    run_id: run_id ?? base.run_id,
+    title: cleanText(body.title, 160) ?? base.title,
+    url: url ?? base.url,
+    pr_url: pr_url ?? base.pr_url,
+    message: cleanText(body.message, 300),
+    started_at: base.started_at ?? now,
+    received_at: now,
+  };
+  setRecord(record);
+  return Response.json({ ok: true, result: record });
 }

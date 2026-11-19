@@ -34,6 +34,21 @@ spec:
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "support-chat"
+            # Optional shared routine for the Cloud Agents dashboard, used when a
+            # presenter has not entered their own routine in the page's Agent
+            # settings.
+            - name: CLOUD_AGENT_TRIGGER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENT_TRIGGER_ID
+                  optional: true
+            - name: CLOUD_AGENT_ROUTINE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENT_ROUTINE_TOKEN
+                  optional: true
             - name: CLAUDE_CODE_OAUTH_TOKEN
               valueFrom:
                 secretKeyRef:
