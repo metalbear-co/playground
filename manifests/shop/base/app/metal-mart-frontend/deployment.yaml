@@ -61,6 +61,20 @@ spec:
                   name: cloud-agents
                   key: CLOUD_AGENTS_CALLBACK_TOKEN
                   optional: true
+            # Optional: lets the Cloud Agents dashboard copy a template Linear
+            # issue into a new demo ticket ("New demo ticket" button).
+            - name: LINEAR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: LINEAR_API_KEY
+                  optional: true
+            - name: CLOUD_AGENTS_TEMPLATE_ISSUE
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENTS_TEMPLATE_ISSUE
+                  optional: true
           ports:
             - containerPort: 3000
               protocol: TCP

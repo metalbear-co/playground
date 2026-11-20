@@ -130,6 +130,7 @@
   <form class="addbar" id="add-form" autocomplete="off">
     <input id="add-ticket" type="text" spellcheck="false" placeholder="Linear issue URL or ID, e.g. SOL-175" aria-label="Linear issue URL or ID" />
     <button class="btn" type="submit">Add task</button>
+    <button class="btn" type="button" id="new-ticket" hidden title="Creates a new Linear issue as a copy of the demo template issue and adds it to your tasks">New demo ticket</button>
     <span class="msg" id="add-msg" aria-live="polite"></span>
   </form>
 
@@ -586,6 +587,33 @@
     say('');
     renderAll(); flash(p.ticket); poll();
   });
+
+  // New demo ticket: the server copies the template Linear issue (status
+  // Backlog, label claude-agent-demo) and returns the new ticket, which becomes
+  // a task row. The button shows only when the server has a Linear API key and
+  // a template issue configured.
+  var LINEAR_API = 'api/cloud-agents/linear-issue';
+  var newBtn = document.getElementById('new-ticket');
+  newBtn.addEventListener('click', function () {
+    newBtn.disabled = true; newBtn.innerHTML = SPIN + ' Creating…'; say('');
+    authFetch(LINEAR_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ created_by: load(DEV_KEY) || undefined }) })
+      .then(readJson)
+      .then(function (r) {
+        if (!r.ok || !r.data.ticket) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
+        var p = parseTicket(r.data.ticket);
+        if (!p) throw new Error('unexpected ticket id ' + r.data.ticket);
+        if (!findItem(p.ticket)) { var list = myTickets(); list.unshift({ ticket: p.ticket, title: r.data.title || '' }); saveTickets(list); }
+        renderAll(); flash(p.ticket); poll();
+        addMsg.className = 'msg'; addMsg.textContent = 'Created ' + p.ticket + (r.data.template ? ' (copy of ' + r.data.template + ')' : '') + ' · ';
+        if (r.data.url) addMsg.appendChild(link(r.data.url, 'open in Linear'));
+      })
+      .catch(function (err) { say('New demo ticket failed: ' + (err.message || String(err)), true); })
+      .then(function () { newBtn.disabled = false; newBtn.textContent = 'New demo ticket'; });
+  });
+  fetch(LINEAR_API, { method: 'GET' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) { if (d && d.configured) { newBtn.hidden = false; if (d.template) newBtn.title = 'Creates a new Linear issue as a copy of ' + d.template + ' and adds it to your tasks'; } })
+    .catch(function () {});
 
   // Double-click a task title to set your own title. It is kept in this browser
   // and wins over the title the agent reports from Linear.
