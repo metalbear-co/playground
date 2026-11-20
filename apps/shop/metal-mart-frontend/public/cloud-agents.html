@@ -130,7 +130,6 @@
   <form class="addbar" id="add-form" autocomplete="off">
     <input id="add-ticket" type="text" spellcheck="false" placeholder="Linear issue URL or ID, e.g. SOL-175" aria-label="Linear issue URL or ID" />
     <button class="btn" type="submit">Add task</button>
-    <button class="btn" type="button" id="new-ticket" hidden title="Creates a new Linear issue as a copy of the demo template issue and adds it to your tasks">New demo ticket</button>
     <span class="msg" id="add-msg" aria-live="polite"></span>
   </form>
 
@@ -243,6 +242,8 @@
   <div class="foot">
     <span>Routine: <span id="kv-trigger" style="font-family: var(--mono)">not set</span> · playground cluster · namespace shop</span>
     <span>
+      <span id="new-ticket-wrap" hidden><button class="link" id="new-ticket" type="button" title="Creates a new Linear issue as a copy of the demo template issue and adds it to your tasks">New demo ticket</button>
+      &nbsp;·&nbsp;</span>
       <button class="link" id="open-settings" type="button" title="Your Claude Code routine: the Run agent button fires it">Agent settings</button>
       &nbsp;·&nbsp;
       <button class="link" id="reset" type="button" title="Clears the finished results of your tasks and the sample rows. Your task list and running agents stay.">Reset demo state</button>
@@ -591,7 +592,8 @@
   // New demo ticket: the server copies the template Linear issue (status
   // Backlog, label claude-agent-demo) and returns the new ticket, which becomes
   // a task row. The button shows only when the server has a Linear API key and
-  // a template issue configured.
+  // a template issue configured. It sits in the footer, away from the task
+  // controls, because it creates a real Linear issue.
   var LINEAR_API = 'api/cloud-agents/linear-issue';
   var newBtn = document.getElementById('new-ticket');
   newBtn.addEventListener('click', function () {
@@ -612,7 +614,7 @@
   });
   fetch(LINEAR_API, { method: 'GET' })
     .then(function (r) { return r.json(); })
-    .then(function (d) { if (d && d.configured) { newBtn.hidden = false; if (d.template) newBtn.title = 'Creates a new Linear issue as a copy of ' + d.template + ' and adds it to your tasks'; } })
+    .then(function (d) { if (d && d.configured) { document.getElementById('new-ticket-wrap').hidden = false; if (d.template) newBtn.title = 'Creates a new Linear issue as a copy of ' + d.template + ' and adds it to your tasks'; } })
     .catch(function () {});
 
   // Double-click a task title to set your own title. It is kept in this browser
