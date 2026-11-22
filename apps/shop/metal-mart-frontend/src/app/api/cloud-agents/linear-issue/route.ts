@@ -9,7 +9,7 @@
  * page shows the button only when it works.
  *
  *   GET                         -> {configured, template}
- *   POST {created_by?}          -> {ok, ticket, title, url, template}
+ *   POST                        -> {ok, ticket, title, url, template}
  *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
  *
  * The Linear API key never leaves the server. POST requires the dashboard
@@ -23,7 +23,7 @@
  */
 
 import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
-import { cleanText, normalizeTicket } from "@/lib/cloud-agents-store";
+import { normalizeTicket } from "@/lib/cloud-agents-store";
 
 const LINEAR_API_URL = process.env.LINEAR_API_URL ?? "https://api.linear.app/graphql";
 const DEMO_LABEL = "claude-agent-demo";
@@ -93,13 +93,6 @@ export async function POST(req: Request) {
     );
   }
 
-  let createdBy: string | undefined;
-  try {
-    createdBy = cleanText(((await req.json()) as { created_by?: unknown }).created_by, 40);
-  } catch {
-    createdBy = undefined;
-  }
-
   try {
     const { issue: t } = await linear<{ issue: Template | null }>(c.key, TEMPLATE_QUERY, { id: c.template });
     if (!t) throw new Error(`template issue ${c.template} not found`);
@@ -118,14 +111,13 @@ export async function POST(req: Request) {
       labelIds.push(issueLabels.nodes[0].id);
     }
 
-    const footer = `\n\n---\nCopied from ${t.identifier} by the Cloud Agents dashboard${createdBy ? ` for ${createdBy}` : ""}.`;
     const input: Record<string, unknown> = {
       teamId: t.team.id,
       title: t.title,
-      description: (t.description ?? "") + footer,
       labelIds,
       stateId: backlog.id,
     };
+    if (t.description) input.description = t.description;
     if (t.priority) input.priority = t.priority;
     if (t.estimate !== null && t.estimate !== undefined) input.estimate = t.estimate;
     if (t.project) input.projectId = t.project.id;
