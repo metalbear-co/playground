@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Software factory · MetalMart R&D</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="https://res.cloudinary.com/dxas4fpir/image/upload/w_64,h_64,c_fit/MetalBear_logo_c2doft" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Poppins:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    color-scheme: light;
+    --purple: #756DF3; --purple-hover: #5f58d6; --purple-deep: #4a44b8; --purple-mid: #E4E3FD; --purple-soft: #F1F0FC; --purple-shadow: #9E99F7;
+    --yellow: #FFCB7D; --ink: #232141; --cream: #FFFDF9; --bg: #FAFAFD; --grey-500: #6e6e80; --grey-700: #333344; --line: #E4E3FD;
+    --ok: #1f7a52; --ok-bg: #dff5ea; --warn: #8a4b00; --warn-bg: #fff0d6; --bad: #b3261e; --bad-bg: #fde4e2;
+    --display: "Unbounded", system-ui, sans-serif; --body: "Poppins", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--grey-700); font: 400 14px/1.5 var(--body); -webkit-font-smoothing: antialiased; }
+  button, input { font-family: var(--body); }
+  a { color: var(--purple-deep); }
+  .wrap { padding: 0 20px 24px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1.5px solid var(--line); margin-bottom: 14px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #000; text-decoration: none; }
+  .brand img { width: 32px; height: 32px; object-fit: contain; }
+  .brand b { font: 700 14px/1 var(--display); }
+  .brand span { font: 500 12px/1 var(--body); color: var(--grey-500); margin-left: 8px; }
+  .right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .api { display: inline-flex; align-items: center; gap: 7px; font: 500 12px/1 var(--mono); padding: 7px 10px; border-radius: 100px; background: var(--purple-mid); }
+  .api i { width: 8px; height: 8px; border-radius: 50%; background: var(--grey-500); }
+  .api[data-state="ok"] i { background: var(--ok); } .api[data-state="off"] i { background: var(--bad); }
+  .ghost { font: 600 12px/1 var(--body); color: #000; text-decoration: none; padding: 8px 12px; border: 1.5px solid var(--purple-shadow); border-radius: 8px; background: none; cursor: pointer; }
+  .ghost:hover { background: var(--purple-mid); }
+
+  .titlebar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font: 700 20px/1.2 var(--display); color: #000; margin: 0 0 4px; }
+  .sub { margin: 0; color: var(--grey-500); font-size: 13px; max-width: 760px; }
+  .kpis { display: flex; gap: 8px; flex-wrap: wrap; }
+  .kpi { font-size: 12.5px; padding: 6px 12px; border-radius: 100px; background: #fff; border: 1.5px solid var(--line); white-space: nowrap; }
+  .kpi b { color: #000; }
+  .kpi.wait { background: var(--warn-bg); border-color: #f3d29a; color: var(--warn); }
+  .kpi.prod { background: var(--ok-bg); border-color: #b9e6cf; color: var(--ok); }
+
+  .layout { display: flex; gap: 14px; align-items: stretch; }
+  .bucket { width: 270px; flex: none; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); padding: 12px; display: flex; flex-direction: column; gap: 10px; align-self: flex-start; }
+  .bucket h2, .col h2 { font: 700 13px/1.2 var(--display); color: #000; margin: 0; }
+  .bucket .hint { font-size: 11.5px; color: var(--grey-500); margin: 0; }
+  .addbar { display: flex; gap: 6px; }
+  .addbar input { flex: 1; min-width: 0; font: 500 12px/1.3 var(--mono); padding: 8px 9px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; color: #000; }
+  .addbar input:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-mid); }
+  .msg { font-size: 12px; color: var(--grey-500); min-height: 0; }
+  .msg.err { color: var(--bad); }
+  .list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+  .empty { font-size: 12px; color: var(--grey-500); text-align: center; padding: 16px 8px; border: 1.5px dashed var(--line); border-radius: 10px; }
+
+  .board { flex: 1; min-width: 0; overflow-x: auto; }
+  .cols { display: grid; grid-template-columns: repeat(6, minmax(178px, 1fr)); gap: 10px; min-width: 1100px; }
+  .col { background: var(--purple-soft); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 500px; border: 2px solid transparent; transition: border-color 120ms, background 120ms; }
+  .col.st-production { background: #EEF7F1; }
+  .col .head { display: flex; flex-direction: column; gap: 3px; padding: 0 2px 4px; }
+  .col .row1 { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .col .num { width: 20px; height: 20px; border-radius: 6px; background: var(--ink); color: #fff; font: 700 11px/20px var(--body); text-align: center; display: inline-block; margin-right: 6px; }
+  .col .count { font: 700 12px/1 var(--body); color: var(--purple-deep); background: #fff; border-radius: 100px; padding: 3px 8px; }
+  .col .who { font-size: 11px; color: var(--grey-500); }
+  .col .mir { align-self: flex-start; font: 600 10px/1 var(--mono); color: #fff; background: var(--purple); border-radius: 5px; padding: 3px 6px; }
+  .col.drop-ok { border-color: var(--purple); border-style: dashed; background: #ebe9fd; }
+  .col .dropzone { display: none; font: 600 12.5px/1.3 var(--body); color: #fff; background: var(--purple-deep); border-radius: 8px; padding: 10px; text-align: center; }
+  .col.drop-ok .dropzone { display: block; }
+
+  .card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; width: 100%; text-align: left; background: #fff; color: var(--grey-700); border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 10px; cursor: pointer; box-shadow: 0 1px 2px rgba(35,33,65,.06); font: inherit; }
+  .card:hover { border-color: var(--purple-shadow); }
+  .card:focus-visible { outline: 3px solid var(--purple-mid); outline-offset: 1px; }
+  .card .top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .card .id { font: 500 11.5px/1 var(--mono); color: var(--purple-deep); }
+  .card .title { font-size: 13px; font-weight: 600; color: #000; line-height: 1.3; }
+  .card .svc { font: 400 11px/1.4 var(--mono); color: var(--grey-500); }
+  .card .state { font-size: 11.5px; font-weight: 600; line-height: 1.35; color: var(--grey-500); }
+  .card .key { display: block; font: 500 10px/1.35 var(--mono); color: var(--grey-700); background: var(--purple-soft); border-radius: 5px; padding: 3px 6px; overflow-wrap: anywhere; user-select: all; }
+  .card .key b { font-weight: 600; color: var(--purple-deep); }
+  .card .bar { height: 5px; border-radius: 100px; background: var(--line); overflow: hidden; }
+  .card .bar i { display: block; height: 100%; border-radius: 100px; background: var(--purple-shadow); transition: width 900ms linear; }
+  .card.live { border: 2px solid var(--purple); }
+  .card.live .bar i { background: var(--purple-deep); }
+  .card.warn { border: 1.5px solid #f0a540; } .card.warn .state { color: var(--warn); } .card.warn .bar i { background: #f0a540; }
+  .card.fail { border: 1.5px solid var(--bad); background: #fff8f7; } .card.fail .state { color: var(--bad); }
+  .card.ready { border: 2px solid var(--purple-deep); background: #FBFAFF; } .card.ready .state { color: var(--purple-deep); }
+  .card.done .state { color: var(--ok); }
+  .card .ids, .bcard .ids { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .card .id, .bcard .id { white-space: nowrap; }
+  .kind { display: inline-block; font: 600 11px/1 var(--mono); padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
+  .card .kind, .bcard .kind { font-size: 10px; padding: 3px 6px; }
+  .kind.feature { color: var(--purple-deep); background: var(--purple-mid); }
+  .kind.bug.s1 { color: var(--bad); background: var(--bad-bg); } .kind.bug.s2 { color: var(--warn); background: var(--warn-bg); }
+  .tag { font: 700 9.5px/1 var(--body); letter-spacing: 0.04em; border-radius: 5px; padding: 3px 6px; }
+  .tag.live { color: #fff; background: var(--purple-deep); }
+  .tag.sim { color: var(--grey-500); background: var(--purple-soft); }
+  body.hide-sim .tag.sim { display: none; }
+
+  .bcard { border: 1.5px solid var(--line); border-radius: 10px; background: #fff; padding: 9px 10px; display: flex; flex-direction: column; gap: 5px; cursor: grab; }
+  .bcard.live { border: 2px solid var(--purple); }
+  .bcard.dragging { opacity: .5; }
+  .bcard .acts { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .bcard .err { font: 500 11.5px/1.4 var(--mono); color: var(--bad); background: var(--bad-bg); border-radius: 6px; padding: 6px 8px; word-break: break-word; }
+  .send { white-space: nowrap; font: 600 11.5px/1 var(--body); padding: 7px 10px; border-radius: 7px; border: 1.5px solid var(--ink); background: var(--cream); color: #000; cursor: pointer; }
+  .send:hover { background: var(--purple-mid); }
+  .x { font: 600 15px/1 var(--body); color: var(--grey-500); background: none; border: 0; padding: 4px; cursor: pointer; }
+  .x:hover { color: var(--bad); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 12.5px/1 var(--body); padding: 10px 14px; border-radius: 8px; border: 1.5px solid var(--ink); cursor: pointer; background: var(--cream); color: #000; text-decoration: none; }
+  .btn:hover { background: var(--purple-mid); }
+  .btn.primary { background: var(--purple-deep); border-color: var(--purple-deep); color: #fff; }
+  .btn.primary:hover { background: var(--ink); }
+  .btn.warn { border-color: #f0a540; color: var(--warn); background: #fff; }
+  .btn:disabled, .btn.quiet { cursor: not-allowed; border-color: var(--line); color: var(--grey-500); background: var(--cream); }
+  .link { font: 600 12px/1 var(--body); color: var(--purple-deep); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* End-to-end tests: the same table as the Cloud Agents page. */
+  .e2e-title { font: 700 16px/1.2 var(--display); color: #000; margin: 28px 0 4px; }
+  .e2e-sub { margin: 0 0 14px; color: var(--grey-500); font-size: 13px; }
+  .e2e { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--cream); border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); overflow: hidden; }
+  .e2e th, .e2e td { padding: 11px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+  .e2e th { font: 600 11px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey-500); background: var(--purple-mid); }
+  .e2e tr:last-child td { border-bottom: 0; }
+  .e2e td.ticket { font: 500 12.5px/1 var(--mono); white-space: nowrap; }
+  .e2e td.title { font-weight: 500; color: #000; min-width: 220px; }
+  .e2e td.action { text-align: right; white-space: nowrap; }
+  .e2e td.note { color: var(--grey-500); font-size: 12.5px; }
+  .e2e td.flow { font: 400 12px/1.6 var(--mono); color: var(--grey-700); white-space: nowrap; }
+  .e2e td.flow i { font-style: normal; color: var(--purple-shadow); padding-right: 5px; }
+  .e2e td.dur, .e2e td.when { font: 500 12px/1 var(--mono); color: var(--grey-500); white-space: nowrap; }
+  .totals { display: inline-flex; gap: 8px; margin-left: 10px; vertical-align: middle; }
+  .totals b { font: 600 11px/1 var(--body); padding: 4px 8px; border-radius: 100px; }
+  .totals .p { color: var(--ok); background: var(--ok-bg); }
+  .status { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--body); padding: 6px 9px; border-radius: 100px; border: 1.5px solid transparent; white-space: nowrap; }
+  .status svg { width: 12px; height: 12px; }
+  .status.done { color: var(--ok); background: var(--ok-bg); }
+  .status.running { color: var(--purple-deep); background: #fff; border-color: var(--purple-shadow); }
+  .status.queued { color: var(--grey-700); background: #fff; border-color: var(--line); }
+  .status.failed { color: var(--bad); background: var(--bad-bg); }
+  .spin { animation: spin 1s linear infinite; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 820px) { .e2e .hide-sm { display: none; } }
+  .foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; font-size: 12px; color: var(--grey-500); flex-wrap: wrap; align-items: center; }
+  .foot .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .foot label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .foot select { font: 500 12px/1 var(--body); padding: 4px 6px; border-radius: 6px; border: 1.5px solid var(--line); background: #fff; }
+
+  .scrim { position: fixed; inset: 0; background: rgba(35,33,65,.35); z-index: 20; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100vw); background: var(--cream); border-left: 1.5px solid var(--ink); z-index: 21; display: flex; flex-direction: column; box-shadow: -8px 0 30px rgba(35,33,65,.18); }
+  .drawer[hidden], .scrim[hidden] { display: none; }
+  .dhead { padding: 16px 20px 12px; border-bottom: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+  .dhead .r1 { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .dhead h3 { font: 700 17px/1.25 var(--display); color: #000; margin: 4px 0 2px; }
+  .dhead .meta { font-size: 12px; color: var(--grey-500); }
+  .close { width: 40px; height: 40px; flex: none; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; font: 600 18px/1 var(--body); }
+  .tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 7px 4px; border-radius: 9px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; font: 600 11.5px/1.2 var(--body); color: var(--grey-500); }
+  .tab .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; background: var(--purple-soft); color: var(--grey-500); }
+  .tab.done { color: #000; } .tab.done .n { background: var(--ok); color: #fff; }
+  .tab.now { color: #000; background: var(--purple-soft); } .tab.now .n { background: var(--purple-deep); color: #fff; }
+  .tab.on { border-color: var(--ink); }
+  .dbody { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .dbody h4 { font: 700 14px/1.3 var(--display); color: #000; margin: 0; }
+  .pill { align-self: flex-start; display: inline-flex; gap: 7px; align-items: center; font: 600 12px/1 var(--body); padding: 6px 10px; border-radius: 100px; background: var(--purple-mid); color: var(--purple-deep); }
+  .pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--purple); }
+  .box { border: 1.5px solid var(--line); border-radius: 10px; background: #fff; padding: 10px 12px; font-size: 13px; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tbl th { text-align: left; font: 600 11px/1 var(--body); color: var(--grey-500); padding: 6px; text-transform: uppercase; letter-spacing: .05em; }
+  .tbl td { padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  .tbl td.m { font: 400 12px/1.4 var(--mono); }
+  .code { background: #16152a; color: #e2e1f3; border-radius: 10px; padding: 12px 14px; font: 400 12px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; }
+  .code .h { color: #a9a4f7; } .code .a { color: #8be0ad; } .code .d { color: #ff9a9a; }
+  .check { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--ok-bg); color: var(--ok); font-size: 13px; font-weight: 600; }
+  .finding { display: flex; gap: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  .finding b { min-width: 48px; }
+  .finding.Pass { background: var(--ok-bg); } .finding.Pass b { color: var(--ok); }
+  .finding.Fixed { background: var(--warn-bg); } .finding.Fixed b { color: var(--warn); }
+  .finding.Note { background: var(--purple-soft); } .finding.Note b { color: var(--purple-deep); }
+  .alert { padding: 10px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+  .alert.warn { background: var(--warn-bg); color: var(--warn); }
+  .alert.bad { background: var(--bad-bg); color: var(--bad); }
+  .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .timeline li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; font-size: 13px; }
+  .timeline time { font: 500 12px/1.5 var(--mono); color: var(--grey-500); }
+  .waiting { padding: 28px 16px; text-align: center; border: 1.5px dashed var(--line); border-radius: 10px; color: var(--grey-500); }
+  .preview { border: 1.5px solid var(--line); border-radius: 10px; background: var(--purple-soft); height: 160px; display: flex; align-items: center; justify-content: center; color: var(--grey-500); font-size: 13px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+
+  dialog { border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); background: var(--cream); color: var(--grey-700); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(35, 33, 65, 0.35); }
+  dialog h3 { font: 700 15px/1.2 var(--display); color: #000; margin: 0 0 14px; }
+  dialog label { display: block; font: 600 11px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey-500); margin: 12px 0 6px; }
+  dialog input { width: 100%; font: 500 14px/1.3 var(--mono); padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; color: #000; }
+  dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  dialog .hint { margin: 4px 0 0; font-size: 12px; color: var(--grey-500); }
+
+  @media (max-width: 860px) {
+    .layout { flex-direction: column; }
+    .bucket { width: 100%; }
+    .brand span { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="./" title="Storefront">
+      <img src="https://res.cloudinary.com/dxas4fpir/image/upload/w_96,h_96,c_fit/MetalBear_logo_c2doft" alt="MetalBear" width="32" height="32" />
+      <b>MetalMart</b><span>R&amp;D · software factory</span>
+    </a>
+    <div class="right">
+      <span class="api" id="api-pill" data-state="unknown"><i></i><span id="api-pill-text">api: checking</span></span>
+      <a class="ghost" href="./cloud-agents">Cloud Agents</a>
+      <a class="ghost" href="./">Storefront</a>
+    </div>
+  </header>
+
+  <div class="titlebar">
+    <div>
+      <h1 id="greeting">Good morning, your software factory</h1>
+      <p class="sub">Linear tickets go in, verified pull requests come out. Drag a task onto Plan: a Claude Code cloud agent plans it, writes the code, verifies it with mirrord against the playground cluster, reviews it, and opens a PR with a preview environment. You approve the PR.</p>
+    </div>
+    <div class="kpis" aria-live="polite">
+      <span class="kpi">In the factory <b id="k-in">0</b></span>
+      <span class="kpi">mirrord sessions on 1 cluster <b id="k-sessions">0</b></span>
+      <span class="kpi wait">Waiting for you <b id="k-wait">0</b></span>
+      <span class="kpi prod">In production <b id="k-prod">0</b></span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="bucket" aria-label="Your tasks">
+      <div style="display:flex;justify-content:space-between;align-items:center"><h2>Your tasks</h2><span id="bucket-count" style="font:700 12px/1 var(--body);color:var(--purple-deep);background:var(--purple-mid);border-radius:100px;padding:3px 8px">0</span></div>
+      <p class="hint">Linear tickets for the factory. Drag a task onto Plan, or click Run agent.</p>
+      <form class="addbar" id="add-form" autocomplete="off">
+        <input id="add-ticket" type="text" spellcheck="false" placeholder="Linear issue URL or ID, e.g. SOL-175" aria-label="Linear issue URL or ID" />
+        <button class="send" type="submit">Add task</button>
+      </form>
+      <div class="msg" id="add-msg" aria-live="polite"></div>
+      <div class="list" id="bucket"></div>
+    </aside>
+
+    <section class="board" aria-label="Factory stations">
+      <div class="cols" id="cols"></div>
+    </section>
+  </div>
+
+  <h2 class="e2e-title">End-to-end tests</h2>
+  <p class="e2e-sub">Shop scenarios run against the live playground cluster. No cluster is built: the services on the order path run on the CI runner under <code>mirrord up</code>, and the scenario drives the real storefront through a full order cycle with a per-run session key.
+    <span class="totals"><b class="p">5 passed</b></span></p>
+
+  <table class="e2e">
+    <thead>
+      <tr><th>Scenario</th><th>Title</th><th class="hide-sm">Flow</th><th>Status</th><th>Duration</th><th class="hide-sm">Last run</th><th class="hide-sm">Notes</th><th></th></tr>
+    </thead>
+    <tbody id="e2e-rows">
+      <tr id="e2e-live">
+        <td class="ticket">E2E-01</td>
+        <td class="title">Guest checkout, single product</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>payment-service<br /><i>↳</i>receipt-service<br /><i>↳</i>delivery-service</td>
+        <td><span class="status queued" id="e2e-status"><span>Checking…</span></span></td>
+        <td class="dur" id="e2e-dur">—</td>
+        <td class="when hide-sm" id="e2e-when">—</td>
+        <td class="note hide-sm" id="e2e-note">order → paid → receipt → delivery · order, payment, delivery under mirrord up</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/workflows/shop-e2e-mirrord.yml" title="Opens the workflow on GitHub. Run workflow there; the chaos input applies a rule from .mirrord/chaos to the order-service session">Run on GitHub</button> <button class="btn quiet" id="e2e-view" type="button" hidden>View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-03</td>
+        <td class="title">Multi-item cart, stock decremented per line</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>order-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">39s</td>
+        <td class="when hide-sm">14 min ago</td>
+        <td class="note hide-sm">3 lines · stock matches</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-04</td>
+        <td class="title">Out-of-stock product rejected at checkout</td>
+        <td class="flow hide-sm">order-service<br /><i>↳</i>inventory-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">12s</td>
+        <td class="when hide-sm">14 min ago</td>
+        <td class="note hide-sm">409 returned · cart kept</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-06</td>
+        <td class="title">Order tracking page follows delivery events</td>
+        <td class="flow hide-sm">metal-mart-frontend<br /><i>↳</i>delivery-service</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">55s</td>
+        <td class="when hide-sm">41 min ago</td>
+        <td class="note hide-sm">preparing → shipped → delivered</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+      <tr>
+        <td class="ticket">E2E-10</td>
+        <td class="title">Cart survives reload and NEW badge renders</td>
+        <td class="flow hide-sm">metal-mart-frontend</td>
+        <td><span class="status done"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg><span>Passed</span></span></td>
+        <td class="dur">9s</td>
+        <td class="when hide-sm">2h ago</td>
+        <td class="note hide-sm">localStorage · Playwright</td>
+        <td class="action"><button class="btn" type="button" data-href="https://github.com/metalbear-co/playground/actions/runs/35616740409">View run</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    <span>Routine: <span id="kv-trigger" style="font-family: var(--mono)">not set</span> · playground cluster · namespace shop</span>
+    <span class="controls">
+      <label><input type="checkbox" id="sim-tags" /> Show SIM tags</label>
+      <label>Simulation speed <select id="sim-speed"><option value="1">Normal</option><option value="4">Fast</option></select></label>
+      <span id="new-ticket-wrap" hidden><button class="link" id="new-ticket" type="button" title="Creates a new Linear issue as a copy of the demo template issue and adds it to your tasks">New demo ticket</button></span>
+      <button class="link" id="open-settings" type="button" title="Your Claude Code routine: dropping a task on Plan fires it">Agent settings</button>
+      <button class="link" id="reset" type="button" title="Puts the simulated tasks back to their start, and clears the finished results of your tasks. Your task list and running agents stay.">Reset demo state</button>
+    </span>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="d-title" hidden>
+  <div class="dhead">
+    <div class="r1">
+      <div>
+        <div style="display:flex;gap:8px;align-items:center"><span id="d-id" style="font:500 13px/1 var(--mono);color:var(--purple-deep)"></span><span id="d-tag"></span></div>
+        <h3 id="d-title"></h3>
+        <div class="meta" id="d-meta"></div>
+      </div>
+      <button class="close" id="d-close" type="button" aria-label="Close">×</button>
+    </div>
+    <nav class="tabs" id="d-tabs" aria-label="Stations"></nav>
+  </div>
+  <div class="dbody" id="d-body"></div>
+</aside>
+
+<dialog id="settings-dialog">
+  <form method="dialog" id="settings-form">
+    <h3>Agent settings</h3>
+    <label for="set-routine">Routine id</label>
+    <input id="set-routine" type="text" autocomplete="off" spellcheck="false" placeholder="trig_01..." pattern="trig_[A-Za-z0-9]{8,64}" />
+    <label for="set-routine-token">Routine API token</label>
+    <input id="set-routine-token" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-oat01-..." />
+    <p class="hint">Shared with the Cloud Agents page: one routine serves both boards, and their runs stay separate. Saved in this browser only and sent only to this shop's server.</p>
+    <div class="row">
+      <button class="btn" type="button" id="settings-cancel">Cancel</button>
+      <button class="btn primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  // The Software Factory board runs the same cloud agent as the Cloud Agents
+  // dashboard, on its own board: its own task list, and its own run records on
+  // the server (source "software-factory"). A run started here never shows on
+  // the Cloud Agents dashboard, and the same ticket can run on both boards in
+  // parallel. Only the settings are shared with that page: the dashboard token
+  // and the presenter's routine.
+  //   - dropping a real ticket on Plan does what Run agent does (POST run);
+  //   - the card's column is the stage the agent reports to the callback;
+  //   - the page polls the callback for this board's records.
+  // Next to the real tickets, the board runs simulated tickets (SOL-16x, BUG-097): a
+  // timer in this page moves them through fixed scripts, with no API calls, so
+  // the board looks busy while a real run takes its 10 to 20 minutes.
+  var SOURCE = 'software-factory';
+  var TICKETS_KEY = 'metal-mart-software-factory:tickets';
+  var ROUTINE_KEY = 'metal-mart-cloud-agents:routine'; // shared with the Cloud Agents page
+  var TOKEN_KEY = 'metal-mart-cloud-agents:token';     // shared with the Cloud Agents page
+  var DEV_KEY = 'metal-mart-cloud-agents:dev';         // shared with the Cloud Agents page
+  var MERGED_KEY = 'metal-mart-software-factory:merged';   // ticket -> run_id approved on this board
+  var HISTORY_KEY = 'metal-mart-software-factory:history'; // ticket -> {run_id, items: [{stage, msg, at}]}
+  var SIM_KEY = 'metal-mart-software-factory:sim';         // {tags, speed}
+  var API = 'api/cloud-agents/run';
+  var CALLBACK = 'api/cloud-agents/callback';
+  var POLL_MS = 5000;
+  var STALL_MS = 45 * 60 * 1000; // ACTIVE_MS on the server
+
+  var STAGES = [
+    { id: 'plan', name: 'Plan', who: 'Planner agent' },
+    { id: 'code', name: 'Code', who: 'Coder agent' },
+    { id: 'verify', name: 'Verify', who: 'Agent + real cluster', mir: 'mirrord up' },
+    { id: 'review', name: 'Review', who: 'Reviewer agent' },
+    { id: 'pr', name: 'Pull request', who: 'Preview env + you', mir: 'mirrord preview' },
+    { id: 'production', name: 'Production', who: 'Merged + deployed' }
+  ];
+  var STAGE_INDEX = {}; STAGES.forEach(function (s, i) { STAGE_INDEX[s.id] = i; });
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
+  function hhmm(d) { return new Date(d).toTimeString().slice(0, 5); }
+
+  // ---- Dashboard token and routine settings (same as the Cloud Agents page) ----
+  (function tokenFromLink() {
+    var fields = (location.hash || '').replace(/^#/, '').split('&').filter(Boolean);
+    var rest = [], token = null;
+    fields.forEach(function (f) { if (f.indexOf('token=') === 0) token = f.slice(6); else rest.push(f); });
+    if (token === null) return;
+    try { localStorage.setItem(TOKEN_KEY, decodeURIComponent(token).trim()); } catch (e) {}
+    try { history.replaceState(null, '', location.pathname + location.search + (rest.length ? '#' + rest.join('&') : '')); } catch (e) {}
+  })();
+  function dashToken(force) {
+    var t = null;
+    try { t = force ? null : localStorage.getItem(TOKEN_KEY); } catch (e) {}
+    if (!t) {
+      t = window.prompt('Dashboard token. Paste it here, or open the dashboard link that carries it (#token=...). Ask the dashboard owner for either.');
+      if (t === null || !t.trim()) return null;
+      t = t.trim();
+      try { localStorage.setItem(TOKEN_KEY, t); } catch (e) {}
+    }
+    return t;
+  }
+  function authFetch(url, opts, retried) {
+    var t = dashToken(retried);
+    if (!t) return Promise.reject(new Error('a dashboard token is required'));
+    var o = Object.assign({}, opts || {});
+    o.headers = Object.assign({}, o.headers || {}, { Authorization: 'Bearer ' + t });
+    return fetch(url, o).then(function (res) {
+      if (res.status === 401 && !retried) { try { localStorage.removeItem(TOKEN_KEY); } catch (e) {} return authFetch(url, opts, true); }
+      return res;
+    });
+  }
+  function readJson(res) {
+    return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; });
+  }
+
+  var pill = document.getElementById('api-pill');
+  var pillText = document.getElementById('api-pill-text');
+  var serverRoutine = null;
+  var setDlg = document.getElementById('settings-dialog');
+  var inRoutine = document.getElementById('set-routine');
+  var inRoutineToken = document.getElementById('set-routine-token');
+  function myRoutine() { var r = load(ROUTINE_KEY); return r && r.id && r.token ? r : null; }
+  function showRoutine() {
+    var mine = myRoutine(), kv = document.getElementById('kv-trigger');
+    if (mine) { pill.dataset.state = 'ok'; pillText.textContent = 'api: your routine'; kv.textContent = mine.id; }
+    else if (serverRoutine) { pill.dataset.state = 'ok'; pillText.textContent = 'api: shared routine'; kv.textContent = serverRoutine + ' (shared)'; }
+    else { pill.dataset.state = 'off'; pillText.textContent = 'api: no routine'; kv.textContent = 'not set'; }
+  }
+  function openSettings() {
+    var r = load(ROUTINE_KEY) || {};
+    inRoutine.value = r.id || ''; inRoutineToken.value = r.token || '';
+    setDlg.showModal(); inRoutine.focus();
+  }
+  document.getElementById('open-settings').addEventListener('click', openSettings);
+  document.getElementById('settings-cancel').addEventListener('click', function () { setDlg.close(); });
+  document.getElementById('settings-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var id = inRoutine.value.trim(), tok = inRoutineToken.value.trim();
+    if (!id && !tok) save(ROUTINE_KEY, null);
+    else if (!id || !tok) { (id ? inRoutineToken : inRoutine).focus(); return; }
+    else save(ROUTINE_KEY, { id: id, token: tok });
+    showRoutine(); setDlg.close();
+  });
+
+  // ---- Real tickets: the Cloud Agents task list and the server records ----
+  var records = {}; // ticket -> record | null
+  var local = {};   // ticket -> {starting} | {error}
+  function myTickets() { var l = load(TICKETS_KEY); return Array.isArray(l) ? l.filter(function (x) { return x && x.ticket; }) : []; }
+  function saveTickets(l) { save(TICKETS_KEY, l.length ? l : null); }
+  function findItem(t) { return myTickets().filter(function (x) { return x.ticket === t; })[0] || null; }
+  function parseTicket(raw) {
+    var s = String(raw || '').trim();
+    var m = /linear\.app\/[^\/\s]+\/issue\/([A-Za-z]+-\d+)(?:\/([^\/?#\s]+))?/i.exec(s);
+    if (m) return { ticket: m[1].toUpperCase(), title: m[2] ? slugTitle(m[2]) : '' };
+    m = /^([A-Za-z]+-\d+)$/.exec(s);
+    return m ? { ticket: m[1].toUpperCase(), title: '' } : null;
+  }
+  function slugTitle(slug) {
+    var t = ''; try { t = decodeURIComponent(slug); } catch (e) { t = slug; }
+    t = t.replace(/-/g, ' ').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+  }
+  function stalled(rec) { return rec.status === 'running' && Date.now() - new Date(rec.started_at || rec.received_at).getTime() > STALL_MS; }
+  function merged() { return load(MERGED_KEY) || {}; }
+
+  // A record from a run that predates the stage field has no stage: the
+  // message and status give the nearest station.
+  function stageOf(rec) {
+    if (rec.stage && STAGE_INDEX[rec.stage] !== undefined) return rec.stage;
+    if (rec.status === 'done') return 'pr';
+    return /verif|mirrord/i.test(rec.message || '') ? 'verify' : 'plan';
+  }
+
+  // The card for a real ticket: its column, look and status line.
+  function realView(item) {
+    var t = item.ticket, rec = records[t] || null, mine = local[t] || {};
+    var title = (item.custom && item.title) || (rec && rec.title) || item.title || ('Linear issue ' + t);
+    var v = { kind: 'real', id: t, title: title, type: /^BUG-/.test(t) ? 'bug' : 'feature', services: 'branch claude/' + t.toLowerCase(), key: (rec && rec.key) || '', rec: rec };
+    if (mine.starting) return Object.assign(v, { col: 'plan', look: 'live', status: 'Starting the agent', progress: 10 });
+    if (!rec) return Object.assign(v, { col: null, error: mine.error });
+    var stage = stageOf(rec);
+    if (rec.status === 'done' && merged()[t] === (rec.run_id || '-')) return Object.assign(v, { col: 'production', look: 'done', status: 'Merged · deploying' });
+    // The agent reports "Check failed: … Fixing." when Verify sends it back to Code.
+    if (rec.status === 'running' && !stalled(rec)) return Object.assign(v, { col: stage, look: /^check failed/i.test(rec.message || '') ? 'warn' : 'live', status: 'In progress · ' + (rec.message || 'agent working'), progress: null });
+    if (rec.status === 'running') return Object.assign(v, { col: stage, look: 'fail', status: 'No result · no report from the agent since ' + hhmm(rec.received_at) });
+    if (rec.status === 'failed') return Object.assign(v, { col: stage, look: 'fail', status: 'Failed · ' + (rec.message || 'the agent reported a failure') });
+    return Object.assign(v, { col: 'pr', look: 'ready', status: 'Done · preview ready, waiting for you' });
+  }
+
+  // Each report the page sees is kept per run, so the detail panel can show
+  // what happened at every station. Kept in this browser only.
+  function recordHistory() {
+    var h = load(HISTORY_KEY) || {}, changed = false;
+    Object.keys(records).forEach(function (t) {
+      var r = records[t];
+      if (!r) return;
+      var runId = r.run_id || '-';
+      if (!h[t] || h[t].run_id !== runId) { h[t] = { run_id: runId, items: [] }; changed = true; }
+      var items = h[t].items, last = items[items.length - 1];
+      var stage = stageOf(r);
+      var msg = r.status === 'done' ? 'PR opened · preview environment live' : r.status === 'failed' ? 'Failed: ' + (r.message || 'no reason given') : (r.message || '');
+      if (msg && (!last || last.msg !== msg || last.stage !== stage)) { items.push({ stage: stage, msg: msg, at: r.received_at }); changed = true; }
+      if (items.length > 30) items.splice(0, items.length - 30);
+    });
+    if (changed) save(HISTORY_KEY, h);
+  }
+
+  function poll() {
+    var list = myTickets();
+    if (!list.length || document.hidden) return;
+    fetch(CALLBACK + '?source=' + SOURCE + '&tickets=' + list.map(function (x) { return x.ticket; }).join(','), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.results) return;
+        records = d.results;
+        var changed = false;
+        var next = myTickets().map(function (x) {
+          var r = records[x.ticket];
+          if (x.custom || !r || !r.title || r.title === x.title) return x;
+          changed = true; return { ticket: x.ticket, title: r.title };
+        });
+        if (changed) saveTickets(next);
+        recordHistory();
+        render();
+      })
+      .catch(function () {});
+  }
+
+  function runTicket(t) {
+    var mine = myRoutine();
+    if (!mine && !serverRoutine) { openSettings(); return; }
+    local[t] = { starting: true }; render();
+    var headers = { 'Content-Type': 'application/json' };
+    if (mine) { headers['X-Routine-Id'] = mine.id; headers['X-Routine-Token'] = mine.token; }
+    authFetch(API, { method: 'POST', headers: headers, body: JSON.stringify({ ticket: t, source: SOURCE, started_by: load(DEV_KEY) || undefined }) })
+      .then(readJson)
+      .then(function (r) {
+        if (!r.ok) {
+          var msg = (r.data && (r.data.error || (r.data.result && r.data.result.error && (r.data.result.error.message || r.data.result.error)))) || ('HTTP ' + r.status);
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        local[t] = {};
+        if (r.data.record) records[t] = r.data.record;
+        recordHistory(); render();
+      })
+      .catch(function (err) { local[t] = { error: err.message || String(err) }; render(); });
+  }
+
+  function resetTicket(t) {
+    authFetch(CALLBACK + '?source=' + SOURCE + '&ticket=' + encodeURIComponent(t), { method: 'DELETE' })
+      .then(function () {
+        records[t] = null; local[t] = {};
+        var m = merged(); delete m[t]; save(MERGED_KEY, Object.keys(m).length ? m : null);
+        var h = load(HISTORY_KEY) || {}; delete h[t]; save(HISTORY_KEY, Object.keys(h).length ? h : null);
+        closeDrawer(); render();
+      })
+      .catch(function (err) { local[t] = { error: err.message || String(err) }; render(); });
+  }
+
+  // Approve & merge opens the PR on GitHub, where the merge happens, and moves
+  // the card to Production on this board.
+  function approve(t) {
+    var rec = records[t];
+    if (!rec) return;
+    if (rec.pr_url) window.open(rec.pr_url, '_blank', 'noopener');
+    var m = merged(); m[t] = rec.run_id || '-'; save(MERGED_KEY, m);
+    drawerTab = 'production'; render();
+  }
+
+  // ---- Simulated tickets ----
+  // Each simulated ticket follows a script of beats: a station, a status line,
+  // a look, and a duration in seconds at normal speed. `offset` starts it part
+  // way through its script, so the board is busy when the page opens.
+  var SIMS = [
+    { id: 'SOL-161', title: 'NEW badge on new products', services: 'frontend', offset: 99999,
+      plan: [['metal-mart-frontend', 'NewBadge on products with is_new', 'GET / shows the badge']],
+      diff: ['@ metal-mart-frontend/src/components/NewBadge.tsx', '+ export function NewBadge() {', '+   return <span className="badge-new">NEW</span>;', '+ }'],
+      checks: ['GET / shows NEW on new products', 'GET / without the key shows no badge'],
+      findings: [['Pass', 'Only the frontend changed, as planned.']] },
+    { id: 'SOL-162', title: 'Cart item count in header', services: 'frontend', offset: 99999,
+      plan: [['metal-mart-frontend', 'Count badge on the Cart link', 'GET /cart?add=3 → header shows 1']],
+      diff: ['@ metal-mart-frontend/src/components/Header.tsx', '+ const count = useCartCount();', '+ <span className="cart-count">{count}</span>'],
+      checks: ['Header shows the cart count after an add'],
+      findings: [['Pass', 'Matches the plan.']] },
+    { id: 'SOL-164', title: 'Back-in-stock email opt-in', services: 'frontend · inventory', offset: 20,
+      plan: [['inventory-service', 'POST /products/:id/subscribe, new stock_alerts table', 'POST …/subscribe → 201'], ['metal-mart-frontend', 'Opt-in button on out-of-stock products', 'product page shows it']],
+      diff: ['@ inventory-service/src/index.ts', '+ app.post("/products/:id/subscribe", async (req, res) => {', '+   await pool.query("INSERT INTO stock_alerts (product_id, email) VALUES ($1, $2)", [id, email]);', '@ metal-mart-frontend/src/app/products/[id]/page.tsx', '+ <button className="btn-secondary">Email me when it is back</button>'],
+      checks: ['POST /api/products/3/subscribe → 201 on a DB branch', 'Out-of-stock product page shows the opt-in'],
+      findings: [['Pass', 'The new table exists only on the mirrord DB branch until merge.'], ['Note', 'The migration must run in production before the deploy.']] },
+    { id: 'SOL-165', title: 'Estimated delivery date in checkout', services: 'delivery · frontend', offset: 170,
+      plan: [['delivery-service', 'GET /estimate returns a date', 'GET /api/deliveries/estimate'], ['metal-mart-frontend', 'Show the date on /checkout', 'checkout shows the date']],
+      diff: ['@ delivery-service/src/index.ts', '+ app.get("/estimate", (_req, res) => res.json({ date: addBusinessDays(new Date(), 3) }));', '@ metal-mart-frontend/src/app/checkout/page.tsx', '+ <p>Arrives by {estimate.date}</p>'],
+      checks: ['GET /api/deliveries/estimate → 200 with a date', '/checkout shows "Arrives by"'],
+      findings: [['Pass', 'Both changes match the plan.']] },
+    { id: 'BUG-097', type: 'bug', title: 'Order confirmation is missing the tax line', services: 'order · receipt', offset: 250, fail: 'Check failed: the receipt has no tax line. Fixing receipt-service.',
+      plan: [['order-service', 'Add tax_cents to the order', 'POST /api/orders'], ['receipt-service', 'Print a Tax line', 'receipt for the order']],
+      diff: ['@ order-service/src/index.ts', '+ const tax_cents = Math.round(total_cents * TAX_RATE);', '+ const result = { ...order, tax_cents };', '@ receipt-service/src/index.ts', '+ lines.push(`Tax: ${formatCents(order.tax_cents)}`);'],
+      checks: ['POST /api/orders → 201 with tax_cents', 'The receipt shows a Tax line'],
+      findings: [['Pass', 'Verify passed on attempt 2. Both services changed as planned.'], ['Note', 'TAX_RATE is a constant. An environment variable is better later.']] },
+    { id: 'SOL-166', title: 'Wishlist heart on product tiles', services: 'frontend', offset: 470,
+      plan: [['metal-mart-frontend', 'Heart toggle on ProductTile, kept in localStorage', 'GET / shows the heart']],
+      diff: ['@ metal-mart-frontend/src/components/ProductTile.tsx', '+ <button aria-label="Add to wishlist" onClick={toggle}>', '+   <HeartIcon filled={saved} />', '+ </button>'],
+      checks: ['GET / shows the heart on every tile', 'The heart state survives a reload'],
+      findings: [['Fixed', 'Removed a build output file from the branch.'], ['Pass', 'Only ProductTile changed.']] },
+    { id: 'SOL-167', title: 'Free-shipping banner over $50', services: 'frontend · order', offset: 590,
+      plan: [['order-service', 'shipping_cents is 0 over $50', 'POST /api/orders'], ['metal-mart-frontend', 'Banner in the cart', 'GET /cart']],
+      diff: ['@ order-service/src/index.ts', '+ const shipping_cents = total_cents >= 5000 ? 0 : 499;', '@ metal-mart-frontend/src/app/cart/page.tsx', '+ <div className="free-shipping">Free shipping over $50</div>'],
+      checks: ['POST /api/orders over $50 → shipping_cents 0', '/cart shows the banner'],
+      findings: [['Pass', 'Both changes match the plan.']] },
+    // First task in Your tasks: the same bug as the Cloud Agents sample row BUG-101.
+    { id: 'BUG-101', type: 'bug', sev: 1, title: 'Uppercase inventory: product names should be capital case', services: 'inventory', bucket: true,
+      plan: [['inventory-service', 'Return product names in capital case from both products queries', 'GET /api/products']],
+      diff: ['@ inventory-service/src/index.ts', '+ const UPPER_NAME_SQL = "upper(name) AS name";', '- pool.query("SELECT id, name, description, price_cents, … FROM products ORDER BY id")', '+ pool.query(`SELECT id, ${UPPER_NAME_SQL}, description, price_cents, … FROM products ORDER BY id`)', '- "SELECT id, name, description, price_cents, … FROM products WHERE id = $1"', '+ `SELECT id, ${UPPER_NAME_SQL}, description, price_cents, … FROM products WHERE id = $1`'],
+      checks: ['GET /api/products with the session key → "TEAMWORKMAKESTHEDREAMWORKSTICKER"', 'GET /api/products/1 with the session key → name in capital case', 'GET /api/products without the key → names unchanged'],
+      findings: [['Pass', 'Both products queries changed: the list and the single product.'], ['Note', 'The database keeps the original names. Only the API response changes.']] },
+    { id: 'SOL-168', title: 'Sort products by price', services: 'frontend · inventory', bucket: true,
+      plan: [['inventory-service', 'GET /products?sort=price', 'GET /api/products?sort=price'], ['metal-mart-frontend', 'Sort control on /products', '/products sorts by price']],
+      diff: ['@ inventory-service/src/index.ts', '+ const order = req.query.sort === "price" ? "price_cents" : "id";', '@ metal-mart-frontend/src/app/products/page.tsx', '+ <select aria-label="Sort by">…</select>'],
+      checks: ['GET /api/products?sort=price returns ascending prices', '/products shows the sort control'],
+      findings: [['Pass', 'Both changes match the plan.']] },
+    // Backlog tasks: they wait in Your tasks until a presenter runs them.
+    { id: 'BUG-099', type: 'bug', sev: 1, title: 'Order tracking page stuck on "preparing"', services: 'delivery · frontend', bucket: true,
+      fail: 'Check failed: the status stayed "preparing" after the shipped event. Fixing delivery-service.',
+      plan: [['delivery-service', 'Update the delivery status on the shipped event', 'GET /api/deliveries/order/:id'], ['metal-mart-frontend', 'Poll the status on /orders/[id]', '/orders/[id] shows "shipped"']],
+      diff: ['@ delivery-service/src/index.ts', '- if (event.type === "shipped") return;', '+ if (event.type === "shipped") await setStatus(event.orderId, "shipped");', '@ metal-mart-frontend/src/app/orders/[id]/page.tsx', '+ useInterval(refresh, 5000);'],
+      checks: ['GET /api/deliveries/order/2690 → status "shipped"', '/orders/2690 shows "shipped" without a reload'],
+      findings: [['Pass', 'Verify passed on attempt 2. The fix is in delivery-service, as planned.'], ['Note', 'The page polls every 5 s. A push channel is better later.']] },
+    { id: 'SOL-169', title: 'Recently viewed products on the home page', services: 'frontend', bucket: true,
+      plan: [['metal-mart-frontend', 'Keep the last 4 viewed ids in localStorage, show a row on /', 'GET / shows the row']],
+      diff: ['@ metal-mart-frontend/src/components/RecentlyViewed.tsx', '+ export function RecentlyViewed() {', '+   const ids = useRecentlyViewed(4);', '@ metal-mart-frontend/src/app/page.tsx', '+ <RecentlyViewed />'],
+      checks: ['GET / shows "Recently viewed" after two product visits', 'GET / with no history shows no row'],
+      findings: [['Pass', 'Only the frontend changed, as planned.']] },
+    { id: 'SOL-172', title: 'Promo code field at checkout', services: 'order · frontend', bucket: true,
+      plan: [['order-service', 'Apply promo_code (METAL10 = 10% off) to the total', 'POST /api/orders with a code'], ['metal-mart-frontend', 'Promo code input on /checkout', '/checkout shows the discount']],
+      diff: ['@ order-service/src/index.ts', '+ const discount = promo_code === "METAL10" ? Math.round(total_cents * 0.1) : 0;', '+ const result = { ...order, discount_cents: discount };', '@ metal-mart-frontend/src/app/checkout/page.tsx', '+ <input name="promo_code" placeholder="Promo code" />'],
+      checks: ['POST /api/orders with METAL10 → discount_cents 50 on $4.99', 'POST /api/orders with a wrong code → discount_cents 0'],
+      findings: [['Pass', 'Both changes match the plan.'], ['Note', 'The promo code is a constant. A promo table is better later.']] },
+    { id: 'SOL-173', title: 'Low-stock warning in the cart', services: 'inventory · frontend', bucket: true,
+      plan: [['inventory-service', 'GET /products returns low_stock when stock < 5', 'GET /api/products'], ['metal-mart-frontend', '"Only N left" line in the cart', '/cart shows the warning']],
+      diff: ['@ inventory-service/src/index.ts', '+ rows.forEach((p) => { p.low_stock = p.stock < 5; });', '@ metal-mart-frontend/src/app/cart/page.tsx', '+ {item.low_stock && <p className="low-stock">Only {item.stock} left</p>}'],
+      checks: ['GET /api/products marks products with stock < 5', '/cart shows "Only 3 left" for a low-stock item'],
+      findings: [['Pass', 'Both changes match the plan.']] },
+    { id: 'BUG-100', type: 'bug', sev: 2, title: 'Back view image 404s on product pages', services: 'frontend', bucket: true,
+      plan: [['metal-mart-frontend', 'Use image_urls[1] for the back view, fall back to the front', 'GET /products/2 back toggle']],
+      diff: ['@ metal-mart-frontend/src/app/products/[id]/page.tsx', '- const back = product.image_url + "-back";', '+ const back = getImageUrls(product)[1] ?? getPrimaryImageUrl(product);'],
+      checks: ['/products/2 back toggle loads an image (no 404)', '/products/5 with one image shows the front for both'],
+      findings: [['Pass', 'Uses the existing image helpers from lib/product.ts.']] },
+    { id: 'SOL-174', title: 'Chat bot greets returning customers by name', services: 'chat', bucket: true,
+      plan: [['chat-service', 'Bot reply uses customerName when the conversation has one', 'chat message via Kafka']],
+      diff: ['@ chat-service/src/index.ts', '- const reply = BOT_REPLY;', '+ const reply = msg.customerName ? `Welcome back, ${msg.customerName}! ${BOT_REPLY}` : BOT_REPLY;'],
+      checks: ['Chat message with customerName "Dana" → bot reply starts "Welcome back, Dana!"', 'Chat message without a name → the usual reply'],
+      findings: [['Pass', 'The Kafka split kept the test messages away from the shared consumer.']] },
+    { id: 'SOL-176', title: 'Gift message on orders and receipts', services: 'order · receipt · frontend', bucket: true,
+      plan: [['order-service', 'Store gift_message (max 140 characters)', 'POST /api/orders'], ['receipt-service', 'Print the gift message', 'receipt for the order'], ['metal-mart-frontend', 'Gift message box at checkout', '/checkout shows the box']],
+      diff: ['@ order-service/src/index.ts', '+ const gift_message = String(req.body.gift_message ?? "").slice(0, 140);', '@ receipt-service/src/index.ts', '+ if (order.gift_message) lines.push(`Gift message: ${order.gift_message}`);', '@ metal-mart-frontend/src/app/checkout/page.tsx', '+ <textarea name="gift_message" maxLength={140} />'],
+      checks: ['POST /api/orders with a gift message → 201, message stored', 'The receipt shows the gift message', '/checkout shows the gift message box'],
+      findings: [['Pass', 'All three services changed as planned.'], ['Fixed', 'Removed a build output file from the branch.']] }
+  ];
+  function beatsFor(sim) {
+    var b = [
+      { col: 'plan', status: 'Reading the ticket and the cluster', d: 60 },
+      { col: 'code', status: 'Writing code on its own branch', d: 110 }
+    ];
+    if (sim.fail) {
+      b.push({ col: 'verify', status: 'mirrord up · sending real traffic', d: 80 });
+      b.push({ col: 'code', status: sim.fail, look: 'warn', d: 110 });
+      b.push({ col: 'verify', status: 'mirrord up · attempt 2', d: 110, retried: true });
+    } else {
+      b.push({ col: 'verify', status: 'mirrord up · sending real traffic', d: 140 });
+    }
+    b.push({ col: 'review', status: 'Reading the diff and the evidence', d: 60 });
+    b.push({ col: 'pr', status: 'Preview environment building', d: 90 });
+    b.push({ col: 'pr', status: 'E2E running on the preview', d: 90 });
+    b.push({ col: 'pr', status: 'Ready for you', look: 'ready', d: 240 });
+    b.push({ col: 'production', status: 'Live in production', look: 'done', d: Infinity });
+    return b;
+  }
+  var simPrefs = load(SIM_KEY) || {};
+  var simSpeed = simPrefs.speed === 4 ? 4 : 1;
+  var simClock = 0;    // simulated seconds since the page opened
+  var simStart = {};   // id -> simClock value when its script started (absent: in the bucket)
+  var simKeys = {};    // id -> mirrord session key, in the agent's format
+  // The agent's session key is `<ticket>-<YYYYMMDD-HHMMSS>` in lower case,
+  // e.g. sol-211-20261122-085206. A simulated task gets one in the same format,
+  // from the time its script started.
+  function makeKey(id, ms) {
+    var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return id.toLowerCase() + '-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function resetSim() {
+    simClock = 0; simStart = {}; simKeys = {};
+    var now = Date.now();
+    SIMS.forEach(function (s) {
+      if (s.bucket) return;
+      simStart[s.id] = -s.offset;
+      simKeys[s.id] = makeKey(s.id, now - Math.min(s.offset, 86400) * 1000);
+    });
+  }
+  resetSim();
+  function simView(sim) {
+    var v = { kind: 'sim', id: sim.id, title: sim.title, type: sim.type || 'feature', sev: sim.sev, services: sim.services, key: simKeys[sim.id] || '', sim: sim };
+    if (simStart[sim.id] === undefined) return Object.assign(v, { col: null });
+    var t = simClock - simStart[sim.id], beats = beatsFor(sim), reached = [];
+    for (var i = 0; i < beats.length; i++) {
+      var bt = beats[i];
+      if (t < bt.d) {
+        return Object.assign(v, { col: bt.col, look: bt.look || '', status: bt.status, progress: bt.d === Infinity || bt.look ? null : Math.round(100 * t / bt.d), retried: !!(sim.fail && (bt.retried || STAGE_INDEX[bt.col] > 2)), failing: bt.look === 'warn' });
+      }
+      t -= bt.d;
+    }
+    return Object.assign(v, { col: 'production', look: 'done', status: 'Live in production' });
+  }
+
+  // ---- Rendering ----
+  var colsEl = document.getElementById('cols');
+  var bucketEl = document.getElementById('bucket');
+  var dragging = null;
+  var lastCols = '', lastBucket = '';
+
+  function views() {
+    var real = myTickets().map(realView);
+    var sims = SIMS.map(simView);
+    return real.concat(sims);
+  }
+  // A card's key is kind + id, so a simulated task never clashes with a real
+  // ticket that has the same id.
+  function keyOf(v) { return v.kind + ':' + v.id; }
+  function tagHtml(v) { return v.kind === 'real' ? '<span class="tag live">LIVE</span>' : '<span class="tag sim">SIM</span>'; }
+  // The same type chips as the Cloud Agents task rows.
+  function kindHtml(v) {
+    if (v.type !== 'bug') return '<span class="kind feature">Feature</span>';
+    var sev = v.sev === 1 ? 1 : 2;
+    return '<span class="kind bug s' + sev + '">Bug · S' + sev + '</span>';
+  }
+  function cardHtml(v) {
+    var cls = 'card' + (v.kind === 'real' && (v.look === 'live' || !v.look) ? ' live' : '') + (v.look && v.look !== 'live' ? ' ' + v.look : '');
+    var bar = v.progress != null ? '<div class="bar"><i style="width:' + Math.max(6, Math.min(100, v.progress)) + '%"></i></div>'
+      : (v.kind === 'real' && v.look === 'live' ? '<div class="bar"><i style="width:60%"></i></div>' : '');
+    return '<button type="button" class="' + cls + '" data-open="' + esc(keyOf(v)) + '">' +
+      '<span class="top"><span class="ids"><span class="id">' + esc(v.id) + '</span>' + kindHtml(v) + '</span>' + tagHtml(v) + '</span>' +
+      '<span class="title">' + esc(v.title) + '</span>' + bar +
+      (v.key ? '<span class="key" title="mirrord session key: requests with baggage mirrord-session=' + esc(v.key) + ' reach this run\'s code"><b>key</b> ' + esc(v.key) + '</span>' : '') +
+      '<span class="state">' + esc(v.status) + '</span></button>';
+  }
+  function bucketHtml(v) {
+    return '<div class="bcard' + (v.kind === 'real' ? ' live' : '') + '" draggable="true" data-drag="' + esc(keyOf(v)) + '">' +
+      '<span class="top" style="display:flex;justify-content:space-between;align-items:center"><span class="ids"><span class="id" style="font:500 11.5px/1 var(--mono);color:var(--purple-deep)">' + esc(v.id) + '</span>' + kindHtml(v) + '</span>' + tagHtml(v) + '</span>' +
+      '<span style="font-size:13px;font-weight:600;color:#000;line-height:1.3">' + esc(v.title) + '</span>' +
+      (v.error ? '<div class="err">' + esc(v.error) + '</div>' : '') +
+      '<span class="acts"><span style="font:400 11px/1.4 var(--mono);color:var(--grey-500)">' + esc(v.services) + '</span>' +
+      '<span><button type="button" class="send" data-send="' + esc(keyOf(v)) + '" aria-label="Run agent on ' + esc(v.id) + '">' + (v.error ? 'Retry' : 'Run agent') + '</button>' +
+      (v.kind === 'real' ? '<button type="button" class="x" data-remove="' + esc(v.id) + '" aria-label="Remove ' + esc(v.id) + ' from your list" title="Remove from your list">×</button>' : '') +
+      '</span></span></div>';
+  }
+
+  function render() {
+    if (dragging) return; // rebuilding the bucket while a card is dragged would cancel the drag
+    var all = views();
+    var byCol = {}; STAGES.forEach(function (s) { byCol[s.id] = []; });
+    var bucket = [];
+    all.forEach(function (v) { if (v.col) byCol[v.col].push(v); else bucket.push(v); });
+    Object.keys(byCol).forEach(function (k) { byCol[k].sort(function (a, b) { return (b.kind === 'real') - (a.kind === 'real'); }); });
+
+    var colsHtml = STAGES.map(function (s, i) {
+      var cards = byCol[s.id];
+      return '<div class="col st-' + s.id + '" data-col="' + s.id + '">' +
+        '<div class="head"><div class="row1"><h2><span class="num">' + (i + 1) + '</span>' + esc(s.name) + '</h2><span class="count">' + cards.length + '</span></div>' +
+        '<span class="who">' + esc(s.who) + '</span>' + (s.mir ? '<span class="mir">' + esc(s.mir) + '</span>' : '') + '</div>' +
+        (s.id === 'plan' ? '<div class="dropzone">Drop here to start</div>' : '') +
+        cards.map(cardHtml).join('') + '</div>';
+    }).join('');
+    // Only touch the DOM when something changed, so focus and hover survive the
+    // one-second simulation tick.
+    if (colsHtml !== lastCols) { colsEl.innerHTML = colsHtml; lastCols = colsHtml; }
+    bucket.sort(function (a, b) { return (b.kind === 'real') - (a.kind === 'real'); });
+    var bucketHtmlAll = bucket.length ? bucket.map(bucketHtml).join('') : '<div class="empty">Every ticket is in the factory. Add a Linear ticket above.</div>';
+    if (bucketHtmlAll !== lastBucket) { bucketEl.innerHTML = bucketHtmlAll; lastBucket = bucketHtmlAll; }
+    document.getElementById('bucket-count').textContent = bucket.length;
+
+    document.getElementById('k-in').textContent = all.filter(function (v) { return v.col && v.col !== 'production'; }).length;
+    document.getElementById('k-sessions').textContent = all.filter(function (v) { return v.col === 'verify' || v.col === 'pr'; }).length;
+    document.getElementById('k-wait').textContent = all.filter(function (v) { return v.look === 'ready'; }).length;
+    document.getElementById('k-prod').textContent = all.filter(function (v) { return v.col === 'production'; }).length;
+    renderDrawer();
+  }
+
+  // Starts a task from the bucket. `key` is kind:id (see keyOf).
+  function send(key) {
+    var i = key.indexOf(':'), kind = key.slice(0, i), id = key.slice(i + 1);
+    if (kind === 'sim') { if (simStart[id] === undefined) { simStart[id] = simClock; simKeys[id] = makeKey(id, Date.now()); render(); } return; }
+    runTicket(id);
+  }
+
+  // ---- Drag and drop: only Plan accepts a drop ----
+  bucketEl.addEventListener('dragstart', function (e) {
+    var el = e.target.closest('[data-drag]');
+    if (!el) return;
+    dragging = el.dataset.drag;
+    el.classList.add('dragging');
+    try { e.dataTransfer.setData('text/plain', dragging); e.dataTransfer.effectAllowed = 'move'; } catch (err) {}
+    var plan = colsEl.querySelector('[data-col="plan"]'); if (plan) plan.classList.add('drop-ok');
+  });
+  function endDrag() {
+    dragging = null;
+    var plan = colsEl.querySelector('[data-col="plan"]'); if (plan) plan.classList.remove('drop-ok');
+    lastCols = ''; lastBucket = '';
+    render();
+  }
+  bucketEl.addEventListener('dragend', endDrag);
+  colsEl.addEventListener('dragover', function (e) { if (dragging && e.target.closest('[data-col="plan"]')) e.preventDefault(); });
+  colsEl.addEventListener('drop', function (e) {
+    if (!e.target.closest('[data-col="plan"]')) return;
+    e.preventDefault();
+    var id = dragging;
+    endDrag();
+    if (id) send(id);
+  });
+
+  bucketEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.send) send(b.dataset.send);
+    if (b.dataset.remove) { saveTickets(myTickets().filter(function (x) { return x.ticket !== b.dataset.remove; })); delete local[b.dataset.remove]; render(); }
+  });
+  colsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-open]');
+    if (b) openDrawer(b.dataset.open);
+  });
+
+  // ---- Detail panel ----
+  var drawer = document.getElementById('drawer');
+  var scrim = document.getElementById('scrim');
+  var drawerId = null, drawerTab = null, drawerHtml = '';
+  function openDrawer(id) { drawerId = id; drawerTab = null; drawerHtml = ''; drawer.hidden = false; scrim.hidden = false; renderDrawer(); document.getElementById('d-close').focus(); }
+  function closeDrawer() { drawerId = null; drawer.hidden = true; scrim.hidden = true; }
+  document.getElementById('d-close').addEventListener('click', closeDrawer);
+  scrim.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && drawerId) closeDrawer(); });
+
+  function codeHtml(lines) {
+    return '<div class="code">' + lines.map(function (l) {
+      if (l.charAt(0) === '@') return '<span class="h">' + esc(l.slice(2)) + '</span>';
+      return '<span class="' + (l.charAt(0) === '+' ? 'a' : l.charAt(0) === '-' ? 'd' : '') + '">' + esc(l) + '</span>';
+    }).join('\n') + '</div>';
+  }
+  var CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+  function simTab(v, tab) {
+    var s = v.sim, key = v.key;
+    if (tab === 'plan') return '<h4>Plan · the planner agent maps the ticket to the cluster</h4><table class="tbl"><thead><tr><th>Service</th><th>Change</th><th>Real-traffic check</th></tr></thead><tbody>' +
+      s.plan.map(function (p) { return '<tr><td><b>' + esc(p[0]) + '</b></td><td>' + esc(p[1]) + '</td><td class="m">' + esc(p[2]) + '</td></tr>'; }).join('') + '</tbody></table>';
+    if (tab === 'code') return '<h4>Code · the coder agent follows the plan</h4>' + (v.failing ? '<div class="alert warn">' + esc(s.fail) + '</div>' : '') + codeHtml(s.diff);
+    if (tab === 'verify') return '<h4>Verify · mirrord up runs the new code in the real cluster</h4><div class="box">Split mode. Only requests with key <code>' + esc(key) + '</code> reach the new code.</div>' +
+      (v.retried ? '<div class="alert warn">Attempt 1 failed: ' + esc(s.fail.replace(/^Check failed: /, '').replace(/ Fixing.*$/, '')) + ' The coder agent fixed it. Attempt 2 passed.</div>' : '') +
+      s.checks.map(function (c) { return '<div class="check">' + CHECK_SVG + esc(c) + '</div>'; }).join('');
+    if (tab === 'review') return '<h4>Review · the reviewer agent checks the diff and the evidence</h4>' +
+      s.findings.map(function (f) { return '<div class="finding ' + esc(f[0]) + '"><b>' + esc(f[0]) + '</b><span>' + esc(f[1]) + '</span></div>'; }).join('');
+    if (tab === 'pr') return '<h4>Pull request · preview environment</h4><div class="preview">[Simulated preview of ' + esc(s.id) + ']</div><div class="box">' + esc(s.checks.length) + ' real-traffic checks passed. ' + (v.look === 'ready' ? 'Waiting for a person to approve.' : v.col === 'production' ? 'Merged.' : 'The preview is getting ready.') + '</div>';
+    return '<h4>Production · merged and deployed</h4><div class="box">Merged to main. ArgoCD deployed the shop namespace. The Linear ticket moved to Done.</div>';
+  }
+
+  function realTab(v, tab) {
+    var rec = v.rec || {}, h = (load(HISTORY_KEY) || {})[v.id];
+    var items = h && h.run_id === (rec.run_id || '-') ? h.items : [];
+    var here = items.filter(function (x) { return x.stage === tab; });
+    var intro = {
+      plan: 'Plan · the agent reads the Linear ticket and decides what to change and how to check it.',
+      code: 'Code · the agent writes the change on its own branch and runs the static checks.',
+      verify: 'Verify · mirrord up runs the new code in the shared playground cluster. Only requests with this run\'s session key reach it.',
+      review: 'Review · the agent checks its diff against the ticket and the verify evidence before it opens the PR.',
+      pr: 'Pull request · the PR has the preview label, so a mirrord preview environment runs the change.',
+      production: 'Production · merged and deployed.'
+    }[tab];
+    var html = '<h4>' + esc(intro) + '</h4>';
+    if (tab === 'verify' && v.key) html += '<div class="box">Split mode. Only requests with <code>baggage: mirrord-session=' + esc(v.key) + '</code> reach this run\'s code.</div>';
+    if (here.length) html += '<ol class="timeline">' + here.map(function (x) { return '<li><time>' + esc(hhmm(x.at)) + '</time><span>' + esc(x.msg) + '</span></li>'; }).join('') + '</ol>';
+    else if (tab !== 'production') html += '<div class="box">No report for this station yet.</div>';
+    var links = [];
+    if (rec.session_url) links.push('<a href="' + esc(rec.session_url) + '" target="_blank" rel="noopener">Open run (Claude Code session)</a>');
+    if (tab === 'pr' || tab === 'production') {
+      if (rec.url) links.push('<a href="' + esc(rec.url) + '" target="_blank" rel="noopener">Open preview</a>');
+      if (rec.pr_url) links.push('<a href="' + esc(rec.pr_url) + '" target="_blank" rel="noopener">Open PR</a>');
+    }
+    if (links.length) html += '<div class="links">' + links.join('') + '</div>';
+    if (tab === 'pr' && v.look === 'ready') html += '<div class="actions"><button class="btn primary" type="button" data-approve="' + esc(v.id) + '">Approve &amp; merge</button>' +
+      (rec.pr_url ? '<a class="btn warn" href="' + esc(rec.pr_url) + '" target="_blank" rel="noopener">Request changes on GitHub</a>' : '') + '</div>';
+    if (tab === 'production' && v.col === 'production') html += '<div class="box">You approved this PR on the board. Merge it on GitHub if you have not yet: CI then builds the images and ArgoCD deploys them.</div>';
+    return html;
+  }
+
+  function renderDrawer() {
+    if (!drawerId) return;
+    var v = views().filter(function (x) { return keyOf(x) === drawerId; })[0];
+    if (!v || !v.col) { closeDrawer(); return; }
+    var at = STAGE_INDEX[v.col];
+    var tab = drawerTab || v.col;
+    var tabIdx = STAGE_INDEX[tab];
+    document.getElementById('d-id').textContent = v.id;
+    document.getElementById('d-tag').innerHTML = kindHtml(v) + ' ' + tagHtml(v);
+    document.getElementById('d-title').textContent = v.title;
+    document.getElementById('d-meta').textContent = (v.kind === 'sim' ? v.services + ' · branch claude/' + v.id + ' · simulated' : v.services + ' · real routine run') +
+      (v.key ? ' · mirrord session key ' + v.key : '');
+    document.getElementById('d-tabs').innerHTML = STAGES.map(function (s, i) {
+      var st = i < at || v.col === 'production' ? 'done' : i === at ? 'now' : '';
+      return '<button type="button" class="tab ' + st + (s.id === tab ? ' on' : '') + '" data-tab="' + s.id + '"><span class="n">' + (i + 1) + '</span>' + esc(s.name) + '</button>';
+    }).join('');
+    var body = '';
+    if (tab === v.col && v.col !== 'production') {
+      body += v.look === 'fail' ? '<div class="alert bad">' + esc(v.status) + '</div>' : '<span class="pill"><i></i>' + esc(v.look === 'ready' ? 'Waiting for you' : 'Running now · ' + v.status) + '</span>';
+    }
+    if (tabIdx > at) body += '<div class="waiting">This station has not started. The ticket is at ' + esc(STAGES[at].name) + '.</div>';
+    else body += v.kind === 'sim' ? simTab(v, tab) : realTab(v, tab);
+    if (v.kind === 'real' && v.rec && (v.look === 'fail' || v.look === 'ready' || v.col === 'production')) {
+      body += '<div class="actions" style="margin-top:auto">' + (v.look === 'fail' ? '<button class="btn" type="button" data-retry="' + esc(v.id) + '">Run again</button>' : '') +
+        '<button class="btn" type="button" data-reset="' + esc(v.id) + '">Reset ticket</button></div>';
+    }
+    if (body !== drawerHtml) { document.getElementById('d-body').innerHTML = body; drawerHtml = body; }
+  }
+  document.getElementById('d-tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tab]');
+    if (b) { drawerTab = b.dataset.tab; renderDrawer(); }
+  });
+  document.getElementById('d-body').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.approve) approve(b.dataset.approve);
+    if (b.dataset.retry) { closeDrawer(); runTicket(b.dataset.retry); }
+    if (b.dataset.reset) resetTicket(b.dataset.reset);
+  });
+
+  // ---- Add a real ticket to this board's task list ----
+  var addInput = document.getElementById('add-ticket');
+  var addMsg = document.getElementById('add-msg');
+  document.getElementById('add-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var p = parseTicket(addInput.value);
+    if (!p) { addMsg.textContent = 'Paste a Linear issue URL or an id like SOL-175.'; addMsg.className = 'msg err'; return; }
+    addInput.value = '';
+    if (findItem(p.ticket)) { addMsg.textContent = p.ticket + ' is already in your list.'; addMsg.className = 'msg'; return; }
+    var list = myTickets(); list.unshift({ ticket: p.ticket, title: p.title }); saveTickets(list);
+    addMsg.textContent = ''; render(); poll();
+  });
+
+  // ---- Simulation controls ----
+  var tagsBox = document.getElementById('sim-tags');
+  var speedSel = document.getElementById('sim-speed');
+  tagsBox.checked = simPrefs.tags !== false;
+  speedSel.value = String(simSpeed);
+  function applyPrefs() {
+    document.body.classList.toggle('hide-sim', !tagsBox.checked);
+    save(SIM_KEY, { tags: tagsBox.checked, speed: simSpeed });
+  }
+  tagsBox.addEventListener('change', applyPrefs);
+  speedSel.addEventListener('change', function () { simSpeed = speedSel.value === '4' ? 4 : 1; applyPrefs(); });
+  applyPrefs();
+
+  // Reset demo state: puts the simulated tasks back to their start and clears
+  // the finished (or stalled) results of this board's tasks on the server, then
+  // reloads. The task list stays, and a running agent keeps its record, so a
+  // reset never lets a second run start on a ticket that is in progress.
+  document.getElementById('reset').addEventListener('click', function () {
+    save(MERGED_KEY, null); save(HISTORY_KEY, null);
+    var done = myTickets().map(function (x) { return x.ticket; }).filter(function (t) { var r = records[t]; return r && (r.status !== 'running' || stalled(r)); });
+    if (!done.length) { location.reload(); return; }
+    Promise.all(done.map(function (t) { return authFetch(CALLBACK + '?source=' + SOURCE + '&ticket=' + encodeURIComponent(t), { method: 'DELETE' }).catch(function () {}); }))
+      .then(function () { location.reload(); });
+  });
+
+  // New demo ticket: the server copies the template Linear issue (status
+  // Backlog, label claude-agent-demo) and returns the new ticket, which becomes
+  // one of this board's tasks. Shown only when the server has a Linear API key
+  // and a template issue configured.
+  var LINEAR_API = 'api/cloud-agents/linear-issue';
+  var newBtn = document.getElementById('new-ticket');
+  newBtn.addEventListener('click', function () {
+    newBtn.disabled = true; newBtn.textContent = 'Creating…'; addMsg.textContent = ''; addMsg.className = 'msg';
+    authFetch(LINEAR_API, { method: 'POST' })
+      .then(readJson)
+      .then(function (r) {
+        if (!r.ok || !r.data.ticket) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
+        var p = parseTicket(r.data.ticket);
+        if (!p) throw new Error('unexpected ticket id ' + r.data.ticket);
+        if (!findItem(p.ticket)) { var list = myTickets(); list.unshift({ ticket: p.ticket, title: r.data.title || '' }); saveTickets(list); }
+        addMsg.textContent = 'Created ' + p.ticket + (r.data.template ? ' (copy of ' + r.data.template + ')' : '') + '.';
+        render(); poll();
+      })
+      .catch(function (err) { addMsg.textContent = 'New demo ticket failed: ' + (err.message || String(err)); addMsg.className = 'msg err'; })
+      .then(function () { newBtn.disabled = false; newBtn.textContent = 'New demo ticket'; });
+  });
+  fetch(LINEAR_API, { method: 'GET' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) { if (d && d.configured) document.getElementById('new-ticket-wrap').hidden = false; })
+    .catch(function () {});
+
+  // The heading greets by time of day and, when known, by name, like the Cloud
+  // Agents page (the name is the one that page keeps from `mm dashboard`).
+  (function () {
+    var dev = load(DEV_KEY), h = new Date().getHours();
+    var g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    document.getElementById('greeting').textContent = dev ? g + ', ' + dev + '. Your software factory' : g + ', your software factory';
+  })();
+
+  // ---- End-to-end tests (the same table as the Cloud Agents page) ----
+  // E2E-01 shows the latest run of the shop E2E workflow, read from the public
+  // GitHub API with no token. One read per page load; while a run is in
+  // progress the row refreshes every 30 s, inside the unauthenticated rate
+  // limit. "Run on GitHub" opens the workflow page, where "Run workflow" starts it.
+  var E2E_RUNS_API = 'https://api.github.com/repos/metalbear-co/playground/actions/workflows/shop-e2e-mirrord.yml/runs?per_page=1';
+  var E2E_POLL_MS = 30000;
+  var SPIN = '<svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg>';
+  var CROSS = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+  var CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>';
+  var e2eStatus = document.getElementById('e2e-status');
+  var e2eNote = document.getElementById('e2e-note');
+  var e2eDur = document.getElementById('e2e-dur');
+  var e2eWhen = document.getElementById('e2e-when');
+  var e2eView = document.getElementById('e2e-view');
+  var e2eTimer = null;
+  function ago(d) {
+    var s = Math.round((Date.now() - d) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) return Math.round(s / 3600) + 'h ago';
+    return Math.round(s / 86400) + 'd ago';
+  }
+  function dur(ms) { var s = Math.max(1, Math.round(ms / 1000)); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; }
+  function e2eShow(run) {
+    var running = run.status !== 'completed';
+    var ok = run.conclusion === 'success';
+    var label = running ? 'Running' : ok ? 'Passed' : run.conclusion === 'cancelled' ? 'Cancelled' : 'Failed';
+    e2eStatus.className = running ? 'status running' : ok ? 'status done' : 'status failed';
+    e2eStatus.innerHTML = (running ? SPIN : ok ? CHECK : CROSS) + '<span>' + label + '</span>';
+    var started = new Date(run.run_started_at || run.created_at);
+    var ended = running ? new Date() : new Date(run.updated_at);
+    e2eDur.textContent = dur(ended - started);
+    e2eWhen.textContent = running ? 'now' : ago(ended);
+    var chaos = /chaos (\S+)/.exec(run.display_title || '');
+    e2eNote.textContent = 'run #' + run.run_number + (chaos ? ' · chaos ' + chaos[1] : '') + ' · order, payment, delivery under mirrord up';
+    e2eView.hidden = false; e2eView.className = 'btn'; e2eView.dataset.href = run.html_url;
+    if (running && !e2eTimer) e2eTimer = setInterval(e2eLoad, E2E_POLL_MS);
+    if (!running && e2eTimer) { clearInterval(e2eTimer); e2eTimer = null; }
+  }
+  function e2eLoad() {
+    fetch(E2E_RUNS_API, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        var run = d && d.workflow_runs && d.workflow_runs[0];
+        if (run) { e2eShow(run); return; }
+        e2eStatus.className = 'status queued'; e2eStatus.innerHTML = '<span>No run yet</span>';
+      })
+      .catch(function () { e2eStatus.className = 'status queued'; e2eStatus.innerHTML = '<span>GitHub unreachable</span>'; });
+  }
+  document.getElementById('e2e-rows').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-href]');
+    if (b && b.dataset.href) window.open(b.dataset.href, '_blank', 'noopener');
+  });
+  e2eLoad();
+
+  setInterval(function () { if (!document.hidden) { simClock += simSpeed; render(); } }, 1000);
+
+  // Another tab with this board may change the task list.
+  window.addEventListener('storage', function (e) { if (e.key === TICKETS_KEY) { render(); poll(); } });
+
+  render();
+  poll();
+  setInterval(poll, POLL_MS);
+  document.addEventListener('visibilitychange', poll);
+  showRoutine();
+  fetch(API, { method: 'GET' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) { serverRoutine = d.configured ? d.trigger_id : null; showRoutine(); })
+    .catch(function () { if (!myRoutine()) { pill.dataset.state = 'off'; pillText.textContent = 'api: unreachable'; } });
+})();
+</script>
+</body>
+</html>

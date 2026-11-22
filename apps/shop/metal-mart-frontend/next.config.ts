@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
       // Internal cloud agents dashboard is a static file in public/; serve it
       // at an extension-less URL so it reads like the other shop routes.
       { source: "/cloud-agents", destination: "/cloud-agents.html" },
+      // Software Factory demo board: the same agent runs, shown as stations.
+      { source: "/software-factory", destination: "/software-factory.html" },
     ];
   },
 };

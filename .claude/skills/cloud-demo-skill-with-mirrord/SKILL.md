@@ -85,6 +85,17 @@ PushNotification, and stop; do not open a PR.
    instructions). The dashboard shows one row per ticket and starts at most one run per
    ticket, so this run owns `TICKET` until it reports. A scheduled run has no payload:
    `RUN_ID` and `TICKET` stay empty.
+
+   **Which board started the run** (dashboard runs only; skip this when `RUN_ID` is
+   empty). Two boards fire this routine: the Cloud Agents dashboard and the Software
+   Factory board. Ask the server which one started this run (print the response):
+   ```bash
+   curl -sS "$CALLBACK_URL?run_id=$RUN_ID"
+   ```
+   Only when the answer has `"source":"software-factory"`, read `software-factory.md`
+   (next to this file) and follow it in addition to these steps. Any other answer
+   (`cloud-agents-dashboard`, an error, no answer) means a Cloud Agents dashboard run:
+   follow this file only, exactly as written.
 1. Pick the issues:
    - **Dashboard run** (payload present): work on `TICKET` only. `get_issue` on it. Work
      on it only if it carries the label `claude-agent-demo` (any status: the presenter
@@ -383,6 +394,8 @@ Rules:
 - `run_id` is `RUN_ID` from the payload. A report whose `run_id` is not the ticket's
   current run is refused with `409` (the presenter reset the row and started a new run);
   then stop reporting, the row belongs to the new run. A scheduled run leaves it out.
+- A Software Factory run adds `source`, `stage` and `key` to every report (see
+  `software-factory.md`). A Cloud Agents dashboard run sends none of them.
 - `title` (optional, up to 160 characters) is the Linear issue title; send it in the
   first report. Build the JSON with `jq -n` when the title has quotes.
 - `url` is `SHARE_URL`. If it was not found, omit the `url` field and send `pr_url` only.
