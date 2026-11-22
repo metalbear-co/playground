@@ -81,11 +81,14 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
+// Product names are returned with their letters spaced out ("MetalBear" -> "M e t a l B e a r").
+const SPACED_NAME_SQL = "trim(regexp_replace(name, '(.)', '\\1 ', 'g')) AS name";
+
 app.get("/products", async (_req, res) => {
   // Set a breakpoint here; trigger with: curl http://localhost:28080/products -H "X-PG-Tenant: dev" (while port-forward + mirrord are running)
    console.log("[Inventory] Fetching Products");
   try {
-    const { rows } = await pool.query("SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id");
+    const { rows } = await pool.query(`SELECT id, ${SPACED_NAME_SQL}, description, price_cents, stock, image_url, image_urls, is_new FROM products ORDER BY id`);
     res.json(rows);
   } catch (err) {
     console.error("Error fetching products:", err);
@@ -100,7 +103,7 @@ app.get("/products/:id", async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, description, price_cents, stock, image_url, image_urls, is_new FROM products WHERE id = $1",
+      `SELECT id, ${SPACED_NAME_SQL}, description, price_cents, stock, image_url, image_urls, is_new FROM products WHERE id = $1`,
       [id]
     );
     if (rows.length === 0) {

@@ -276,7 +276,8 @@ app.post("/orders", async (req, res) => {
   const input: OrderInput = { items, total_cents, customer_email, baggage };
 
   try {
-    const result = await createOrderDirect(input);
+    const order = await createOrderDirect(input);
+    const result = { ...order, time: new Date().toISOString() };
     console.log("Order response:", JSON.stringify(result, null, 2));
     return res.status(201).json(result);
   } catch (err) {

@@ -178,6 +178,12 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <div
+        data-testid="new-tshirts-banner"
+        className="w-full bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white sm:text-base"
+      >
+        Check out our new t-shirts!
+      </div>
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
