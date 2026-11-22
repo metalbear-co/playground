@@ -598,7 +598,7 @@
   var newBtn = document.getElementById('new-ticket');
   newBtn.addEventListener('click', function () {
     newBtn.disabled = true; newBtn.innerHTML = SPIN + ' Creating…'; say('');
-    authFetch(LINEAR_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ created_by: load(DEV_KEY) || undefined }) })
+    authFetch(LINEAR_API, { method: 'POST' })
       .then(readJson)
       .then(function (r) {
         if (!r.ok || !r.data.ticket) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
