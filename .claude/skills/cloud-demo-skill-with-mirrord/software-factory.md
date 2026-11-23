@@ -32,8 +32,25 @@ following.
      to 3.4 with a **new** key, following the retry rules in Step 3.2.
 
    If a check is still red after the fix, or the cause is outside your change, report
-   `failed` and stop with no PR, as Step 3.5 says. When every check is green, report
-   `stage: "verify"`, message `mirrord up · key <KEY> · <passed>/<total> checks passed`.
+   `failed` and stop with no PR, as Step 3.5 says. Add `checks` to that report (below),
+   so the board shows which check failed.
+
+   When every check is green and Step 3.6 wrote the redacted log, push the evidence now,
+   so the board can show it before the PR exists: `git add .github/pr-screenshots`,
+   commit, push the run's branch, and `SHA=$(git rev-parse HEAD)`. Then report
+   `stage: "verify"`, message `mirrord up · key <KEY> · <passed>/<total> checks passed`,
+   with two more fields:
+   - `checks`: one item per real-traffic request of Step 3.3, up to 8:
+     `{"service":"inventory","request":"GET /api/products","without":"\"name\":\"Mug\"","with":"\"name\":\"MUG\"","ok":true}`.
+     `without` is the baseline response and `with` the response with the session key,
+     each one short line (the field or text that proves the change).
+   - `evidence`: up to 6 file URLs of this commit, every screenshot first and then the
+     redacted log:
+     `https://raw.githubusercontent.com/metalbear-co/playground/$SHA/.github/pr-screenshots/<file>`.
+     The callback refuses URLs outside `metalbear-co/playground`.
+
+   The board shows the checks, the screenshots and the log in the card's Verify tab.
+   Keep the body under 8 KB.
 5. **Review** (after Step 3, before Step 5). Report `stage: "review"`, message
    `Reviewing the diff and the evidence`. Then check, and print each result:
    - **Scope.** `git diff --stat origin/main...HEAD`. Every changed file belongs to a

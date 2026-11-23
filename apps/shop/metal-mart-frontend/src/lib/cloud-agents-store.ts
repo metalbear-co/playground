@@ -69,12 +69,66 @@ export function normalizeKey(raw: unknown): string | null {
   return /^[a-z0-9][a-z0-9-]{2,63}$/.test(k) ? k : null;
 }
 
+/**
+ * One real-traffic check from the Verify station of a Software Factory run:
+ * the request, the response without the session key (baseline) and with it.
+ */
+export type VerifyCheck = { service: string; request: string; without?: string; with?: string; ok: boolean };
+
+const MAX_CHECKS = 8;
+
+/** Returns the checks, or null when the value is not a list of checks. Text fields are cleaned and capped. */
+export function normalizeChecks(raw: unknown): VerifyCheck[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_CHECKS) return null;
+  const out: VerifyCheck[] = [];
+  for (const c of raw) {
+    if (!c || typeof c !== "object") return null;
+    const o = c as Record<string, unknown>;
+    const service = cleanText(o.service, 40);
+    const request = cleanText(o.request, 120);
+    if (!service || !request || typeof o.ok !== "boolean") return null;
+    out.push({ service, request, without: cleanText(o.without, 160), with: cleanText(o.with, 160), ok: o.ok });
+  }
+  return out;
+}
+
+/**
+ * Evidence files of a run (screenshots, the redacted mirrord up log) that the
+ * agent pushed to its branch. Only files in the playground repo are accepted,
+ * so the board never loads images from other hosts.
+ */
+const EVIDENCE_PREFIXES = [
+  "https://raw.githubusercontent.com/metalbear-co/playground/",
+  "https://github.com/metalbear-co/playground/",
+];
+const MAX_EVIDENCE = 6;
+
+export function normalizeEvidence(raw: unknown): string[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_EVIDENCE) return null;
+  const out: string[] = [];
+  for (const e of raw) {
+    if (typeof e !== "string" || e.length > 300) return null;
+    let u: URL;
+    try {
+      u = new URL(e.trim());
+    } catch {
+      return null;
+    }
+    const s = u.toString();
+    if (u.protocol !== "https:" || u.search || u.hash || !EVIDENCE_PREFIXES.some((p) => s.startsWith(p))) return null;
+    out.push(s);
+  }
+  return out;
+}
+
 export type TicketRecord = {
   ticket: string;
   status: AgentStatus;
   source?: RecordSource;
   stage?: AgentStage;
   key?: string;
+  checks?: VerifyCheck[];
+  evidence?: string[];
   run_id?: string;
   title?: string;
   started_by?: string;
