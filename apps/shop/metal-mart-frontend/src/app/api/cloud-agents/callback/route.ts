@@ -11,7 +11,7 @@
  * `source` names the board: "cloud-agents-dashboard" (the default, so the Cloud
  * Agents dashboard and its agents send nothing) or "software-factory".
  *
- *   POST {ticket, run_id?, source?, title?, url?, pr_url?, status?, stage?, key?, message?}
+ *   POST {ticket, run_id?, source?, title?, url?, pr_url?, status?, stage?, key?, checks?, evidence?, message?}
  *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
  *        The board comes from the run id when the server started that run, else
  *        from `source`. A report with a run_id that is not the ticket's current
@@ -24,6 +24,11 @@
  *        key is the run's mirrord session key, shown on the Software Factory
  *        card; stored for Software Factory runs only. A report without it
  *        keeps the record's key.
+ *        checks ([{service, request, without?, with?, ok}], up to 8) and
+ *        evidence (up to 6 file URLs in the playground repo: screenshots, the
+ *        redacted mirrord up log) fill the Verify station of a Software Factory
+ *        card; stored for Software Factory runs only. A report without them
+ *        keeps the record's values.
  *   GET  ?ticket=SOL-175[&source=…]           -> {ticket, active, result: TicketRecord | null}
  *   GET  ?tickets=SOL-175,SOL-176[&source=…]  -> {results: {"SOL-175": TicketRecord | null, ...}}
  *   GET  ?run_id=<id>                         -> {run_id, ticket, source} | 404
@@ -51,6 +56,8 @@ import {
   getRecord,
   isActive,
   lookupRun,
+  normalizeChecks,
+  normalizeEvidence,
   normalizeKey,
   normalizeRunId,
   normalizeSource,
@@ -59,7 +66,7 @@ import {
   setRecord,
 } from "@/lib/cloud-agents-store";
 
-const MAX_BODY = 4 * 1024;
+const MAX_BODY = 8 * 1024;
 const MAX_TICKETS = 25;
 const STATUSES: AgentStatus[] = ["done", "failed", "running"];
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -164,6 +171,10 @@ export async function POST(req: Request) {
   if (factory && body.stage && !stage) return bad("stage must be one of plan, code, verify, review, pr");
   const key = factory ? (normalizeKey(body.key) ?? undefined) : undefined;
   if (factory && body.key && !key) return bad("key must be the mirrord session key, e.g. sol-211-20261122-085206");
+  const checks = factory && body.checks !== undefined ? normalizeChecks(body.checks) : undefined;
+  if (checks === null) return bad("checks must be 1 to 8 items like {service, request, without, with, ok}");
+  const evidence = factory && body.evidence !== undefined ? normalizeEvidence(body.evidence) : undefined;
+  if (evidence === null) return bad("evidence must be 1 to 6 https URLs of files in metalbear-co/playground");
   const existing = getRecord(ticket, source);
   if (run_id && existing?.run_id && existing.run_id !== run_id) {
     return bad(`${ticket} now belongs to another run; this report was not stored`, 409);
@@ -178,7 +189,9 @@ export async function POST(req: Request) {
     ...base,
     ticket,
     status,
-    ...(factory ? { source, stage: stage ?? (status === "done" ? "pr" : base.stage), key: key ?? base.key } : {}),
+    ...(factory
+      ? { source, stage: stage ?? (status === "done" ? "pr" : base.stage), key: key ?? base.key, checks: checks ?? base.checks, evidence: evidence ?? base.evidence }
+      : {}),
     run_id: run_id ?? base.run_id,
     title: cleanText(body.title, 160) ?? base.title,
     url: url ?? base.url,
