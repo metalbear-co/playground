@@ -1,12 +1,19 @@
 /**
- * In-memory ticket records for the Cloud Agents dashboard.
+ * In-memory ticket records for the Cloud Agents dashboard and the Software
+ * Factory board.
  *
- * The dashboard shows one row per Linear ticket, and the server keeps one
- * record per ticket: status, the current run id, the preview and PR links. Every
- * row with a ticket reads that ticket's record, so two presenters who add the
- * same ticket see the same run, and a ticket never has two runs at the same
- * time: /api/cloud-agents/run claims the record before it fires a routine and
- * refuses a second run while the record is active.
+ * Each board shows one card or row per Linear ticket, and the server keeps one
+ * record per ticket and board: status, the current run id, the preview and PR
+ * links. Every row with a ticket reads that ticket's record, so two presenters
+ * who add the same ticket to the same board see the same run, and a ticket
+ * never has two runs at the same time on one board: /api/cloud-agents/run
+ * claims the record before it fires a routine and refuses a second run while
+ * the record is active.
+ *
+ * The boards are separate namespaces (RecordSource). A run started from the
+ * Software Factory never shows on the Cloud Agents dashboard, and the same
+ * ticket can run on both boards in parallel. Cloud Agents records keep the plain
+ * ticket as their key; other boards prefix it with the board name.
  *
  * A record is active while its status is "running" and the run started less
  * than ACTIVE_MS ago. After that the run is treated as stalled (it ended without
@@ -14,15 +21,60 @@
  *
  * The frontend runs as a single replica, so a module-level map is enough for a
  * demo. State is lost on pod restart, which is acceptable: the rows go back to
- * Ready and the next run posts fresh links. The map hangs off globalThis so
- * Next.js dev hot reloads keep it.
+ * Ready and the next run posts fresh links. The maps hang off globalThis so
+ * Next.js dev hot reloads keep them.
  */
 
 export type AgentStatus = "done" | "failed" | "running";
 
+/**
+ * The board a run belongs to. It is also the `source` of the routine fire
+ * payload. A record without a source belongs to the Cloud Agents dashboard.
+ */
+export const RECORD_SOURCES = ["cloud-agents-dashboard", "software-factory"] as const;
+export type RecordSource = (typeof RECORD_SOURCES)[number];
+export const DEFAULT_SOURCE: RecordSource = "cloud-agents-dashboard";
+
+/** Returns the source, DEFAULT_SOURCE when none is given, or null when the value is unknown. */
+export function normalizeSource(raw: unknown): RecordSource | null {
+  if (raw === undefined || raw === null || raw === "") return DEFAULT_SOURCE;
+  if (typeof raw !== "string") return null;
+  const s = raw.trim().toLowerCase();
+  return (RECORD_SOURCES as readonly string[]).includes(s) ? (s as RecordSource) : null;
+}
+
+/**
+ * The Software Factory station a run is at. The agent sends it with each
+ * report of a Software Factory run; the board puts the ticket's card in that
+ * column. Production is not a run stage: the board moves a card there after
+ * the merge.
+ */
+export const AGENT_STAGES = ["plan", "code", "verify", "review", "pr"] as const;
+export type AgentStage = (typeof AGENT_STAGES)[number];
+
+export function normalizeStage(raw: unknown): AgentStage | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim().toLowerCase();
+  return (AGENT_STAGES as readonly string[]).includes(s) ? (s as AgentStage) : null;
+}
+
+/**
+ * The mirrord session key of a run (`<ticket>-<timestamp>`, lower case). The
+ * run's local code receives only requests whose baggage carries
+ * `mirrord-session=<key>`. The Software Factory board shows it on the card.
+ */
+export function normalizeKey(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const k = raw.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{2,63}$/.test(k) ? k : null;
+}
+
 export type TicketRecord = {
   ticket: string;
   status: AgentStatus;
+  source?: RecordSource;
+  stage?: AgentStage;
+  key?: string;
   run_id?: string;
   title?: string;
   started_by?: string;
@@ -34,11 +86,28 @@ export type TicketRecord = {
   received_at: string;
 };
 
+export type RunInfo = { run_id: string; ticket: string; source: RecordSource };
+
 export const ACTIVE_MS = 45 * 60 * 1000;
 const MAX_RECORDS = 200;
+const MAX_RUNS = 500;
 
-const g = globalThis as unknown as { __cloudAgentRecords?: Map<string, TicketRecord> };
+const g = globalThis as unknown as {
+  __cloudAgentRecords?: Map<string, TicketRecord>;
+  __cloudAgentRuns?: Map<string, RunInfo>;
+};
 const records: Map<string, TicketRecord> = (g.__cloudAgentRecords ??= new Map());
+// run id -> the ticket and board it was started for, so a report and the
+// agent's lookup (GET ?run_id=) find the board from the run id alone.
+const runs: Map<string, RunInfo> = (g.__cloudAgentRuns ??= new Map());
+
+export function sourceOf(r: TicketRecord): RecordSource {
+  return r.source ?? DEFAULT_SOURCE;
+}
+
+function key(ticket: string, source: RecordSource): string {
+  return source === DEFAULT_SOURCE ? ticket : `${source}:${ticket}`;
+}
 
 export function normalizeTicket(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -66,34 +135,41 @@ export function isActive(r: TicketRecord | null | undefined, now = Date.now()): 
   return Number.isFinite(since) && now - since < ACTIVE_MS;
 }
 
-export function getRecord(ticket: string): TicketRecord | null {
-  return records.get(ticket) ?? null;
+export function getRecord(ticket: string, source: RecordSource = DEFAULT_SOURCE): TicketRecord | null {
+  return records.get(key(ticket, source)) ?? null;
 }
 
 export function setRecord(r: TicketRecord): void {
-  records.delete(r.ticket);
-  records.set(r.ticket, r);
+  const k = key(r.ticket, sourceOf(r));
+  records.delete(k);
+  records.set(k, r);
   // Map iteration is insertion order, so the first key is the oldest write.
   while (records.size > MAX_RECORDS) records.delete(records.keys().next().value as string);
 }
 
+export function lookupRun(runId: string): RunInfo | null {
+  return runs.get(runId) ?? null;
+}
+
 /**
- * Claims a ticket for a new run. Returns the active record when the ticket is
- * already running (nothing changes), or the new "running" record plus the
- * record it replaced, so a failed fire can put the old one back. Synchronous,
- * so two requests for the same ticket cannot both claim it.
+ * Claims a ticket on a board for a new run. Returns the active record when the
+ * ticket is already running there (nothing changes), or the new "running"
+ * record plus the record it replaced, so a failed fire can put the old one
+ * back. Synchronous, so two requests for the same ticket cannot both claim it.
  */
 export function claimTicket(
   ticket: string,
   runId: string,
-  startedBy: string | undefined
+  startedBy: string | undefined,
+  source: RecordSource = DEFAULT_SOURCE
 ): { active: TicketRecord } | { claimed: TicketRecord; previous: TicketRecord | null } {
-  const previous = getRecord(ticket);
+  const previous = getRecord(ticket, source);
   if (isActive(previous)) return { active: previous as TicketRecord };
   const now = new Date().toISOString();
   const claimed: TicketRecord = {
     ticket,
     status: "running",
+    ...(source !== DEFAULT_SOURCE ? { source, stage: "plan" as const } : {}),
     run_id: runId,
     title: previous?.title,
     started_by: startedBy,
@@ -102,22 +178,32 @@ export function claimTicket(
     received_at: now,
   };
   setRecord(claimed);
+  runs.set(runId, { run_id: runId, ticket, source });
+  while (runs.size > MAX_RUNS) runs.delete(runs.keys().next().value as string);
   return { claimed, previous };
 }
 
 /** Undoes a claim whose fire failed, unless something else wrote the ticket since. */
 export function releaseClaim(claimed: TicketRecord, previous: TicketRecord | null): void {
-  if (getRecord(claimed.ticket)?.run_id !== claimed.run_id) return;
+  const source = sourceOf(claimed);
+  if (claimed.run_id) runs.delete(claimed.run_id);
+  if (getRecord(claimed.ticket, source)?.run_id !== claimed.run_id) return;
   if (previous) setRecord(previous);
-  else records.delete(claimed.ticket);
+  else records.delete(key(claimed.ticket, source));
 }
 
-export function clearTicket(ticket: string): boolean {
-  return records.delete(ticket);
+export function clearTicket(ticket: string, source: RecordSource = DEFAULT_SOURCE): boolean {
+  return records.delete(key(ticket, source));
 }
 
-export function clearAll(): number {
-  const n = records.size;
-  records.clear();
+/** Clears every record of one board. */
+export function clearAll(source: RecordSource = DEFAULT_SOURCE): number {
+  let n = 0;
+  for (const [k, r] of records) {
+    if (sourceOf(r) === source) {
+      records.delete(k);
+      n++;
+    }
+  }
   return n;
 }

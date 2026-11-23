@@ -13,9 +13,11 @@
  * routine configured in its env, if any. The id and the token always come from
  * the same place: a browser-supplied id is never paired with the server token.
  *
- * One run per ticket. POST takes the Linear ticket of the dashboard row
- * ({ticket, started_by?}) and claims that ticket's record in the store (see
- * lib/cloud-agents-store) before it fires. When the ticket already has an active
+ * One run per ticket and board. POST takes the Linear ticket of the dashboard row
+ * ({ticket, started_by?, source?}) and claims that ticket's record in the store
+ * (see lib/cloud-agents-store) before it fires. `source` is the board:
+ * "cloud-agents-dashboard" (the default) or "software-factory"; each board has
+ * its own records, so the same ticket can run on both in parallel. When the ticket already has an active
  * run, nothing is fired: the response carries that run's record with
  * already_running: true, and the row follows it. Otherwise the POST mints a run
  * id and passes it with the ticket to the routine in the fire payload (`text`).
@@ -38,7 +40,7 @@
 
 import { randomUUID } from "node:crypto";
 import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
-import { claimTicket, cleanText, getRecord, normalizeTicket, releaseClaim, setRecord } from "@/lib/cloud-agents-store";
+import { claimTicket, cleanText, getRecord, normalizeSource, normalizeTicket, releaseClaim, setRecord } from "@/lib/cloud-agents-store";
 
 const API_BASE = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
 const ROUTINE_BETA = "experimental-cc-routine-2026-04-01";
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
   const routine = pickRoutine(req);
   if ("error" in routine) return Response.json({ ok: false, error: routine.error }, { status: 400 });
 
-  let body: { ticket?: unknown; started_by?: unknown } = {};
+  let body: { ticket?: unknown; started_by?: unknown; source?: unknown } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -84,14 +86,16 @@ export async function POST(req: Request) {
   }
   const ticket = normalizeTicket(body.ticket);
   if (!ticket) return Response.json({ ok: false, error: "ticket is required, for example SOL-175" }, { status: 400 });
+  const source = normalizeSource(body.source);
+  if (!source) return Response.json({ ok: false, error: "source must be cloud-agents-dashboard or software-factory" }, { status: 400 });
 
   const runId = randomUUID();
-  const claim = claimTicket(ticket, runId, cleanText(body.started_by, 40));
+  const claim = claimTicket(ticket, runId, cleanText(body.started_by, 40), source);
   if ("active" in claim) {
     return Response.json({ ok: true, already_running: true, ticket, run_id: claim.active.run_id, record: claim.active });
   }
 
-  const payload = { source: "cloud-agents-dashboard", run_id: runId, ticket };
+  const payload = { source, run_id: runId, ticket };
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/v1/claude_code/routines/${routine.id}/fire`, {
@@ -130,7 +134,7 @@ export async function POST(req: Request) {
   const record = { ...claim.claimed, message: "Agent started" };
   if (typeof sessionUrl === "string" && sessionUrl.startsWith("https://")) record.session_url = sessionUrl;
   // A Reset during the fire clears the claim; do not bring it back.
-  if (getRecord(ticket)?.run_id === runId) setRecord(record);
+  if (getRecord(ticket, source)?.run_id === runId) setRecord(record);
 
   return Response.json({
     ok: true,
