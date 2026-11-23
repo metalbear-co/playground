@@ -91,6 +91,8 @@
   .card.done .state { color: var(--ok); }
   .card .ids, .bcard .ids { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .card .id, .bcard .id { white-space: nowrap; }
+  a.id { text-decoration: underline; text-decoration-color: var(--purple-shadow); text-underline-offset: 2px; }
+  a.id:hover { text-decoration-color: currentColor; }
   .kind { display: inline-block; font: 600 11px/1 var(--mono); padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
   .card .kind, .bcard .kind { font-size: 10px; padding: 3px 6px; }
   .kind.feature { color: var(--purple-deep); background: var(--purple-mid); }
@@ -753,6 +755,14 @@
   // A card's key is kind + id, so a simulated task never clashes with a real
   // ticket that has the same id.
   function keyOf(v) { return v.kind + ':' + v.id; }
+  // Real tickets link to their Linear issue. Simulated ids are not real issues.
+  function linearUrl(id) { return 'https://linear.app/metalbear/issue/' + encodeURIComponent(id); }
+  function idHtml(v, style) {
+    var st = style ? ' style="' + style + '"' : '';
+    return v.kind === 'real'
+      ? '<a class="id" href="' + esc(linearUrl(v.id)) + '" target="_blank" rel="noopener" title="Open ' + esc(v.id) + ' in Linear"' + st + '>' + esc(v.id) + '</a>'
+      : '<span class="id"' + st + '>' + esc(v.id) + '</span>';
+  }
   function tagHtml(v) { return v.kind === 'real' ? '<span class="tag live">LIVE</span>' : '<span class="tag sim">SIM</span>'; }
   // The same type chips as the Cloud Agents task rows.
   function kindHtml(v) {
@@ -764,15 +774,15 @@
     var cls = 'card' + (v.kind === 'real' && (v.look === 'live' || !v.look) ? ' live' : '') + (v.look && v.look !== 'live' ? ' ' + v.look : '');
     var bar = v.progress != null ? '<div class="bar"><i style="width:' + Math.max(6, Math.min(100, v.progress)) + '%"></i></div>'
       : (v.kind === 'real' && v.look === 'live' ? '<div class="bar"><i style="width:60%"></i></div>' : '');
-    return '<button type="button" class="' + cls + '" data-open="' + esc(keyOf(v)) + '">' +
-      '<span class="top"><span class="ids"><span class="id">' + esc(v.id) + '</span>' + kindHtml(v) + '</span>' + tagHtml(v) + '</span>' +
+    return '<div role="button" tabindex="0" class="' + cls + '" data-open="' + esc(keyOf(v)) + '" aria-label="Open ' + esc(v.id) + ' details">' +
+      '<span class="top"><span class="ids">' + idHtml(v) + kindHtml(v) + '</span>' + tagHtml(v) + '</span>' +
       '<span class="title">' + esc(v.title) + '</span>' + bar +
       (v.key ? '<span class="key" title="mirrord session key: requests with baggage mirrord-session=' + esc(v.key) + ' reach this run\'s code"><b>key</b> ' + esc(v.key) + '</span>' : '') +
-      '<span class="state">' + esc(v.status) + '</span></button>';
+      '<span class="state">' + esc(v.status) + '</span></div>';
   }
   function bucketHtml(v) {
     return '<div class="bcard' + (v.kind === 'real' ? ' live' : '') + '" draggable="true" data-drag="' + esc(keyOf(v)) + '">' +
-      '<span class="top" style="display:flex;justify-content:space-between;align-items:center"><span class="ids"><span class="id" style="font:500 11.5px/1 var(--mono);color:var(--purple-deep)">' + esc(v.id) + '</span>' + kindHtml(v) + '</span>' + tagHtml(v) + '</span>' +
+      '<span class="top" style="display:flex;justify-content:space-between;align-items:center"><span class="ids">' + idHtml(v, 'font:500 11.5px/1 var(--mono);color:var(--purple-deep)') + kindHtml(v) + '</span>' + tagHtml(v) + '</span>' +
       '<span style="font-size:13px;font-weight:600;color:#000;line-height:1.3">' + esc(v.title) + '</span>' +
       (v.error ? '<div class="err">' + esc(v.error) + '</div>' : '') +
       '<span class="acts"><span style="font:400 11px/1.4 var(--mono);color:var(--grey-500)">' + esc(v.services) + '</span>' +
@@ -851,8 +861,16 @@
     if (b.dataset.remove) { saveTickets(myTickets().filter(function (x) { return x.ticket !== b.dataset.remove; })); delete local[b.dataset.remove]; render(); }
   });
   colsEl.addEventListener('click', function (e) {
+    if (e.target.closest('a')) return; // the Linear link opens in a new tab, not the panel
     var b = e.target.closest('[data-open]');
     if (b) openDrawer(b.dataset.open);
+  });
+  colsEl.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var b = e.target.closest('[data-open]');
+    if (!b || e.target !== b) return;
+    e.preventDefault();
+    openDrawer(b.dataset.open);
   });
 
   // ---- Detail panel ----
@@ -962,7 +980,7 @@
     var at = STAGE_INDEX[v.col];
     var tab = drawerTab || v.col;
     var tabIdx = STAGE_INDEX[tab];
-    document.getElementById('d-id').textContent = v.id;
+    document.getElementById('d-id').innerHTML = idHtml(v, 'color:inherit');
     document.getElementById('d-tag').innerHTML = kindHtml(v) + ' ' + tagHtml(v);
     document.getElementById('d-title').textContent = v.title;
     document.getElementById('d-meta').textContent = (v.kind === 'sim' ? v.services + ' · branch claude/' + v.id + ' · simulated' : v.services + ' · real routine run') +
