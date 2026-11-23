@@ -1,0 +1,135 @@
+
+* New local mirrord daemon started
+* Daemon PID:
+ -> 467
+
+* Web UI:
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
+* API token:
+ -> x-auth-token: <redacted>
+
+* mirrord session monitor ready!
+ -> daemon log file: /tmp/mirrord/ui-3.290.0/stderr-1795439467
+
+inventory-service: requesting DB branching
+inventory-service: no MirrordSplitConfig defines `dbBranches` for `deployment/inventory-service` in namespace `shop`, running against the source DB
+inventory-service: mirrord exec (cli version 3.290.0)
+inventory-service: Detected `mirrord exec` running with a CI token.
+inventory-service: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+inventory-service: mirrord ci start (cli version 3.290.0)
+inventory-service: version check
+inventory-service: preparing to launch process
+inventory-service: checking if target binary is dynamically linked
+inventory-service: target binary is dynamically linked
+inventory-service: extracting layer
+inventory-service: layer extracted
+inventory-service: checking operator
+inventory-service: checking license
+inventory-service: Operator license is valid for 42 more days.
+inventory-service: operator license valid
+inventory-service: preparing user credentials
+inventory-service: user credentials prepared
+inventory-service: starting session
+inventory-service: connecting to the target
+inventory-service: connected to the target
+inventory-service: session started
+inventory-service: using operator
+inventory-service: session ID: E2D29F1BDB2DC737
+inventory-service: ready to launch process
+inventory-service: config summary
+inventory-service: Running command: npm --prefix apps/shop/inventory-service run dev
+inventory-service: mirrord will target: deployment/inventory-service, no configuration file was loaded
+inventory-service: mirrord will run with the mirrord Operator
+inventory-service: env: all remote environment variables will be fetched
+inventory-service: fs: file operations will default to read from the remote
+inventory-service: incoming: incoming traffic will be stolen
+inventory-service: outgoing: forwarding is enabled on TCP and UDP
+inventory-service: dns: DNS will be resolved remotely
+inventory-service: internal proxy: logs will be written to /tmp/mirrord-intproxy-1795439467-2Z26IzR.log
+inventory-service: Session key: sol-218-20261123-131011
+inventory-service: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+inventory-service: config summary
+inventory-service: running process
+inventory-service: Ready!
+inventory-service: 
+inventory-service: > inventory-service@1.0.0 dev
+inventory-service: > tsx watch src/index.ts
+inventory-service: 
+inventory-service: [Inventory] DATABASE_URL: postgresql://postgres:postgres@postgres.infra.svc.cluster.local:5432/inventory
+inventory-service: Inventory service listening on port 80
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-826a0c329a2633bb6ff646ef27e525a4-98bafa7cb547d832-01",
+inventory-service:   "baggage": "mirrord-session=sol-218-20261123-131011",
+inventory-service:   "mirrord-key": "sol-218-20261123-131011"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-7904b0257c79b918af904755ab6292f1-59df765418317784-01",
+inventory-service:   "baggage": "mirrord-session=sol-218-20261123-131011",
+inventory-service:   "mirrord-key": "sol-218-20261123-131011"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-3f278539ab5feaa7c0afd2a99a7305e3-0b6676e60b3a94fd-01",
+inventory-service:   "baggage": "mirrord-session=sol-218-20261123-131011",
+inventory-service:   "mirrord-key": "sol-218-20261123-131011"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products
+inventory-service: [Inventory] GET /products/1 headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-736d7d4cb25e5dcf9d6802b89f8da561-1ae3befb2767fd10-01",
+inventory-service:   "baggage": "mirrord-session=sol-218-20261123-131011",
+inventory-service:   "mirrord-key": "sol-218-20261123-131011"
+inventory-service: }
+inventory-service: [Inventory] GET /products/1 headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-26094fbe5866b8e9583cfa4c1f93303f-76ebd31a26acf56c-01",
+inventory-service:   "baggage": "mirrord-session=sol-218-20261123-131011",
+inventory-service:   "mirrord-key": "sol-218-20261123-131011"
+inventory-service: }
+inventory-service: [Inventory] GET /products headers: {
+inventory-service:   "host": "inventory-service",
+inventory-service:   "connection": "keep-alive",
+inventory-service:   "accept": "*/*",
+inventory-service:   "accept-language": "*",
+inventory-service:   "sec-fetch-mode": "cors",
+inventory-service:   "user-agent": "node",
+inventory-service:   "accept-encoding": "gzip, deflate",
+inventory-service:   "traceparent": "00-9bb9015b9c0fb58d1fbe2e3001aac904-9bfdf31ad9ee0817-01",
+inventory-service:   "baggage": "mirrord-session=sol-218-20261123-131011",
+inventory-service:   "mirrord-key": "sol-218-20261123-131011"
+inventory-service: }
+inventory-service: [Inventory] Fetching Products

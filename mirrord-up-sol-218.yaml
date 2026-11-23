@@ -1,0 +1,11 @@
+# SOL-218: inventory-service returns product names in upper case.
+# Run from the playground repo root:
+#   mirrord up -f mirrord-up-sol-218.yaml --key <session-key>
+services:
+  inventory-service:
+    target: { path: deployment/inventory-service, namespace: shop }
+    # split mode (default): steal only requests carrying this session's key in the baggage header
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    run:
+      command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"]
