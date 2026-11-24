@@ -1,0 +1,72 @@
+
+* New local mirrord daemon started
+* Daemon PID:
+ -> 836
+
+* Web UI:
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
+* API token:
+ -> x-auth-token: <redacted>
+
+* mirrord session monitor ready!
+ -> daemon log file: /tmp/mirrord/ui-3.291.1/stderr-1795561293
+
+metal-mart-frontend: requesting DB branching
+metal-mart-frontend: no MirrordSplitConfig defines `dbBranches` for `deployment/metal-mart-frontend` in namespace `shop`, running against the source DB
+metal-mart-frontend: mirrord exec (cli version 3.291.1)
+metal-mart-frontend: Detected `mirrord exec` running with a CI token.
+metal-mart-frontend: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+metal-mart-frontend: mirrord ci start (cli version 3.291.1)
+metal-mart-frontend: version check
+metal-mart-frontend: running on latest!
+metal-mart-frontend: preparing to launch process
+metal-mart-frontend: checking if target binary is dynamically linked
+metal-mart-frontend: target binary is dynamically linked
+metal-mart-frontend: extracting layer
+metal-mart-frontend: layer extracted
+metal-mart-frontend: checking operator
+metal-mart-frontend: checking license
+metal-mart-frontend: Operator license is valid for 41 more days.
+metal-mart-frontend: operator license valid
+metal-mart-frontend: preparing user credentials
+metal-mart-frontend: user credentials prepared
+metal-mart-frontend: starting session
+metal-mart-frontend: connecting to the target
+metal-mart-frontend: connected to the target
+metal-mart-frontend: session started
+metal-mart-frontend: using operator
+metal-mart-frontend: session ID: F89EF567E53C7FFF
+metal-mart-frontend: ready to launch process
+metal-mart-frontend: config summary
+metal-mart-frontend: Running command: npm --prefix apps/shop/metal-mart-frontend run dev -- -p 3000
+metal-mart-frontend: mirrord will target: deployment/metal-mart-frontend, no configuration file was loaded
+metal-mart-frontend: mirrord will run with the mirrord Operator
+metal-mart-frontend: env: all remote environment variables will be fetched
+metal-mart-frontend: fs: file operations will default to read from the remote
+metal-mart-frontend: incoming: incoming traffic will be stolen
+metal-mart-frontend: outgoing: forwarding is enabled on TCP and UDP
+metal-mart-frontend: dns: DNS will be resolved remotely
+metal-mart-frontend: internal proxy: logs will be written to /tmp/mirrord-intproxy-1795561293-bnYFK7R.log
+metal-mart-frontend: Session key: sol-225-20261124-230027
+metal-mart-frontend: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+metal-mart-frontend: config summary
+metal-mart-frontend: running process
+metal-mart-frontend: Ready!
+metal-mart-frontend: 
+metal-mart-frontend: > metal-mart-frontend@0.1.0 dev
+metal-mart-frontend: > next dev -p 3000
+metal-mart-frontend: 
+metal-mart-frontend:  ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+metal-mart-frontend: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+metal-mart-frontend:    ▲ Next.js 16.0.0 (Turbopack)
+metal-mart-frontend:    - Local:        http://localhost:3000
+metal-mart-frontend:    - Network:      http://192.0.2.2:3000
+metal-mart-frontend: 
+metal-mart-frontend:  ✓ Starting...
+metal-mart-frontend:  ✓ Ready in 3.5s
+metal-mart-frontend:  ○ Compiling / ...
+metal-mart-frontend:  GET / 200 in 4.3s (compile: 4.1s, render: 236ms)
+metal-mart-frontend:  ⚠ Cross origin request detected from playground.metalbear.dev to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+metal-mart-frontend: Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+metal-mart-frontend:  GET /api/banner 200 in 1505ms (compile: 335ms, render: 1170ms)
+metal-mart-frontend:  GET /api/products 200 in 1617ms (compile: 458ms, render: 1159ms)
