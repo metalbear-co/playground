@@ -114,6 +114,23 @@
 
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 12.5px/1 var(--body); padding: 10px 14px; border-radius: 8px; border: 1.5px solid var(--ink); cursor: pointer; background: var(--cream); color: #000; text-decoration: none; }
   .btn:hover { background: var(--purple-mid); }
+  /* The two results of the Pull request station: the mirrord preview
+     environment (purple, mirrord) and the PR (white, GitHub). */
+  .deliver { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+  .dcard { display: flex; flex-direction: column; gap: 4px; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--ink); box-shadow: 2px 3px 0 var(--ink); text-decoration: none; transition: transform .1s, box-shadow .1s; }
+  a.dcard:hover { transform: translate(-1px, -1px); box-shadow: 3px 4px 0 var(--ink); }
+  .dcard .k { display: flex; align-items: center; gap: 6px; font: 600 10px/1.2 var(--body); text-transform: uppercase; letter-spacing: .05em; }
+  .dcard .k svg { flex: none; }
+  .dcard .t { font: 700 14px/1.2 var(--display); }
+  .dcard .u { font: 500 10.5px/1.35 var(--mono); overflow-wrap: anywhere; border-radius: 5px; padding: 2px 5px; }
+  .dcard .n { font: 400 11.5px/1.35 var(--body); }
+  .dcard.env { background: var(--purple); color: #fff; }
+  .dcard.env .u { background: rgba(255, 255, 255, .18); }
+  .dcard.gh { background: #fff; color: #1f2328; border-color: #1f2328; box-shadow: 2px 3px 0 #1f2328; }
+  a.dcard.gh:hover { box-shadow: 3px 4px 0 #1f2328; }
+  .dcard.gh .k, .dcard.gh .n { color: #59636e; }
+  .dcard.gh .u { background: #f6f8fa; color: #1f2328; }
+  .dcard.off { opacity: .55; box-shadow: none; }
   .btn.primary { background: var(--purple-deep); border-color: var(--purple-deep); color: #fff; }
   .btn.primary:hover { background: var(--ink); }
   .btn.warn { border-color: #f0a540; color: var(--warn); background: #fff; }
@@ -191,6 +208,7 @@
   .timeline .msg { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .timeline .msg.bad > span { color: #b42318; }
   .timeline .lines { margin: 0; padding: 6px 8px; list-style: none; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 400 11.5px/1.5 var(--mono); color: var(--grey-700); overflow-x: auto; }
+  .timeline .lines a { color: var(--purple-deep); }
   .timeline .lines li { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
   .waiting { padding: 28px 16px; text-align: center; border: 1.5px dashed var(--line); border-radius: 10px; color: var(--grey-500); }
   .preview { border: 1.5px solid var(--line); border-radius: 10px; background: var(--purple-soft); height: 160px; display: flex; align-items: center; justify-content: center; color: var(--grey-500); font-size: 13px; }
@@ -908,6 +926,32 @@
     });
     return out.map(function (x) { return typeof x === 'string' ? x : '@ ' + x.name + '   +' + x.add + ' −' + x.del; });
   }
+  // The Pull request station's two results, as cards that look different on
+  // purpose: the preview opens the shop with this PR's code through a unique
+  // mirrord link, the PR opens GitHub.
+  var WINDOW_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg>';
+  var GITHUB_SVG = '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
+  function deliverHtml(rec) {
+    var bare = function (u) { return u.replace(/^https:\/\//, '').replace(/\/$/, ''); };
+    var pr = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(rec.pr_url || '');
+    var env = rec.url
+      ? '<a class="dcard env" href="' + esc(rec.url) + '" target="_blank" rel="noopener">' +
+        '<span class="k">' + WINDOW_SVG + 'mirrord preview environment</span>' +
+        '<span class="t">Open preview</span>' +
+        '<span class="u">' + esc(bare(rec.url)) + '</span>' +
+        '<span class="n">Unique link to this PR\'s code. Everyone else sees staging.</span></a>'
+      : '<div class="dcard env off"><span class="k">' + WINDOW_SVG + 'mirrord preview environment</span><span class="t">Preview starting</span>' +
+        '<span class="n">The link shows here when it is up.</span></div>';
+    var gh = rec.pr_url
+      ? '<a class="dcard gh" href="' + esc(rec.pr_url) + '" target="_blank" rel="noopener">' +
+        '<span class="k">' + GITHUB_SVG + 'GitHub' + (pr ? ' · ' + esc(pr[1]) : '') + '</span>' +
+        '<span class="t">Open PR' + (pr ? ' #' + esc(pr[2]) : '') + '</span>' +
+        '<span class="u">' + esc(bare(rec.pr_url)) + '</span>' +
+        '<span class="n">Diff, CI checks and evidence. Merge there.</span></a>'
+      : '<div class="dcard gh off"><span class="k">' + GITHUB_SVG + 'GitHub</span><span class="t">PR not open yet</span>' +
+        '<span class="n">The link shows here when the agent opens it.</span></div>';
+    return '<div class="deliver">' + env + gh + '</div>';
+  }
   var CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
   // Shared environments: the staging shop that mirrord up and the preview run
@@ -969,9 +1013,20 @@
     }
     return h && h.run_id === (rec.run_id || '-') ? h.items : [];
   }
+  // https URLs in a log line become links; every other part is escaped. A
+  // trailing ) . , or ; stays text, not part of the link.
+  function linkify(text) {
+    var out = '', last = 0, re = /https:\/\/[^\s<>"']+/g, m;
+    while ((m = re.exec(text))) {
+      var u = m[0].replace(/[).,;]+$/, '');
+      out += esc(text.slice(last, m.index)) + '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(u) + '</a>';
+      last = m.index + u.length;
+    }
+    return out + esc(text.slice(last));
+  }
   function timelineHtml(list) {
     return '<ol class="timeline">' + list.map(function (x) {
-      var lines = x.lines && x.lines.length ? '<ul class="lines">' + x.lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' : '';
+      var lines = x.lines && x.lines.length ? '<ul class="lines">' + x.lines.map(function (l) { return '<li>' + linkify(l) + '</li>'; }).join('') + '</ul>' : '';
       return '<li><time>' + esc(hhmm(x.at)) + '</time><div class="msg' + (x.bad ? ' bad' : '') + '">' + (x.msg ? '<span>' + esc(x.msg) + '</span>' : '') + lines + '</div></li>';
     }).join('') + '</ol>';
   }
@@ -991,6 +1046,7 @@
     // requests through mirrord and the screenshots), then the agent's reports
     // for that station.
     var html = '<h4>' + esc(intro) + '</h4>', results = '';
+    if (tab === 'pr') results += deliverHtml(rec);
     if (tab === 'code' && rec.diff) results += '<div class="sub">Code changes</div>' + codeHtml(gitDiffLines(rec.diff));
     if (tab === 'verify') {
       if (v.key) html += '<div class="box">Split mode. Only requests with <code>baggage: mirrord-session=' + esc(v.key) + '</code> reach this run\'s code.</div>';
@@ -1004,7 +1060,7 @@
     if (tab === 'verify') html += envLinksHtml(v.key);
     var links = [];
     if (rec.session_url) links.push('<a href="' + esc(rec.session_url) + '" target="_blank" rel="noopener">Open run (Claude Code session)</a>');
-    if (tab === 'pr' || tab === 'production') {
+    if (tab === 'production') {
       if (rec.url) links.push('<a href="' + esc(rec.url) + '" target="_blank" rel="noopener">Open preview</a>');
       if (rec.pr_url) links.push('<a href="' + esc(rec.pr_url) + '" target="_blank" rel="noopener">Open PR</a>');
     }
