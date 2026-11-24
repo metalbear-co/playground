@@ -179,6 +179,17 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <Header showSubtitle />
+      {/* MetalMart V2 announcement banner */}
+      <div
+        role="status"
+        data-testid="v2-banner"
+        className="w-full bg-gradient-to-r from-[#6a4ff5] to-[#8b73f8] px-6 py-3 text-center text-sm font-semibold text-white sm:text-base"
+      >
+        <span className="mr-2 inline-block rounded-full bg-[#f59e0b] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-900">
+          V2
+        </span>
+        MetalMart V2 is here!
+      </div>
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
         <section className="flex-1 px-6 py-12">
