@@ -80,6 +80,17 @@
   .link { font: 600 12.5px/1 var(--body); color: var(--purple-deep); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 
   td.title.editable { cursor: text; }
+  tr.flash td { animation: flash 1.6s ease-out; }
+  @keyframes flash { 0%, 40% { background: #fff3df; } 100% { background: transparent; } }
+  .addbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; }
+  .addbar input { flex: 1 1 260px; min-width: 0; max-width: 460px; font: 500 13px/1.3 var(--mono); padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; color: #000; }
+  .addbar input:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-mid); }
+  .addbar .msg { font-size: 12.5px; color: var(--grey-500); }
+  .addbar .msg.err { color: var(--bad); }
+  .x { font: 600 15px/1 var(--body); color: var(--grey-500); background: none; border: 0; padding: 6px 4px 6px 8px; cursor: pointer; vertical-align: middle; }
+  .x:hover { color: var(--bad); }
+  .info { margin-top: 8px; font: 500 12px/1.45 var(--body); color: var(--purple-deep); background: var(--purple-mid); border-radius: 6px; padding: 8px 10px; }
+  .muted { color: var(--grey-500); }
 
   dialog { border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); background: var(--cream); color: var(--grey-700); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(35, 33, 65, 0.35); }
@@ -116,25 +127,17 @@
   <h1 id="greeting">Good morning, your tasks for today</h1>
   <p class="sub">Linear tickets assigned to you. Either run on Claude Code cloud agents: each run branches, verifies with mirrord against the playground cluster, and opens a PR with a preview environment. Or debug locally with mirrord against the staging cluster.</p>
 
+  <form class="addbar" id="add-form" autocomplete="off">
+    <input id="add-ticket" type="text" spellcheck="false" placeholder="Linear issue URL or ID, e.g. SOL-175" aria-label="Linear issue URL or ID" />
+    <button class="btn" type="submit">Add task</button>
+    <span class="msg" id="add-msg" aria-live="polite"></span>
+  </form>
+
   <table>
     <thead>
       <tr><th>Ticket</th><th>Title</th><th class="hide-sm">Services</th><th>Type</th><th>Status</th><th class="hide-sm">Notes</th><th></th></tr>
     </thead>
-    <tbody>
-      <tr class="live" id="row-live">
-        <td class="ticket">
-          <a id="ticket-live" href="https://linear.app/metalbear/issue/SOL-175" target="_blank" rel="noopener">SOL-175</a>
-        </td>
-        <td class="title editable" id="title-cell-live" title="Double-click to edit">
-          <span id="title-live">MetalMart V2</span>
-          <div id="feedback-live"></div>
-        </td>
-        <td class="services hide-sm">order-service<br />metal-mart-frontend<br />chat-service</td>
-        <td><span class="kind feature">Feature</span></td>
-        <td><span class="status ready" id="status-live"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg><span>Ready</span></span></td>
-        <td class="note hide-sm" id="note-live">routine claude-agent-demo</td>
-        <td class="action"><button class="btn" id="run-live" type="button">Run agent</button> <button class="btn" type="button" data-resolve>Resolved</button></td>
-      </tr>
+    <tbody id="tasks">
       <tr class="live" id="bug-live">
         <td class="ticket">BUG-101</td>
         <td class="title">Uppercase inventory: product names should be capital case</td>
@@ -237,19 +240,38 @@
   </table>
 
   <div class="foot">
-    <span>Routine: <span id="kv-trigger" style="font-family: var(--mono)">claude-agent-demo</span> · playground cluster · namespace shop</span>
-    <button class="link" id="reset" type="button" title="Clears the in-progress state. The edited ticket id and title are kept.">Reset demo state</button>
+    <span>Routine: <span id="kv-trigger" style="font-family: var(--mono)">not set</span> · playground cluster · namespace shop</span>
+    <span>
+      <span id="new-ticket-wrap" hidden><button class="link" id="new-ticket" type="button" title="Creates a new Linear issue as a copy of the demo template issue and adds it to your tasks">New demo ticket</button>
+      &nbsp;·&nbsp;</span>
+      <button class="link" id="open-settings" type="button" title="Your Claude Code routine: the Run agent button fires it">Agent settings</button>
+      &nbsp;·&nbsp;
+      <button class="link" id="reset" type="button" title="Clears the finished results of your tasks and the sample rows. Your task list and running agents stay.">Reset demo state</button>
+    </span>
   </div>
 </div>
 
+<dialog id="settings-dialog">
+  <form method="dialog" id="settings-form">
+    <h3>Agent settings</h3>
+    <label for="set-routine">Routine id</label>
+    <input id="set-routine" type="text" autocomplete="off" spellcheck="false" placeholder="trig_01..." pattern="trig_[A-Za-z0-9]{8,64}" style="font-family: var(--mono)" />
+    <label for="set-routine-token">Routine API token</label>
+    <input id="set-routine-token" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-oat01-..." style="font-family: var(--mono)" />
+    <p class="hint">Your own routine, so the run uses your claude.ai account. Saved in this browser only and sent only to this shop's server. Leave both empty to use the shared routine, if the server has one.</p>
+    <div class="row">
+      <button class="btn quiet" type="button" id="settings-cancel" style="cursor:pointer">Cancel</button>
+      <button class="btn" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="edit-dialog">
   <form method="dialog" id="edit-form">
-    <h3>Edit live ticket</h3>
-    <label for="edit-ticket">Linear ticket</label>
-    <input id="edit-ticket" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="SOL-175" required pattern="[A-Za-z]+-\d+" />
+    <h3>Edit task title · <span id="edit-ticket" style="font-family: var(--mono)"></span></h3>
     <label for="edit-title">Title</label>
     <input id="edit-title" type="text" autocomplete="off" placeholder="MetalMart V2" required />
-    <p class="hint">Saved in this browser only. Reset demo state keeps it.</p>
+    <p class="hint">Saved in this browser only. Without your own title, the row shows the title from the Linear issue once the agent reads it.</p>
     <div class="row">
       <button class="btn quiet" type="button" id="edit-cancel" style="cursor:pointer">Cancel</button>
       <button class="btn" type="submit" id="edit-save">Save</button>
@@ -259,29 +281,29 @@
 
 <script>
 (function () {
-  var KEY = 'metal-mart-cloud-agents:run';
-  var LABEL_KEY = 'metal-mart-cloud-agents:label';
   var RESOLVED_KEY = 'metal-mart-cloud-agents:resolved';
+  var TICKETS_KEY = 'metal-mart-cloud-agents:tickets';
+  var ROUTINE_KEY = 'metal-mart-cloud-agents:routine';
+  var DEV_KEY = 'metal-mart-cloud-agents:dev';
   var API = 'api/cloud-agents/run'; // relative, so it works under the /shop base path too
-  var CALLBACK = 'api/cloud-agents/callback'; // the agent posts its links here when it finishes
+  var CALLBACK = 'api/cloud-agents/callback'; // ticket records: the agent reports here, the rows read here
   var POLL_MS = 5000;
+  // Same window as ACTIVE_MS on the server: a run that has not reported back
+  // after this long is shown as stalled, with the link to its Claude Code
+  // session, and the ticket can be run again.
+  var STALL_MS = 45 * 60 * 1000;
 
-  var ticketEl = document.getElementById('ticket-live');
-  var titleEl = document.getElementById('title-live');
-  var btn = document.getElementById('run-live');
-  var status = document.getElementById('status-live');
-  var note = document.getElementById('note-live');
-  var feedback = document.getElementById('feedback-live');
   var pill = document.getElementById('api-pill');
   var pillText = document.getElementById('api-pill-text');
-  var TICKET = ticketEl.textContent.trim();
 
   var SPIN = '<svg class="spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2a6 6 0 1 1-6 6"/></svg>';
   var CROSS = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
   var CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>';
+  var ARROW = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>';
 
+  function hhmm(d) { return d.toTimeString().slice(0, 5); }
   function hhmmss(d) { return d.toTimeString().slice(0, 8); }
-  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function save(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch (e) {} }
 
@@ -329,143 +351,304 @@
       return res;
     });
   }
+  function readJson(res) {
+    return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; });
+  }
 
-  // The live row's ticket id + title are editable so each demo can point at a
-  // fresh Linear issue. Double-click the title cell to open the dialog (no visible
-  // control, so the audience does not see it); Save stores the label in
-  // localStorage, Esc or Cancel discards.
-  var dlg = document.getElementById('edit-dialog');
-  var inTicket = document.getElementById('edit-ticket');
-  var inTitle = document.getElementById('edit-title');
-  function applyLabel(l) {
-    if (l && l.ticket) { TICKET = l.ticket.trim().toUpperCase(); ticketEl.textContent = TICKET; }
-    if (l && l.title) titleEl.textContent = l.title.trim();
-    ticketEl.href = 'https://linear.app/metalbear/issue/' + encodeURIComponent(TICKET);
-    document.title = 'Your tasks · ' + TICKET + ' · MetalMart R&D';
+  // Agent settings: the presenter's own routine. A routine runs as the
+  // claude.ai account that owns it; the id and API token are kept in this
+  // browser and sent to the run endpoint as X-Routine-Id / X-Routine-Token.
+  // Empty settings fall back to the server's shared routine, when it has one.
+  var serverRoutine = null; // trigger id configured on the server, from GET api/cloud-agents/run
+  var setDlg = document.getElementById('settings-dialog');
+  var inRoutine = document.getElementById('set-routine');
+  var inRoutineToken = document.getElementById('set-routine-token');
+  function myRoutine() { var r = load(ROUTINE_KEY); return r && r.id && r.token ? r : null; }
+  function showRoutine() {
+    var mine = myRoutine();
+    var kv = document.getElementById('kv-trigger');
+    if (mine) { pill.dataset.state = 'ok'; pillText.textContent = 'api: your routine'; kv.textContent = mine.id; }
+    else if (serverRoutine) { pill.dataset.state = 'ok'; pillText.textContent = 'api: shared routine'; kv.textContent = serverRoutine + ' (shared)'; }
+    else { pill.dataset.state = 'off'; pillText.textContent = 'api: no routine'; kv.textContent = 'not set'; }
   }
-  function openEditor() {
-    inTicket.value = TICKET;
-    inTitle.value = titleEl.textContent.trim();
-    dlg.showModal();
-    inTitle.focus(); inTitle.select();
+  function openSettings() {
+    var r = load(ROUTINE_KEY) || {};
+    inRoutine.value = r.id || '';
+    inRoutineToken.value = r.token || '';
+    setDlg.showModal();
+    inRoutine.focus();
   }
-  document.getElementById('title-cell-live').addEventListener('dblclick', function (e) { e.preventDefault(); openEditor(); });
-  document.getElementById('edit-cancel').addEventListener('click', function () { dlg.close(); });
-  document.getElementById('edit-form').addEventListener('submit', function (e) {
+  document.getElementById('open-settings').addEventListener('click', openSettings);
+  document.getElementById('settings-cancel').addEventListener('click', function () { setDlg.close(); });
+  document.getElementById('settings-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    var l = { ticket: inTicket.value.trim().toUpperCase(), title: inTitle.value.trim() };
-    if (!l.ticket || !l.title) return;
-    applyLabel(l);
-    save(LABEL_KEY, l);
-    dlg.close();
+    var id = inRoutine.value.trim(), tok = inRoutineToken.value.trim();
+    if (!id && !tok) save(ROUTINE_KEY, null);
+    else if (!id || !tok) { (id ? inRoutineToken : inRoutine).focus(); return; }
+    else save(ROUTINE_KEY, { id: id, token: tok });
+    showRoutine();
+    setDlg.close();
   });
-  applyLabel(load(LABEL_KEY));
 
-  function setInProgress(state) {
-    status.className = 'status running';
-    status.innerHTML = SPIN + '<span>In progress</span>';
-    note.textContent = 'started ' + hhmmss(new Date(state.startedAt)) + ' · branch claude/' + TICKET.toLowerCase();
-    btn.disabled = true;
-    btn.className = 'btn quiet';
-    btn.textContent = 'Running';
-    btn.dataset.href = '';
-    if (state.url) {
-      var a = document.createElement('a'); a.href = state.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'open run'; a.style.marginLeft = '8px';
-      note.appendChild(document.createTextNode(' · ')); note.appendChild(a);
-    }
-    feedback.innerHTML = '';
+  // Task rows: one row per Linear ticket. The list of tickets is this
+  // browser's own (localStorage), so each presenter sees only the tasks they
+  // added. The state of a ticket lives on the server, one record per ticket
+  // (api/cloud-agents/callback), and every row shows its ticket's record: two
+  // presenters with the same ticket see the same run, and Run agent never
+  // starts a second run for a ticket that is in progress.
+  var tbody = document.getElementById('tasks');
+  var anchor = document.getElementById('bug-live'); // task rows go above the sample rows
+  var records = {}; // ticket -> server record (null: no record)
+  var local = {};   // ticket -> {starting} | {error} | {info}: state of this browser's last click
+
+  function myTickets() { var l = load(TICKETS_KEY); return Array.isArray(l) ? l.filter(function (x) { return x && x.ticket; }) : []; }
+  function saveTickets(l) { save(TICKETS_KEY, l.length ? l : null); }
+  function findItem(t) { var l = myTickets(); for (var i = 0; i < l.length; i++) if (l[i].ticket === t) return l[i]; return null; }
+
+  // Accepts a Linear issue URL (linear.app/<workspace>/issue/SOL-175/<slug>) or
+  // a bare id. The URL slug gives a first title until the agent reports the
+  // issue's real title.
+  function parseTicket(raw) {
+    var s = String(raw || '').trim();
+    var m = /linear\.app\/[^\/\s]+\/issue\/([A-Za-z]+-\d+)(?:\/([^\/?#\s]+))?/i.exec(s);
+    if (m) return { ticket: m[1].toUpperCase(), title: m[2] ? slugTitle(m[2]) : '' };
+    m = /^([A-Za-z]+-\d+)$/.exec(s);
+    return m ? { ticket: m[1].toUpperCase(), title: '' } : null;
   }
-
-  function setFailed(message) {
-    status.className = 'status failed';
-    status.innerHTML = CROSS + '<span>Failed to start</span>';
-    feedback.innerHTML = '<div class="error">' + esc(message) + '</div>';
-    btn.disabled = false;
-    btn.textContent = 'Retry';
+  function slugTitle(slug) {
+    var t = ''; try { t = decodeURIComponent(slug); } catch (e) { t = slug; }
+    t = t.replace(/-/g, ' ').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
   }
-
-  function findUrl(obj) {
-    if (!obj || typeof obj !== 'object') return null;
-    var keys = ['url', 'session_url', 'claude_ai_url', 'web_url'];
-    for (var i = 0; i < keys.length; i++) if (typeof obj[keys[i]] === 'string' && /^https?:\/\//.test(obj[keys[i]])) return obj[keys[i]];
-    for (var k in obj) { if (obj[k] && typeof obj[k] === 'object') { var u = findUrl(obj[k]); if (u) return u; } }
-    return null;
-  }
-
-  // Completion: the agent posts {ticket, url, pr_url, status} to CALLBACK. While a
-  // run is in progress the row polls for it, and on load it checks once so any
-  // browser shows the finished state. The poll asks for the latest result of any
-  // ticket, not the one typed into the row: the agent picks whichever Linear
-  // issue carries the demo label, so the row adopts the ticket the agent reports.
-  // Links render on the live row; the button turns into "Open preview".
-  var pollTimer = null;
   function link(href, text) { var a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text; return a; }
-  function renderResult(r) {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    if (isResolved(TICKET)) return;
-    if (r.ticket && r.ticket !== TICKET) {
-      applyLabel({ ticket: r.ticket });
-      var l = load(LABEL_KEY) || {};
-      save(LABEL_KEY, { ticket: TICKET, title: l.title || titleEl.textContent.trim() });
-    }
-    var when = hhmmss(new Date(r.received_at));
-    if (r.status === 'failed') {
-      status.className = 'status failed'; status.innerHTML = CROSS + '<span>Failed</span>';
-      note.textContent = 'agent reported failure · ' + when;
-    } else if (r.status === 'running') {
-      status.className = 'status running'; status.innerHTML = SPIN + '<span>In progress</span>';
-      note.textContent = (r.message || 'agent update') + ' · ' + when;
-    } else {
-      status.className = 'status done'; status.innerHTML = CHECK + '<span>Done</span>';
-      note.textContent = 'preview ready · ' + when;
-    }
-    if (r.url || r.pr_url) {
-      note.appendChild(document.createTextNode(' · '));
-      if (r.url) note.appendChild(link(r.url, 'preview env'));
-      if (r.url && r.pr_url) note.appendChild(document.createTextNode(' · '));
-      if (r.pr_url) note.appendChild(link(r.pr_url, 'PR'));
-    }
-    if (r.message && r.status !== 'running') feedback.innerHTML = '<div class="' + (r.status === 'failed' ? 'error' : 'note') + '">' + esc(r.message) + '</div>';
-    var target = r.url || r.pr_url;
-    btn.dataset.href = '';
-    if (r.status === 'running') {
-      btn.className = 'btn quiet'; btn.disabled = true; btn.textContent = 'Running';
-    } else if (r.status === 'failed') {
-      btn.className = 'btn'; btn.disabled = false; btn.textContent = 'Retry';
-    } else {
-      btn.className = 'btn'; btn.disabled = !target; btn.textContent = target ? (r.url ? 'Open preview' : 'Open PR') : 'Done';
-      btn.dataset.href = target || '';
-    }
-    if (r.status !== 'running') save(KEY, null);
+  function stalled(rec) { return rec.status === 'running' && Date.now() - new Date(rec.started_at || rec.received_at).getTime() > STALL_MS; }
+
+  function rowFor(t) {
+    var tr = tbody.querySelector('tr[data-ticket="' + t + '"]');
+    if (tr) return tr;
+    tr = document.createElement('tr');
+    tr.dataset.ticket = t;
+    tr.innerHTML = '<td class="ticket"><a target="_blank" rel="noopener"></a></td>' +
+      '<td class="title editable" title="Double-click to edit"><span class="t"></span><div class="fb"></div></td>' +
+      '<td class="services hide-sm muted">—</td><td><span class="kind feature">Feature</span></td>' +
+      '<td><span class="status"></span></td><td class="note hide-sm"></td><td class="action"></td>';
+    var a = tr.querySelector('td.ticket a');
+    a.textContent = t; a.href = 'https://linear.app/metalbear/issue/' + encodeURIComponent(t);
+    return tr;
   }
-  function pollResult(onEmpty) {
-    fetch(CALLBACK, { cache: 'no-store' })
+
+  function renderRow(tr, item) {
+    var t = item.ticket, rec = records[t] || null, mine = local[t] || {};
+    var st = tr.querySelector('.status'), note = tr.querySelector('td.note'), act = tr.querySelector('td.action'), fb = tr.querySelector('.fb');
+    tr.querySelector('.t').textContent = (item.custom && item.title) || (rec && rec.title) || item.title || ('Linear issue ' + t);
+    note.textContent = ''; fb.innerHTML = ''; act.innerHTML = '';
+    function button(label, actName, opts) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn' + (opts && opts.quiet ? ' quiet' : ''); b.dataset.act = actName;
+      b.innerHTML = label; if (opts && opts.disabled) b.disabled = true;
+      act.appendChild(b); act.appendChild(document.createTextNode(' '));
+      return b;
+    }
+    function sessionLink(r) { if (r && r.session_url) { note.appendChild(document.createTextNode(' · ')); note.appendChild(link(r.session_url, 'open run')); } }
+
+    if (mine.starting) {
+      st.className = 'status running'; st.innerHTML = SPIN + '<span>Starting</span>';
+      note.textContent = 'starting the agent';
+      button(SPIN + ' Starting…', 'none', { quiet: true, disabled: true });
+    } else if (!rec) {
+      st.className = 'status ready'; st.innerHTML = ARROW + '<span>Ready</span>';
+      note.textContent = 'branch claude/' + t.toLowerCase();
+      button(mine.error ? 'Retry' : 'Run agent', 'run');
+    } else if (rec.status === 'running' && !stalled(rec)) {
+      st.className = 'status running'; st.innerHTML = SPIN + '<span>In progress</span>';
+      note.textContent = (rec.message || 'agent working') + ' · started ' + hhmm(new Date(rec.started_at || rec.received_at)) + (rec.started_by ? ' by ' + rec.started_by : '');
+      sessionLink(rec);
+      button('Running', 'none', { quiet: true, disabled: true });
+    } else if (rec.status === 'running') {
+      st.className = 'status failed'; st.innerHTML = CROSS + '<span>No result</span>';
+      note.textContent = 'no report from the agent since ' + hhmm(new Date(rec.received_at));
+      sessionLink(rec);
+      fb.innerHTML = '<div class="error">The agent did not report back. Open the run to see why, or run it again.</div>';
+      button('Retry', 'run'); button('Reset', 'reset');
+    } else if (rec.status === 'failed') {
+      st.className = 'status failed'; st.innerHTML = CROSS + '<span>Failed</span>';
+      note.textContent = 'agent reported failure · ' + hhmm(new Date(rec.received_at));
+      sessionLink(rec);
+      if (rec.message) fb.innerHTML = '<div class="error">' + esc(rec.message) + '</div>';
+      button('Retry', 'run'); button('Reset', 'reset');
+    } else {
+      st.className = 'status done'; st.innerHTML = CHECK + '<span>Done</span>';
+      note.textContent = (rec.url ? 'preview ready' : 'PR opened') + ' · ' + hhmm(new Date(rec.received_at));
+      if (rec.url) { note.appendChild(document.createTextNode(' · ')); note.appendChild(link(rec.url, 'preview env')); }
+      if (rec.pr_url) { note.appendChild(document.createTextNode(' · ')); note.appendChild(link(rec.pr_url, 'PR')); }
+      var target = rec.url || rec.pr_url;
+      if (target) button(rec.url ? 'Open preview' : 'Open PR', 'open').dataset.href = target;
+      button('Reset', 'reset');
+    }
+    if (mine.error) fb.innerHTML = '<div class="error">' + esc(mine.error) + '</div>';
+    else if (mine.info) fb.innerHTML = '<div class="info">' + esc(mine.info) + '</div>';
+    var x = document.createElement('button');
+    x.type = 'button'; x.className = 'x'; x.dataset.act = 'remove'; x.title = 'Remove from your list'; x.setAttribute('aria-label', 'Remove ' + t + ' from your list'); x.textContent = '×';
+    act.appendChild(x);
+  }
+
+  function renderAll() {
+    var list = myTickets(), keep = {};
+    list.forEach(function (item) {
+      keep[item.ticket] = true;
+      var tr = rowFor(item.ticket);
+      tbody.insertBefore(tr, anchor);
+      renderRow(tr, item);
+    });
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr[data-ticket]'), function (tr) { if (!keep[tr.dataset.ticket]) tr.remove(); });
+  }
+  function flash(t) {
+    var tr = tbody.querySelector('tr[data-ticket="' + t + '"]');
+    if (!tr) return;
+    tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash');
+    tr.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function poll() {
+    var list = myTickets();
+    if (!list.length || document.hidden) return;
+    fetch(CALLBACK + '?tickets=' + list.map(function (x) { return x.ticket; }).join(','), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && d.result) renderResult(d.result); else if (onEmpty) onEmpty(); })
+      .then(function (d) {
+        if (!d || !d.results) return;
+        records = d.results;
+        // Keep the Linear title the agent reported, so the row keeps it after a Reset.
+        var changed = false;
+        var next = myTickets().map(function (x) {
+          var r = records[x.ticket];
+          if (x.custom || !r || !r.title || r.title === x.title) return x;
+          changed = true; return { ticket: x.ticket, title: r.title };
+        });
+        if (changed) saveTickets(next);
+        renderAll();
+      })
       .catch(function () {});
   }
-  function startPolling() { if (!pollTimer) pollTimer = setInterval(pollResult, POLL_MS); }
 
-  btn.addEventListener('click', function () {
-    if (btn.dataset.href) { window.open(btn.dataset.href, '_blank', 'noopener'); return; }
-    btn.disabled = true;
-    btn.innerHTML = SPIN + ' Starting…';
-    feedback.innerHTML = '';
-
-    authFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: TICKET }) })
-      .then(function (res) { return res.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { d = { raw: t }; } return { ok: res.ok, status: res.status, data: d }; }); })
+  function runTicket(t) {
+    var mine = myRoutine();
+    if (!mine && !serverRoutine) { openSettings(); return; }
+    local[t] = { starting: true }; renderAll();
+    var headers = { 'Content-Type': 'application/json' };
+    if (mine) { headers['X-Routine-Id'] = mine.id; headers['X-Routine-Token'] = mine.token; }
+    authFetch(API, { method: 'POST', headers: headers, body: JSON.stringify({ ticket: t, started_by: load(DEV_KEY) || undefined }) })
+      .then(readJson)
       .then(function (r) {
         if (!r.ok) {
           var msg = (r.data && (r.data.error || (r.data.result && r.data.result.error && (r.data.result.error.message || r.data.result.error)))) || ('HTTP ' + r.status);
           throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
         }
-        var state = { startedAt: r.data.started_at || new Date().toISOString(), url: findUrl(r.data.result), trigger: r.data.trigger_id };
-        save(KEY, state);
-        setInProgress(state);
-        startPolling();
+        local[t] = {};
+        if (r.data.record) records[t] = r.data.record;
+        if (r.data.already_running) {
+          var rec = r.data.record || {};
+          local[t] = { info: t + ' is already running' + (rec.started_by ? ' (started by ' + rec.started_by + ')' : '') + ' since ' + hhmm(new Date(rec.started_at || Date.now())) + '. This row follows that run.' };
+          setTimeout(function () { if (local[t] && local[t].info) { local[t] = {}; renderAll(); } }, 15000);
+        }
+        renderAll();
       })
-      .catch(function (err) { setFailed(err.message || String(err)); });
+      .catch(function (err) { local[t] = { error: err.message || String(err) }; renderAll(); });
+  }
+
+  function resetTicket(t) {
+    authFetch(CALLBACK + '?ticket=' + encodeURIComponent(t), { method: 'DELETE' })
+      .then(function () { records[t] = null; local[t] = {}; renderAll(); })
+      .catch(function (err) { local[t] = { error: err.message || String(err) }; renderAll(); });
+  }
+
+  tbody.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-act]');
+    var tr = b && b.closest('tr[data-ticket]');
+    if (!tr) return;
+    var t = tr.dataset.ticket;
+    if (b.dataset.act === 'run') runTicket(t);
+    else if (b.dataset.act === 'open' && b.dataset.href) window.open(b.dataset.href, '_blank', 'noopener');
+    else if (b.dataset.act === 'reset') resetTicket(t);
+    else if (b.dataset.act === 'remove') { saveTickets(myTickets().filter(function (x) { return x.ticket !== t; })); delete local[t]; renderAll(); }
   });
+
+  // Add task: one row per ticket. A ticket that is already in the list is
+  // highlighted instead of added again.
+  var addForm = document.getElementById('add-form');
+  var addInput = document.getElementById('add-ticket');
+  var addMsg = document.getElementById('add-msg');
+  function say(text, isErr) { addMsg.textContent = text; addMsg.className = 'msg' + (isErr ? ' err' : ''); }
+  addForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var p = parseTicket(addInput.value);
+    if (!p) { say('Paste a Linear issue URL or an id like SOL-175.', true); return; }
+    addInput.value = '';
+    if (findItem(p.ticket)) { say(p.ticket + ' is already in your list.'); flash(p.ticket); return; }
+    var list = myTickets(); list.unshift({ ticket: p.ticket, title: p.title }); saveTickets(list);
+    say('');
+    renderAll(); flash(p.ticket); poll();
+  });
+
+  // New demo ticket: the server copies the template Linear issue (status
+  // Backlog, label claude-agent-demo) and returns the new ticket, which becomes
+  // a task row. The button shows only when the server has a Linear API key and
+  // a template issue configured. It sits in the footer, away from the task
+  // controls, because it creates a real Linear issue.
+  var LINEAR_API = 'api/cloud-agents/linear-issue';
+  var newBtn = document.getElementById('new-ticket');
+  newBtn.addEventListener('click', function () {
+    newBtn.disabled = true; newBtn.innerHTML = SPIN + ' Creating…'; say('');
+    authFetch(LINEAR_API, { method: 'POST' })
+      .then(readJson)
+      .then(function (r) {
+        if (!r.ok || !r.data.ticket) throw new Error((r.data && r.data.error) || ('HTTP ' + r.status));
+        var p = parseTicket(r.data.ticket);
+        if (!p) throw new Error('unexpected ticket id ' + r.data.ticket);
+        if (!findItem(p.ticket)) { var list = myTickets(); list.unshift({ ticket: p.ticket, title: r.data.title || '' }); saveTickets(list); }
+        renderAll(); flash(p.ticket); poll();
+        addMsg.className = 'msg'; addMsg.textContent = 'Created ' + p.ticket + (r.data.template ? ' (copy of ' + r.data.template + ')' : '') + ' · ';
+        if (r.data.url) addMsg.appendChild(link(r.data.url, 'open in Linear'));
+      })
+      .catch(function (err) { say('New demo ticket failed: ' + (err.message || String(err)), true); })
+      .then(function () { newBtn.disabled = false; newBtn.textContent = 'New demo ticket'; });
+  });
+  fetch(LINEAR_API, { method: 'GET' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) { if (d && d.configured) { document.getElementById('new-ticket-wrap').hidden = false; if (d.template) newBtn.title = 'Creates a new Linear issue as a copy of ' + d.template + ' and adds it to your tasks'; } })
+    .catch(function () {});
+
+  // Double-click a task title to set your own title. It is kept in this browser
+  // and wins over the title the agent reports from Linear.
+  var dlg = document.getElementById('edit-dialog');
+  var editTicket = document.getElementById('edit-ticket');
+  var inTitle = document.getElementById('edit-title');
+  var editing = null;
+  tbody.addEventListener('dblclick', function (e) {
+    var td = e.target.closest('td.title');
+    var tr = td && td.closest('tr[data-ticket]');
+    if (!tr) return;
+    e.preventDefault();
+    editing = tr.dataset.ticket;
+    editTicket.textContent = editing;
+    inTitle.value = tr.querySelector('.t').textContent.trim();
+    dlg.showModal(); inTitle.focus(); inTitle.select();
+  });
+  document.getElementById('edit-cancel').addEventListener('click', function () { dlg.close(); });
+  document.getElementById('edit-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var title = inTitle.value.trim();
+    if (!title || !editing) return;
+    saveTickets(myTickets().map(function (x) { return x.ticket === editing ? { ticket: x.ticket, title: title, custom: true } : x; }));
+    dlg.close(); renderAll();
+  });
+
+  // Browsers that used the single live row (one ticket kept under :label) get
+  // that ticket as their first task; the old per-run keys are dropped.
+  (function migrate() {
+    var old = load('metal-mart-cloud-agents:label');
+    if (old && old.ticket && !load(TICKETS_KEY)) { var p = parseTicket(old.ticket); if (p) saveTickets([{ ticket: p.ticket, title: old.title || '', custom: Boolean(old.title) }]); }
+    ['metal-mart-cloud-agents:label', 'metal-mart-cloud-agents:run', 'metal-mart-cloud-agents:last-run'].forEach(function (k) { save(k, null); });
+  })();
 
   // Bug rows: the live one flips to "Running" locally; the rest are static.
   var BUG_KEY = 'metal-mart-cloud-agents:bug';
@@ -583,22 +766,25 @@
       var row = b.closest('tr');
       var t = row.querySelector('.ticket').textContent.trim();
       var list = resolvedList(); if (list.indexOf(t) === -1) list.push(t); save(RESOLVED_KEY, list);
-      if (row.id === 'row-live') { save(KEY, null); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
       if (row.id === 'bug-live') save(BUG_KEY, null);
       markResolved(row, hhmmss(new Date()));
     });
   });
-  Array.prototype.forEach.call(document.querySelectorAll('tbody tr'), function (row) {
+  Array.prototype.forEach.call(document.querySelectorAll('tbody tr:not([data-ticket])'), function (row) {
     var t = row.querySelector('.ticket').textContent.trim();
     if (isResolved(t)) markResolved(row, 'earlier');
   });
 
-  // Clears the live run in the browser and every stored result on the server,
-  // plus the bug demo state, then reloads. The footer link is the only reset on
-  // the page.
+  // Reset demo state: clears the sample rows' state in this browser and the
+  // finished (or stalled) results of this browser's tasks on the server, then
+  // reloads. The task list stays, and a running agent keeps its record, so a
+  // reset never lets a second run start on a ticket that is in progress.
   function clearRun() {
-    save(KEY, null); save(BUG_KEY, null); save(RESOLVED_KEY, null);
-    authFetch(CALLBACK, { method: 'DELETE' }).catch(function () {}).then(function () { location.reload(); });
+    save(BUG_KEY, null); save(RESOLVED_KEY, null);
+    var done = myTickets().map(function (x) { return x.ticket; }).filter(function (t) { var r = records[t]; return r && (r.status !== 'running' || stalled(r)); });
+    if (!done.length) { location.reload(); return; }
+    Promise.all(done.map(function (t) { return authFetch(CALLBACK + '?ticket=' + encodeURIComponent(t), { method: 'DELETE' }).catch(function () {}); }))
+      .then(function () { location.reload(); });
   }
   document.getElementById('reset').addEventListener('click', clearRun);
 
@@ -607,7 +793,6 @@
   // (`mm dashboard` opens the page that way, taking the name from the developer's
   // machine), is kept in this browser, and is removed from the URL so the link
   // stays shareable. Reset demo state keeps it.
-  var DEV_KEY = 'metal-mart-cloud-agents:dev';
   (function () {
     var m = /[#&?]dev=([^&]+)/.exec(location.hash) || /[?&]dev=([^&]+)/.exec(location.search);
     if (m) {
@@ -621,18 +806,16 @@
     document.getElementById('greeting').textContent = dev ? g + ', ' + dev + '. Your tasks for today' : g + ', your tasks for today';
   })();
 
-  var prior = load(KEY);
-  if (prior && prior.startedAt && !isResolved(TICKET)) { setInProgress(prior); startPolling(); }
-  pollResult();
+  renderAll();
+  poll();
+  setInterval(poll, POLL_MS);
+  document.addEventListener('visibilitychange', poll);
 
+  showRoutine();
   fetch(API, { method: 'GET' })
     .then(function (r) { return r.json(); })
-    .then(function (d) {
-      pill.dataset.state = d.configured ? 'ok' : 'off';
-      pillText.textContent = d.configured ? 'api: connected' : 'api: not configured';
-      if (d.trigger_id) document.getElementById('kv-trigger').textContent = d.trigger_id;
-    })
-    .catch(function () { pill.dataset.state = 'off'; pillText.textContent = 'api: unreachable'; });
+    .then(function (d) { serverRoutine = d.configured ? d.trigger_id : null; showRoutine(); })
+    .catch(function () { if (!myRoutine()) { pill.dataset.state = 'off'; pillText.textContent = 'api: unreachable'; } });
 })();
 </script>
 </body>

@@ -1,73 +1,118 @@
 /**
  * Back-office endpoint for the Cloud Agents dashboard (public/cloud-agents.html, served at /cloud-agents).
  *
- * POST fires the Claude Code cloud routine that picks up Linear issues
- * labelled "claude-agent-demo" and opens a mirrord-verified preview PR. Every
- * stored result is cleared before the routine fires: the dashboard shows the
- * latest callback of any ticket (the agent picks the issue, so the ticket in the
- * body is only the one the dashboard displays), and a stale result from an
- * earlier run would otherwise surface as if it belonged to the new one.
- * GET reports whether the endpoint is configured, so the dashboard can show it.
- * POST requires the dashboard token (Authorization: Bearer
- * <CLOUD_AGENTS_CALLBACK_TOKEN>): the page is public, and firing the routine
- * must not be open to anonymous visitors.
+ * POST fires a Claude Code routine that picks up a Linear issue labelled
+ * "claude-agent-demo" and opens a mirrord-verified preview PR (see
+ * .claude/skills/cloud-demo-skill-with-mirrord).
  *
- * Configuration (server-side env):
- *   CLAUDE_CODE_OAUTH_TOKEN  - OAuth token for the claude.ai account that owns
- *                              the routine (create one with `claude setup-token`).
- *   CLOUD_AGENT_TRIGGER_ID   - routine id to run (trig_...).
- *   ANTHROPIC_BASE_URL       - optional API host override.
+ * Whose routine runs. A routine belongs to one claude.ai account and runs as
+ * that account, so every presenter fires their own: the dashboard sends the
+ * presenter's routine id and routine API token in the X-Routine-Id and
+ * X-Routine-Token headers (entered once in the page's Agent settings, kept in
+ * that browser). When the headers are absent, the server falls back to the
+ * routine configured in its env, if any. The id and the token always come from
+ * the same place: a browser-supplied id is never paired with the server token.
+ *
+ * One run per ticket and board. POST takes the Linear ticket of the dashboard row
+ * ({ticket, started_by?, source?}) and claims that ticket's record in the store
+ * (see lib/cloud-agents-store) before it fires. `source` is the board:
+ * "cloud-agents-dashboard" (the default) or "software-factory"; each board has
+ * its own records, so the same ticket can run on both in parallel. When the ticket already has an active
+ * run, nothing is fired: the response carries that run's record with
+ * already_running: true, and the row follows it. Otherwise the POST mints a run
+ * id and passes it with the ticket to the routine in the fire payload (`text`).
+ * The agent reports back to /api/cloud-agents/callback with both. The callback
+ * URL is deliberately not part of the payload: the agent reads it from its own
+ * environment, so a payload can never redirect the callback token elsewhere.
+ *
+ * POST requires the dashboard token (Authorization: Bearer
+ * <CLOUD_AGENTS_CALLBACK_TOKEN>): the page is public, and the endpoint must not
+ * be an open relay to the routines API.
+ * GET reports whether a server-side routine is configured.
+ *
+ * Configuration (server-side env, all optional):
+ *   CLOUD_AGENT_TRIGGER_ID     - default routine id (trig_...).
+ *   CLOUD_AGENT_ROUTINE_TOKEN  - that routine's API token (Edit routine → Trigger → API →
+ *                                Generate token). CLAUDE_CODE_OAUTH_TOKEN is read as a
+ *                                fallback name.
+ *   ANTHROPIC_BASE_URL         - API host override.
  */
 
+import { randomUUID } from "node:crypto";
 import { denyUnlessAuthorized } from "@/lib/cloud-agents-auth";
-import { clearAll, normalizeTicket } from "@/lib/cloud-agents-store";
+import { claimTicket, cleanText, getRecord, normalizeSource, normalizeTicket, releaseClaim, setRecord } from "@/lib/cloud-agents-store";
 
 const API_BASE = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com";
-const TRIGGER_ID = process.env.CLOUD_AGENT_TRIGGER_ID ?? "trig_01YSsN4xAz2bf3W7Mcb4FBPF";
-const OAUTH_BETA = "oauth-2025-04-20";
+const ROUTINE_BETA = "experimental-cc-routine-2026-04-01";
 const API_VERSION = "2023-06-01";
+const TRIGGER_RE = /^trig_[A-Za-z0-9]{8,64}$/;
 
-function token(): string | undefined {
-  return process.env.CLAUDE_CODE_OAUTH_TOKEN || undefined;
+type Routine = { id: string; token: string; source: "browser" | "server" };
+
+function serverRoutine(): Routine | null {
+  const id = process.env.CLOUD_AGENT_TRIGGER_ID?.trim();
+  const token = (process.env.CLOUD_AGENT_ROUTINE_TOKEN || process.env.CLAUDE_CODE_OAUTH_TOKEN || "").trim();
+  return id && token && TRIGGER_RE.test(id) ? { id, token, source: "server" } : null;
+}
+
+function pickRoutine(req: Request): Routine | { error: string } {
+  const id = req.headers.get("x-routine-id")?.trim();
+  const token = req.headers.get("x-routine-token")?.trim();
+  if (id || token) {
+    if (!id || !token) return { error: "Agent settings need both the routine id and the routine API token" };
+    if (!TRIGGER_RE.test(id)) return { error: "routine id must look like trig_..." };
+    return { id, token, source: "browser" };
+  }
+  return serverRoutine() ?? { error: "No routine configured. Open Agent settings and enter your routine id and API token." };
 }
 
 export async function GET() {
-  return Response.json({
-    configured: Boolean(token()),
-    trigger_id: TRIGGER_ID,
-  });
+  const r = serverRoutine();
+  return Response.json({ configured: Boolean(r), trigger_id: r?.id ?? null });
 }
 
 export async function POST(req: Request) {
   const denied = denyUnlessAuthorized(req);
   if (denied) return denied;
-  const oauth = token();
-  if (!oauth) {
-    return Response.json(
-      { ok: false, error: "CLAUDE_CODE_OAUTH_TOKEN is not set on the frontend service" },
-      { status: 503 }
-    );
-  }
 
-  let ticket: string | null = null;
+  const routine = pickRoutine(req);
+  if ("error" in routine) return Response.json({ ok: false, error: routine.error }, { status: 400 });
+
+  let body: { ticket?: unknown; started_by?: unknown; source?: unknown } = {};
   try {
-    ticket = normalizeTicket(((await req.json()) as { ticket?: unknown }).ticket);
+    body = (await req.json()) as typeof body;
   } catch {
-    ticket = null;
+    body = {};
   }
-  clearAll();
+  const ticket = normalizeTicket(body.ticket);
+  if (!ticket) return Response.json({ ok: false, error: "ticket is required, for example SOL-175" }, { status: 400 });
+  const source = normalizeSource(body.source);
+  if (!source) return Response.json({ ok: false, error: "source must be cloud-agents-dashboard or software-factory" }, { status: 400 });
 
-  const res = await fetch(`${API_BASE}/v1/claude_code/routines/${TRIGGER_ID}/fire`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${oauth}`,
-      "anthropic-beta": OAUTH_BETA,
-      "anthropic-version": API_VERSION,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-    cache: "no-store",
-  });
+  const runId = randomUUID();
+  const claim = claimTicket(ticket, runId, cleanText(body.started_by, 40), source);
+  if ("active" in claim) {
+    return Response.json({ ok: true, already_running: true, ticket, run_id: claim.active.run_id, record: claim.active });
+  }
+
+  const payload = { source, run_id: runId, ticket };
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/v1/claude_code/routines/${routine.id}/fire`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${routine.token}`,
+        "anthropic-beta": ROUTINE_BETA,
+        "anthropic-version": API_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: JSON.stringify(payload) }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    releaseClaim(claim.claimed, claim.previous);
+    return Response.json({ ok: false, error: `routines API unreachable: ${String(err)}` }, { status: 502 });
+  }
 
   const text = await res.text();
   let data: unknown;
@@ -77,15 +122,28 @@ export async function POST(req: Request) {
     data = { raw: text };
   }
 
-  return Response.json(
-    {
-      ok: res.ok,
-      status: res.status,
-      trigger_id: TRIGGER_ID,
-      started_at: new Date().toISOString(),
-      ticket,
-      result: data,
-    },
-    { status: res.ok ? 200 : res.status }
-  );
+  if (!res.ok) {
+    releaseClaim(claim.claimed, claim.previous);
+    return Response.json(
+      { ok: false, status: res.status, trigger_id: routine.id, routine_source: routine.source, ticket, result: data },
+      { status: res.status }
+    );
+  }
+
+  const sessionUrl = (data as { claude_code_session_url?: unknown })?.claude_code_session_url;
+  const record = { ...claim.claimed, message: "Agent started" };
+  if (typeof sessionUrl === "string" && sessionUrl.startsWith("https://")) record.session_url = sessionUrl;
+  // A Reset during the fire clears the claim; do not bring it back.
+  if (getRecord(ticket, source)?.run_id === runId) setRecord(record);
+
+  return Response.json({
+    ok: true,
+    status: res.status,
+    trigger_id: routine.id,
+    routine_source: routine.source,
+    ticket,
+    run_id: runId,
+    record,
+    result: data,
+  });
 }

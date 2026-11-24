@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: main
-          image: ghcr.io/metalbear-co/playground-metal-mart-frontend:d808ffadffd6768972853bec064b1533764f8ff2
+          image: ghcr.io/metalbear-co/playground-metal-mart-frontend:f69f5fe90901f312946b5983c8b36e5a8baeb457
           imagePullPolicy: Always
           env:
             - name: PORT
@@ -34,6 +34,21 @@ spec:
               value: "kafka.infra.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
               value: "support-chat"
+            # Optional shared routine for the Cloud Agents dashboard, used when a
+            # presenter has not entered their own routine in the page's Agent
+            # settings.
+            - name: CLOUD_AGENT_TRIGGER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENT_TRIGGER_ID
+                  optional: true
+            - name: CLOUD_AGENT_ROUTINE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENT_ROUTINE_TOKEN
+                  optional: true
             - name: CLAUDE_CODE_OAUTH_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -45,6 +60,20 @@ spec:
                 secretKeyRef:
                   name: cloud-agents
                   key: CLOUD_AGENTS_CALLBACK_TOKEN
+                  optional: true
+            # Optional: lets the Cloud Agents dashboard copy a template Linear
+            # issue into a new demo ticket ("New demo ticket" button).
+            - name: LINEAR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: LINEAR_API_KEY
+                  optional: true
+            - name: CLOUD_AGENTS_TEMPLATE_ISSUE
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-agents
+                  key: CLOUD_AGENTS_TEMPLATE_ISSUE
                   optional: true
           ports:
             - containerPort: 3000

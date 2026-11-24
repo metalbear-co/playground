@@ -274,6 +274,8 @@ type OperatorSession = {
   namespace: string;
   owner: { username: string; k8sUsername: string; hostname: string };
   branchName?: string;
+  /** Session key (`spec.key`): the `mirrord-session` baggage value the session's HTTP filter matches. */
+  key?: string;
   createdAt: string;
   connectedAt?: string;
   durationSeconds?: number;
@@ -628,13 +630,34 @@ const mirrordLayerBasePos =
 const DYNAMIC_LOCAL_SPACING_X =
   mirrordLayerBasePos.x - localProcessBasePos.x + nodeWidth + 280;
 
-const normalizeOwnerUsername = (username: string) =>
-  username === AGENT_OS_USERNAME ? AGENT_DISPLAY_USERNAME : username;
+/**
+ * Agent runs share one VM image, so every agent session reports the same `root@vm` owner. The
+ * session key (`sol-214-20261123-082255`) is what tells runs apart, so it is folded into the
+ * display username ("agent · sol-214-20261123-082255"). Sessions without a key fall back to the
+ * last segment of the branch name (`claude/SOL-214` → `SOL-214`).
+ */
+const agentKeyForSession = (session: OperatorSession) => {
+  const key = session.key?.trim() || session.branchName?.split("/").pop()?.trim();
+  return key ? key : undefined;
+};
+
+const normalizeOwnerUsername = (session: OperatorSession) => {
+  if (session.owner.username !== AGENT_OS_USERNAME) return session.owner.username;
+  const agentKey = agentKeyForSession(session);
+  return agentKey ? `${AGENT_DISPLAY_USERNAME} · ${agentKey}` : AGENT_DISPLAY_USERNAME;
+};
 
 const normalizeOperatorSession = (session: OperatorSession): OperatorSession => ({
   ...session,
-  owner: { ...session.owner, username: normalizeOwnerUsername(session.owner.username) },
+  owner: { ...session.owner, username: normalizeOwnerUsername(session) },
 });
+
+/**
+ * Identity of whoever runs a session. Hostname alone is not enough: concurrent agent runs share a
+ * hostname and differ only by username (which carries the agent key after normalization).
+ */
+const ownerIdentity = (owner: { username?: string; hostname: string }) =>
+  `${owner.username ?? ""}@${owner.hostname}`;
 
 const sanitizeHostname = (hostname: string) =>
   hostname.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
@@ -649,10 +672,17 @@ const formatMirrordOwnerLabel = (owner: { username?: string; k8sUsername?: strin
     ? MIRRORD_CI_LABEL
     : `${owner.username ?? "unknown"} (${owner.k8sUsername ?? owner.hostname ?? "unknown"})`;
 
+const isAgentOwner = (owner: { username?: string }) =>
+  owner.username === AGENT_DISPLAY_USERNAME ||
+  (owner.username?.startsWith(`${AGENT_DISPLAY_USERNAME} · `) ?? false);
+
+/** Agent owners show their key ("agent · SOL-214"); the shared service account would not tell them apart. */
 const formatMirrordAgentOwnerLabel = (owner: { username?: string; k8sUsername?: string; hostname?: string }) =>
   isMirrordCiOwner(owner)
     ? MIRRORD_CI_LABEL
-    : (owner.k8sUsername ?? owner.hostname ?? "unknown");
+    : isAgentOwner(owner)
+      ? owner.username!
+      : (owner.k8sUsername ?? owner.hostname ?? "unknown");
 
 /**
  * Build an index of possible string aliases for each architecture node so snapshot targets can be
@@ -751,7 +781,7 @@ const ArchitectureNode = ({ id, data }: NodeProps<Node<NodeData>>) => {
         )}
         {data.description && (
           <p
-            className="font-normal leading-snug text-[#111827]"
+            className="wrap-anywhere font-normal leading-snug text-[#111827]"
             style={{ fontSize: isService ? 14 : 13 }}
           >
             {data.description}
@@ -821,7 +851,7 @@ const ZoneNode = ({ data }: NodeProps<ClusterZoneNode>) => (
   >
     <div className={data.description ? "" : "text-center"}>
       <p
-        className="text-lg font-bold uppercase tracking-[0.16em]"
+        className="wrap-anywhere text-lg font-bold uppercase tracking-[0.16em]"
         style={{ color: data.border }}
       >
         {data.label}
@@ -1065,6 +1095,8 @@ type FocusedSession = {
   agentId: string;
   ownerUsername: string;
   ownerHostname: string;
+  /** `ownerIdentity` of the focused session's owner; separates agents that share a hostname. */
+  ownerIdentity: string;
 };
 
 /**
@@ -1214,7 +1246,7 @@ export default function VisualizationPage() {
           group.originalDeployment = session.copyTarget.originalTargetDeployment;
         }
       }
-      if (!group.owners.some((o) => o.hostname === session.owner.hostname)) {
+      if (!group.owners.some((o) => ownerIdentity(o) === ownerIdentity(session.owner))) {
         group.owners.push({
           username: session.owner.username,
           k8sUsername: session.owner.k8sUsername,
@@ -1302,7 +1334,7 @@ export default function VisualizationPage() {
                   </span>
                 )}
                 {group.owners.map((owner) => (
-                  <p key={owner.hostname} className="text-xs leading-snug text-[#3730A3] font-semibold">
+                  <p key={ownerIdentity(owner)} className="wrap-anywhere text-xs leading-snug text-[#3730A3] font-semibold">
                     {formatMirrordAgentOwnerLabel(owner)}
                   </p>
                 ))}
@@ -1543,6 +1575,68 @@ export default function VisualizationPage() {
     return nodes;
   }, [kafkaTopics, operatorSessions, dynamicNodePositions]);
 
+  // One local machine per unique owner (`ownerIdentity`: username + hostname) across all
+  // non-CI operator sessions in the shop namespace. Concurrent agent runs share a hostname
+  // but carry different keys, so each gets its own machine. A session with no queue split
+  // (plain mirror or steal) counts the same as one with a Kafka split: the local machine
+  // exists regardless of which features the session uses. When fewer than two owners are
+  // active, the static Local Machine zone is used instead.
+  type LocalMachineEntry = {
+    ownerName: string;
+    k8sUsername?: string;
+    hostname: string;
+    identity: string;
+  };
+
+  const localMachineEntries = useMemo((): LocalMachineEntry[] => {
+    const uniqueOwners = new Map<string, LocalMachineEntry>();
+    for (const session of localOperatorSessions) {
+      const identity = ownerIdentity(session.owner);
+      if (!uniqueOwners.has(identity)) {
+        uniqueOwners.set(identity, {
+          ownerName: session.owner.username,
+          k8sUsername: session.owner.k8sUsername,
+          hostname: session.owner.hostname,
+          identity,
+        });
+      }
+    }
+    if (uniqueOwners.size > 1) {
+      return Array.from(uniqueOwners.values());
+    }
+    return [];
+  }, [localOperatorSessions]);
+
+  const hasDynamicLocalMachines = localMachineEntries.length > 1;
+
+  /**
+   * mirrord-layer node that consumes a queue split owned by `sessionId`. Splits resolve to their
+   * owner's local machine, so two agents' splits land on their own layers. Splits whose session
+   * is not in the session list fall back to position order (`index`).
+   */
+  const layerForSplitSession = useCallback(
+    (sessionId: string, index: number, splitCount: number) => {
+      const session = operatorSessions.find(
+        (s) => s.sessionId.toLowerCase() === sessionId.toLowerCase(),
+      );
+      if (session) {
+        const localIndex = hasDynamicLocalMachines
+          ? localMachineEntries.findIndex((e) => e.identity === ownerIdentity(session.owner))
+          : -1;
+        if (localIndex >= 0) {
+          return { id: `dynamic-layer-${localIndex}`, handle: `dynamic-layer-${localIndex}-target-top` };
+        }
+        if (!hasDynamicLocalMachines) {
+          return { id: "mirrord-layer", handle: "layer-target-top" };
+        }
+      }
+      return splitCount > 1
+        ? { id: `dynamic-layer-${index}`, handle: `dynamic-layer-${index}-target-top` }
+        : { id: "mirrord-layer", handle: "layer-target-top" };
+    },
+    [operatorSessions, hasDynamicLocalMachines, localMachineEntries],
+  );
+
   // Build dynamic edges for Kafka topic nodes.
   // Edges created:
   //   - Kafka producer → Operator (arrow from bottom of kafka to top of operator)
@@ -1609,9 +1703,11 @@ export default function VisualizationPage() {
     // Filtered topic → mirrord-layer (arrow from bottom of topic to layer)
     filteredTopics.forEach((topic, index) => {
       const nodeId = `kafka-topic-${topic.topicName}`;
-      const usesDynamicLocal = filteredTopics.length > 1;
-      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
-      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      const { id: targetLayer, handle: targetHandle } = layerForSplitSession(
+        topic.sessionId,
+        index,
+        filteredTopics.length,
+      );
       edges.push({
         id: `${nodeId}-to-layer`,
         source: nodeId,
@@ -1682,7 +1778,7 @@ export default function VisualizationPage() {
     }
 
     return edges;
-  }, [kafkaTopics, operatorSessions, aliasIndex]);
+  }, [kafkaTopics, operatorSessions, aliasIndex, layerForSplitSession]);
 
   // Build dynamic nodes for SQS split queues.
   // For each active split queue we create two nodes:
@@ -1843,9 +1939,11 @@ export default function VisualizationPage() {
     // filtered queue → mirrord-layer (local process consumes matching messages)
     sqsQueues.forEach((queue, index) => {
       const nodeId = `sqs-queue-${queue.queueName}`;
-      const usesDynamicLocal = sqsQueues.length > 1;
-      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
-      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      const { id: targetLayer, handle: targetHandle } = layerForSplitSession(
+        queue.sessionId,
+        index,
+        sqsQueues.length,
+      );
       edges.push({
         id: `${nodeId}-to-layer`,
         source: nodeId,
@@ -1880,7 +1978,7 @@ export default function VisualizationPage() {
     }
 
     return edges;
-  }, [sqsQueues, operatorSessions, aliasIndex]);
+  }, [sqsQueues, operatorSessions, aliasIndex, layerForSplitSession]);
 
   // Build dynamic RabbitMQ ephemeral queue nodes (filtered → local, fallback → cluster consumer).
   const rmqQueueNodes = useMemo((): Node<NodeData>[] => {
@@ -2017,9 +2115,11 @@ export default function VisualizationPage() {
 
     filteredQueues.forEach((queue, index) => {
       const nodeId = `rmq-queue-${queue.queueName}`;
-      const usesDynamicLocal = filteredQueues.length > 1;
-      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
-      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      const { id: targetLayer, handle: targetHandle } = layerForSplitSession(
+        queue.sessionId,
+        index,
+        filteredQueues.length,
+      );
       edges.push({
         id: `${nodeId}-to-layer`,
         source: nodeId,
@@ -2071,7 +2171,7 @@ export default function VisualizationPage() {
     }
 
     return edges;
-  }, [rmqQueues, aliasIndex]);
+  }, [rmqQueues, aliasIndex, layerForSplitSession]);
 
   // Hide the static sqs→payment edge when a split queue replaces it.
   const sqsReplacedEdges = useMemo(() => {
@@ -2218,9 +2318,11 @@ export default function VisualizationPage() {
 
     filteredQueues.forEach((queue, index) => {
       const nodeId = `temporal-queue-${queue.queueName}`;
-      const usesDynamicLocal = filteredQueues.length > 1;
-      const targetLayer = usesDynamicLocal ? `dynamic-layer-${index}` : "mirrord-layer";
-      const targetHandle = usesDynamicLocal ? `dynamic-layer-${index}-target-top` : "layer-target-top";
+      const { id: targetLayer, handle: targetHandle } = layerForSplitSession(
+        queue.sessionId,
+        index,
+        filteredQueues.length,
+      );
       edges.push({
         id: `${nodeId}-to-layer`,
         source: nodeId,
@@ -2272,7 +2374,7 @@ export default function VisualizationPage() {
     }
 
     return edges;
-  }, [temporalQueues, aliasIndex]);
+  }, [temporalQueues, aliasIndex, layerForSplitSession]);
 
   const temporalReplacedEdges = useMemo(() => {
     const replaced = new Set<string>();
@@ -2319,35 +2421,6 @@ export default function VisualizationPage() {
     return replaced;
   }, [kafkaTopics, operatorSessions, aliasIndex, baseEdges]);
 
-  // One local machine per unique developer hostname across all non-CI operator
-  // sessions in the shop namespace. A session with no queue split (plain mirror or
-  // steal) counts the same as one with a Kafka split: the local machine exists
-  // regardless of which features the session uses. When fewer than two hostnames
-  // are active, the static Local Machine zone is used instead.
-  type LocalMachineEntry = {
-    ownerName: string;
-    k8sUsername?: string;
-    hostname: string;
-  };
-
-  const localMachineEntries = useMemo((): LocalMachineEntry[] => {
-    const uniqueHostnames = new Map<string, LocalMachineEntry>();
-    for (const session of localOperatorSessions) {
-      if (!uniqueHostnames.has(session.owner.hostname)) {
-        uniqueHostnames.set(session.owner.hostname, {
-          ownerName: session.owner.username,
-          k8sUsername: session.owner.k8sUsername,
-          hostname: session.owner.hostname,
-        });
-      }
-    }
-    if (uniqueHostnames.size > 1) {
-      return Array.from(uniqueHostnames.values());
-    }
-    return [];
-  }, [localOperatorSessions]);
-
-  const hasDynamicLocalMachines = localMachineEntries.length > 1;
 
   /**
    * Derive which nodes are relevant to the focused session so we can dim everything else.
@@ -2366,7 +2439,7 @@ export default function VisualizationPage() {
     }
 
     const localIndex = hasDynamicLocalMachines
-      ? localMachineEntries.findIndex((e) => e.hostname === focusedSession.ownerHostname)
+      ? localMachineEntries.findIndex((e) => e.identity === focusedSession.ownerIdentity)
       : -1;
     const localId = localIndex >= 0 ? `dynamic-local-${localIndex}` : "local-process";
     const layerId = localIndex >= 0 ? `dynamic-layer-${localIndex}` : "mirrord-layer";
@@ -2398,7 +2471,7 @@ export default function VisualizationPage() {
     const matchingSessionIds = new Set(
       operatorSessions
         .filter((s) => {
-          if (s.owner.hostname !== focusedSession.ownerHostname) return false;
+          if (ownerIdentity(s.owner) !== focusedSession.ownerIdentity) return false;
           const sTargetArchId = aliasIndex.get((s.target.name ?? "").toLowerCase());
           return sTargetArchId === targetArchId;
         })
@@ -2530,100 +2603,73 @@ export default function VisualizationPage() {
    */
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      // Focus one owner's session on a target. `ownerIdentityFilter` pins the owner when the
+      // click came from a specific local machine; otherwise the first non-CI owner is used.
+      const focusGroup = (group: AgentGroup, ownerIdentityFilter?: string) => {
+        const agentId = `agent-${sanitizeHostname(group.targetName)}`;
+        const preferredSession =
+          (ownerIdentityFilter
+            ? group.sessions.find((s) => ownerIdentity(s.owner) === ownerIdentityFilter)
+            : undefined) ??
+          group.sessions.find((s) => !isMirrordCiOwner(s.owner)) ??
+          group.sessions[0];
+        const owner = preferredSession?.owner ?? group.owners[0];
+        const ownerHostname = owner?.hostname ?? "unknown";
+        const focusedIdentity = owner ? ownerIdentity(owner) : "unknown";
+        setFocusedSession({
+          targetName: group.targetName,
+          agentId,
+          ownerUsername: owner?.username ?? "unknown",
+          ownerHostname,
+          ownerIdentity: focusedIdentity,
+        });
+        setFocusedMode("mirror");
+        const targetArchId = aliasIndex.get(group.targetName.toLowerCase());
+        const hasBranch = pgBranches.some(
+          (b) =>
+            b.owners.some((o) => o.hostname === ownerHostname) &&
+            (b.targetDeployment === group.targetName ||
+              aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
+        );
+        // Detect a queue split (kafka, sqs, rmq, temporal) for this owner+target.
+        const sessionIdsForFocus = new Set(
+          operatorSessions
+            .filter(
+              (s) =>
+                ownerIdentity(s.owner) === focusedIdentity &&
+                aliasIndex.get((s.target.name ?? "").toLowerCase()) === targetArchId,
+            )
+            .map((s) => s.sessionId),
+        );
+        const hasQueueSplit =
+          kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
+          sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
+          rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
+          temporalQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
+        setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
+      };
+
       if (node.id.startsWith("agent-")) {
         const group = agentGroups.find(
           (g) => `agent-${sanitizeHostname(g.targetName)}` === node.id,
         );
-        if (group) {
-          const preferredSession =
-            group.sessions.find((s) => !isMirrordCiOwner(s.owner)) ?? group.sessions[0];
-          const ownerHostname = preferredSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
-          setFocusedSession({
-            targetName: group.targetName,
-            agentId: node.id,
-            ownerUsername:
-              preferredSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
-            ownerHostname,
-          });
-          setFocusedMode("mirror");
-          const targetArchId = aliasIndex.get(group.targetName.toLowerCase());
-          const hasBranch = pgBranches.some(
-            (b) =>
-              b.owners.some((o) => o.hostname === ownerHostname) &&
-              (b.targetDeployment === group.targetName ||
-                aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
-          );
-          // Detect a queue split (kafka or sqs) for this user+target.
-          const sessionIdsForFocus = new Set(
-            operatorSessions
-              .filter(
-                (s) =>
-                  s.owner.hostname === ownerHostname &&
-                  aliasIndex.get((s.target.name ?? "").toLowerCase()) === targetArchId,
-              )
-              .map((s) => s.sessionId),
-          );
-          const hasQueueSplit =
-            kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
-            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
-            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
-            temporalQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
-          setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
-        }
+        if (group) focusGroup(group);
         return;
       }
 
       if (node.id === "local-process" || node.id.startsWith("dynamic-local-")) {
         if (agentGroups.length === 0) return;
-        let group: AgentGroup | undefined;
-        if (node.id === "local-process" && agentGroups.length === 1) {
-          group = agentGroups[0];
-        } else if (node.id.startsWith("dynamic-local-")) {
-          const idx = parseInt(node.id.replace("dynamic-local-", ""), 10);
-          const entry = localMachineEntries[idx];
-          if (entry) {
-            group = agentGroups.find((g) =>
-              g.sessions.some((s) => s.owner.hostname === entry.hostname),
-            );
-          }
+        if (node.id === "local-process") {
+          if (agentGroups.length === 1) focusGroup(agentGroups[0]);
+          return;
         }
-        if (group) {
-          const agentId = `agent-${sanitizeHostname(group.targetName)}`;
-          const preferredSession =
-            group.sessions.find((s) => !isMirrordCiOwner(s.owner)) ?? group.sessions[0];
-          const ownerHostname = preferredSession?.owner.hostname ?? group.owners[0]?.hostname ?? "unknown";
-          setFocusedSession({
-            targetName: group.targetName,
-            agentId,
-            ownerUsername:
-              preferredSession?.owner.username ?? group.owners[0]?.username ?? "unknown",
-            ownerHostname,
-          });
-          setFocusedMode("mirror");
-          const targetArchId = aliasIndex.get(group.targetName.toLowerCase());
-          const hasBranch = pgBranches.some(
-            (b) =>
-              b.owners.some((o) => o.hostname === ownerHostname) &&
-              (b.targetDeployment === group.targetName ||
-                aliasIndex.get(b.targetDeployment.toLowerCase()) === targetArchId),
-          );
-          // Detect a queue split (kafka or sqs) for this user+target.
-          const sessionIdsForFocus = new Set(
-            operatorSessions
-              .filter(
-                (s) =>
-                  s.owner.hostname === ownerHostname &&
-                  aliasIndex.get((s.target.name ?? "").toLowerCase()) === targetArchId,
-              )
-              .map((s) => s.sessionId),
-          );
-          const hasQueueSplit =
-            kafkaTopics.some((t) => sessionIdsForFocus.has(t.sessionId)) ||
-            sqsQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
-            rmqQueues.some((q) => sessionIdsForFocus.has(q.sessionId)) ||
-            temporalQueues.some((q) => sessionIdsForFocus.has(q.sessionId));
-          setFocusPanelTab(hasBranch ? "db-branch" : hasQueueSplit ? "queue-split" : "mirror");
-        }
+        const idx = parseInt(node.id.replace("dynamic-local-", ""), 10);
+        const entry = localMachineEntries[idx];
+        if (!entry) return;
+        const group = agentGroups.find((g) =>
+          g.sessions.some((s) => ownerIdentity(s.owner) === entry.identity),
+        );
+        if (group) focusGroup(group, entry.identity);
       }
     },
     [agentGroups, localMachineEntries, pgBranches, aliasIndex, operatorSessions, kafkaTopics, sqsQueues, rmqQueues, temporalQueues],
@@ -2668,7 +2714,7 @@ export default function VisualizationPage() {
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {isCiRunnerLocal ? "mirrord session" : "Developer machine"}
               </span>
-              <p className="text-xs leading-snug text-slate-600">
+              <p className="wrap-anywhere text-xs leading-snug text-slate-600">
                 {formatMirrordOwnerLabel({ username: ownerName, k8sUsername, hostname })}
               </p>
             </div>
@@ -4336,7 +4382,7 @@ export default function VisualizationPage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#3B82F6]">
               Running locally
             </span>
-            <p className="text-xs text-slate-600 leading-snug">
+            <p className="wrap-anywhere text-xs text-slate-600 leading-snug">
               {focusedSession.ownerUsername}
               {focusedSession.ownerHostname ? ` · ${focusedSession.ownerHostname}` : ""}
             </p>
@@ -4632,7 +4678,7 @@ export default function VisualizationPage() {
                   <p className="text-xl font-bold text-[#111827] leading-tight">
                     {focusedViewData.targetLabel}
                   </p>
-                  <p className="text-sm text-[#6B7280] mt-0.5">
+                  <p className="wrap-anywhere text-sm text-[#6B7280] mt-0.5">
                     {focusedSession.ownerUsername}
                     {focusedSession.ownerHostname ? ` · ${focusedSession.ownerHostname}` : ""}
                   </p>

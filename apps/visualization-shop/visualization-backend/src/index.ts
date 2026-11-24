@@ -228,6 +228,8 @@ type OperatorSession = {
     hostname: string;
   };
   branchName?: string | undefined;
+  /** Session key (`spec.key`): the `mirrord-session` baggage value the session's HTTP filter matches. */
+  key?: string | undefined;
   createdAt: string;
   connectedAt?: string | undefined;
   durationSeconds?: number | undefined;
@@ -413,6 +415,7 @@ const fetchOperatorSessions = async (
         hostname: (owner.hostname as string) ?? "unknown",
       },
       branchName: jiraMetrics.branchName as string | undefined,
+      key: spec.key as string | undefined,
       createdAt,
       connectedAt,
       durationSeconds: Number.isFinite(durationSeconds)
