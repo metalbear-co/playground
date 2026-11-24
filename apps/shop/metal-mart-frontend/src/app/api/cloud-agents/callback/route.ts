@@ -11,7 +11,7 @@
  * `source` names the board: "cloud-agents-dashboard" (the default, so the Cloud
  * Agents dashboard and its agents send nothing) or "software-factory".
  *
- *   POST {ticket, run_id?, source?, title?, url?, pr_url?, status?, stage?, key?, checks?, evidence?, message?}
+ *   POST {ticket, run_id?, source?, title?, url?, pr_url?, status?, stage?, key?, checks?, evidence?, log?, diff?, mirrord_up?, message?}
  *        Authorization: Bearer <CLOUD_AGENTS_CALLBACK_TOKEN>
  *        The board comes from the run id when the server started that run, else
  *        from `source`. A report with a run_id that is not the ticket's current
@@ -29,6 +29,16 @@
  *        redacted mirrord up log) fill the Verify station of a Software Factory
  *        card; stored for Software Factory runs only. A report without them
  *        keeps the record's values.
+ *        log (up to 10 lines of detail, each up to 200 characters) goes with
+ *        the report's message into the run log of a Software Factory card. Each
+ *        report with a message or a log adds one entry; the record keeps the
+ *        newest 50. Lines shaped like a JWT or a long hex token are masked.
+ *        diff (git diff output, up to 10,000 characters; longer text is cut)
+ *        is the run's code change, shown in the Code station of a Software
+ *        Factory card. A report without it keeps the record's diff.
+ *        mirrord_up (the mirrord-up-<id>.yaml text, up to 6,000 characters) is
+ *        the file the run started `mirrord up` with, shown in the Verify
+ *        station. A report without it keeps the record's file.
  *   GET  ?ticket=SOL-175[&source=…]           -> {ticket, active, result: TicketRecord | null}
  *   GET  ?tickets=SOL-175,SOL-176[&source=…]  -> {results: {"SOL-175": TicketRecord | null, ...}}
  *   GET  ?run_id=<id>                         -> {run_id, ticket, source} | 404
@@ -50,6 +60,7 @@ import {
   type RecordSource,
   type TicketRecord,
   DEFAULT_SOURCE,
+  appendLog,
   cleanText,
   clearAll,
   clearTicket,
@@ -59,6 +70,9 @@ import {
   normalizeChecks,
   normalizeEvidence,
   normalizeKey,
+  normalizeDiff,
+  normalizeLogLines,
+  normalizeMirrordUp,
   normalizeRunId,
   normalizeSource,
   normalizeStage,
@@ -66,7 +80,7 @@ import {
   setRecord,
 } from "@/lib/cloud-agents-store";
 
-const MAX_BODY = 8 * 1024;
+const MAX_BODY = 24 * 1024;
 const MAX_TICKETS = 25;
 const STATUSES: AgentStatus[] = ["done", "failed", "running"];
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -175,6 +189,12 @@ export async function POST(req: Request) {
   if (checks === null) return bad("checks must be 1 to 8 items like {service, request, without, with, ok}");
   const evidence = factory && body.evidence !== undefined ? normalizeEvidence(body.evidence) : undefined;
   if (evidence === null) return bad("evidence must be 1 to 6 https URLs of files in metalbear-co/playground");
+  const logLines = factory && body.log !== undefined ? normalizeLogLines(body.log) : undefined;
+  if (logLines === null) return bad("log must be 1 to 10 strings");
+  const diff = factory && body.diff !== undefined ? normalizeDiff(body.diff) : undefined;
+  if (diff === null) return bad("diff must be the git diff text");
+  const mirrordUp = factory && body.mirrord_up !== undefined ? normalizeMirrordUp(body.mirrord_up) : undefined;
+  if (mirrordUp === null) return bad("mirrord_up must be the mirrord-up yaml text");
   const existing = getRecord(ticket, source);
   if (run_id && existing?.run_id && existing.run_id !== run_id) {
     return bad(`${ticket} now belongs to another run; this report was not stored`, 409);
@@ -190,7 +210,7 @@ export async function POST(req: Request) {
     ticket,
     status,
     ...(factory
-      ? { source, stage: stage ?? (status === "done" ? "pr" : base.stage), key: key ?? base.key, checks: checks ?? base.checks, evidence: evidence ?? base.evidence }
+      ? { source, stage: stage ?? (status === "done" ? "pr" : base.stage), key: key ?? base.key, checks: checks ?? base.checks, evidence: evidence ?? base.evidence, diff: diff ?? base.diff, mirrord_up: mirrordUp ?? base.mirrord_up }
       : {}),
     run_id: run_id ?? base.run_id,
     title: cleanText(body.title, 160) ?? base.title,
@@ -200,6 +220,15 @@ export async function POST(req: Request) {
     started_at: base.started_at ?? now,
     received_at: now,
   };
+  if (factory && (record.message || logLines || status !== "running")) {
+    record.log = appendLog(base.log, {
+      at: now,
+      status,
+      stage: record.stage,
+      ...(record.message ? { message: record.message } : {}),
+      ...(logLines ? { lines: logLines } : {}),
+    });
+  }
   setRecord(record);
   return Response.json({ ok: true, result: record });
 }

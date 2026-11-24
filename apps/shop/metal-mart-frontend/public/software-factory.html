@@ -188,6 +188,10 @@
   .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .timeline li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; font-size: 13px; }
   .timeline time { font: 500 12px/1.5 var(--mono); color: var(--grey-500); }
+  .timeline .msg { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .timeline .msg.bad > span { color: #b42318; }
+  .timeline .lines { margin: 0; padding: 6px 8px; list-style: none; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 400 11.5px/1.5 var(--mono); color: var(--grey-700); overflow-x: auto; }
+  .timeline .lines li { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
   .waiting { padding: 28px 16px; text-align: center; border: 1.5px dashed var(--line); border-radius: 10px; color: var(--grey-500); }
   .preview { border: 1.5px solid var(--line); border-radius: 10px; background: var(--purple-soft); height: 160px; display: flex; align-items: center; justify-content: center; color: var(--grey-500); font-size: 13px; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -195,11 +199,11 @@
   .tbl td.res { font-weight: 700; white-space: nowrap; }
   .tbl td.res.ok { color: var(--ok); }
   .tbl td.res.no { color: var(--bad); }
-  .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
   .shots a { display: block; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; text-decoration: none; }
-  .shots img { display: block; width: 100%; height: 150px; object-fit: cover; object-position: top; background: var(--cream); }
+  .shots img { display: block; width: 100%; height: 220px; object-fit: cover; object-position: top; background: var(--cream); }
   .shots span { display: block; padding: 6px 8px; font: 400 11px/1.3 var(--mono); color: var(--grey-500); overflow-wrap: anywhere; }
-  .shots .preview { height: 150px; border: 0; border-radius: 0; }
+  .shots .preview { height: 220px; border: 0; border-radius: 0; }
   .hint { margin: 0; font-size: 12.5px; color: var(--grey-500); }
   .links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
 
@@ -889,6 +893,21 @@
       return '<span class="' + (l.charAt(0) === '+' ? 'a' : l.charAt(0) === '-' ? 'd' : '') + '">' + esc(l) + '</span>';
     }).join('\n') + '</div>';
   }
+  // Turns `git diff` output into codeHtml lines: a header per file with its
+  // +/- counts, the added and removed lines, and a ⋯ line between hunks.
+  function gitDiffLines(diff) {
+    var out = [], file = null;
+    diff.split('\n').forEach(function (l) {
+      var m = /^diff --git a\/(.+?) b\/(.+)$/.exec(l);
+      if (m) { file = { name: m[2], add: 0, del: 0, at: out.length }; out.push(file); return; }
+      if (/^(index |--- |\+\+\+ |new file mode|deleted file mode|similarity index|rename (from|to) |old mode|new mode)/.test(l)) return;
+      if (/^@@/.test(l)) { out.push('  ⋯ ' + l.replace(/^@@[^@]*@@ ?/, '')); return; }
+      if (file && l.charAt(0) === '+') file.add++;
+      if (file && l.charAt(0) === '-') file.del++;
+      out.push(l);
+    });
+    return out.map(function (x) { return typeof x === 'string' ? x : '@ ' + x.name + '   +' + x.add + ' −' + x.del; });
+  }
   var CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
   // Shared environments: the staging shop that mirrord up and the preview run
@@ -901,7 +920,7 @@
       (key ? '<p class="hint">Without the session key, staging shows main. Requests with <code>baggage: mirrord-session=' + esc(key) + '</code> (for example from the mirrord browser extension) reach this run\'s code.</p>' : '');
   }
   function checksHtml(list) {
-    return '<div class="sub">Real-traffic checks</div><table class="tbl"><thead><tr><th>Request</th><th>Without key</th><th>With key</th><th></th></tr></thead><tbody>' +
+    return '<div class="sub">Requests through mirrord</div><table class="tbl"><thead><tr><th>Request</th><th>Without key</th><th>With key</th><th></th></tr></thead><tbody>' +
       list.map(function (c) {
         return '<tr><td><b>' + esc(c.service) + '</b><br><span class="m">' + esc(c.request) + '</span></td><td class="m">' + esc(c.without || '—') + '</td><td class="m">' + esc(c.with || '—') + '</td>' +
           '<td class="res ' + (c.ok ? 'ok">✓ pass' : 'no">✗ fail') + '</td></tr>';
@@ -916,11 +935,10 @@
     var name = function (u) { return decodeURIComponent(u.split('/').pop() || u); };
     var imgs = ok.filter(function (u) { return /^https:\/\/raw\.githubusercontent\.com\/.*\.(png|jpe?g|gif|webp)$/i.test(u); });
     var files = ok.filter(function (u) { return imgs.indexOf(u) < 0; });
-    return '<div class="sub">Evidence</div>' +
-      (imgs.length ? '<div class="shots">' + imgs.map(function (u) {
+    return (imgs.length ? '<div class="sub">Playwright screenshots</div><div class="shots">' + imgs.map(function (u) {
         return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Screenshot ' + esc(name(u)) + '" loading="lazy" referrerpolicy="no-referrer"><span>' + esc(name(u)) + '</span></a>';
       }).join('') + '</div>' : '') +
-      (files.length ? '<div class="links">' + files.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(name(u)) + '</a>'; }).join('') + '</div>' : '');
+      (files.length ? '<div class="sub">mirrord up log</div><div class="links">' + files.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(name(u)) + '</a>'; }).join('') + '</div>' : '');
   }
 
   function simTab(v, tab) {
@@ -939,27 +957,51 @@
     return '<h4>Production · merged and deployed</h4><div class="box">Merged to main. ArgoCD deployed the shop namespace. The Linear ticket moved to Done.</div>';
   }
 
+  // The run log from the server (rec.log) has every report and its detail
+  // lines. A record without one comes from a server that does not keep logs,
+  // so the panel falls back to the reports this browser saw.
+  function logItems(rec, h) {
+    if (rec.log && rec.log.length) {
+      return rec.log.map(function (e) {
+        var msg = e.status === 'done' ? (e.message || 'PR opened · preview environment live') : e.status === 'failed' ? 'Failed: ' + (e.message || 'no reason given') : (e.message || '');
+        return { stage: e.stage || 'plan', msg: msg, at: e.at, lines: e.lines || [], bad: e.status === 'failed' };
+      });
+    }
+    return h && h.run_id === (rec.run_id || '-') ? h.items : [];
+  }
+  function timelineHtml(list) {
+    return '<ol class="timeline">' + list.map(function (x) {
+      var lines = x.lines && x.lines.length ? '<ul class="lines">' + x.lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' : '';
+      return '<li><time>' + esc(hhmm(x.at)) + '</time><div class="msg' + (x.bad ? ' bad' : '') + '">' + (x.msg ? '<span>' + esc(x.msg) + '</span>' : '') + lines + '</div></li>';
+    }).join('') + '</ol>';
+  }
   function realTab(v, tab) {
     var rec = v.rec || {}, h = (load(HISTORY_KEY) || {})[v.id];
-    var items = h && h.run_id === (rec.run_id || '-') ? h.items : [];
+    var items = logItems(rec, h);
     var here = items.filter(function (x) { return x.stage === tab; });
     var intro = {
       plan: 'Plan · the agent reads the Linear ticket and decides what to change and how to check it.',
-      code: 'Code · the agent writes the change on its own branch and runs the static checks.',
+      code: 'Code · the agent writes the change on its own branch.',
       verify: 'Verify · mirrord up runs the new code in the shared playground cluster. Only requests with this run\'s session key reach it.',
-      review: 'Review · the agent checks its diff against the ticket and the verify evidence before it opens the PR.',
+      review: 'Review · the agent runs the static checks and checks its diff against the ticket and the verify evidence before it opens the PR.',
       pr: 'Pull request · the PR has the preview label, so a mirrord preview environment runs the change.',
       production: 'Production · merged and deployed.'
     }[tab];
-    var html = '<h4>' + esc(intro) + '</h4>';
-    if (tab === 'verify' && v.key) html += '<div class="box">Split mode. Only requests with <code>baggage: mirrord-session=' + esc(v.key) + '</code> reach this run\'s code.</div>';
-    if (here.length) html += '<ol class="timeline">' + here.map(function (x) { return '<li><time>' + esc(hhmm(x.at)) + '</time><span>' + esc(x.msg) + '</span></li>'; }).join('') + '</ol>';
-    else if (tab !== 'production') html += '<div class="box">No report for this station yet.</div>';
+    // Each station shows its own results first (the code change, the
+    // requests through mirrord and the screenshots), then the agent's reports
+    // for that station.
+    var html = '<h4>' + esc(intro) + '</h4>', results = '';
+    if (tab === 'code' && rec.diff) results += '<div class="sub">Code changes</div>' + codeHtml(gitDiffLines(rec.diff));
     if (tab === 'verify') {
-      if (rec.checks && rec.checks.length) html += checksHtml(rec.checks);
-      if (rec.evidence && rec.evidence.length) html += evidenceHtml(rec.evidence);
-      html += envLinksHtml(v.key);
+      if (v.key) html += '<div class="box">Split mode. Only requests with <code>baggage: mirrord-session=' + esc(v.key) + '</code> reach this run\'s code.</div>';
+      if (rec.mirrord_up) results += '<div class="sub">mirrord up file · mirrord-up-' + esc(v.id) + '.yaml</div><div class="code">' + esc(rec.mirrord_up) + '</div>';
+      if (rec.checks && rec.checks.length) results += checksHtml(rec.checks);
+      if (rec.evidence && rec.evidence.length) results += evidenceHtml(rec.evidence);
     }
+    html += results;
+    if (here.length) html += (results ? '<div class="sub">Agent log</div>' : '') + timelineHtml(here);
+    else if (!results && tab !== 'production') html += '<div class="box">No report for this station yet.</div>';
+    if (tab === 'verify') html += envLinksHtml(v.key);
     var links = [];
     if (rec.session_url) links.push('<a href="' + esc(rec.session_url) + '" target="_blank" rel="noopener">Open run (Claude Code session)</a>');
     if (tab === 'pr' || tab === 'production') {
