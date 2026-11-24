@@ -126,4 +126,9 @@ following.
    ```
 7. **Pull request** (Step 5.3, after the label):
    `report pr "PR opened, preview building" "PR #<number>: <PR title>" "preview workflow: <run URL>"`.
-   The final report (Step 6b) has `stage: "pr"`.
+   The final report (Step 6b) has `stage: "pr"`, `pr_url` and `url`. The board shows those
+   two links as the **Open preview** and **Open PR** cards, so the log lines of the final
+   report do not repeat them. Log what the cards do not show, for example:
+   `preview services: inventory ✓ order ✓ chat ✓`, `preview key: SOL-224 (send baggage
+   mirrord-session=SOL-224 to the staging URL)`, `Linear: SOL-224 → SE Action, preview link
+   commented`.
