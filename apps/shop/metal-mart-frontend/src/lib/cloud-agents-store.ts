@@ -121,6 +121,79 @@ export function normalizeEvidence(raw: unknown): string[] | null {
   return out;
 }
 
+/**
+ * The run log of a Software Factory card: one entry per report, with the
+ * station, the status line and up to MAX_LOG_LINES detail lines (scope items,
+ * mirrord up services, static and review checks). The board shows it
+ * per station in the card's panel. The server keeps it, so every presenter
+ * sees the whole run, also after a reload.
+ */
+export type LogEntry = { at: string; status: AgentStatus; stage?: AgentStage; message?: string; lines?: string[] };
+
+export const MAX_LOG = 50;
+const MAX_LOG_LINES = 10;
+const MAX_LOG_LINE = 200;
+
+// Detail lines come from agent output, so they are masked for anything shaped
+// like a secret: a JWT, or a hex token of 64 or more characters. A git SHA
+// (40 hex characters) stays.
+const SECRET_RE = /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}|\b[0-9a-fA-F]{64,}\b/g;
+
+/** Returns 1 to MAX_LOG_LINES cleaned lines, or null when the value is not a list of strings. */
+export function normalizeLogLines(raw: unknown): string[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_LOG_LINES) return null;
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") return null;
+    const line = cleanText(item.replace(SECRET_RE, "[redacted]"), MAX_LOG_LINE);
+    if (line) out.push(line);
+  }
+  return out.length ? out : null;
+}
+
+export const MAX_DIFF = 10000;
+export const MAX_MIRRORD_UP = 6000;
+
+/**
+ * The code change of a Software Factory run, as `git diff` output. The board
+ * shows it in the Code station.
+ */
+export function normalizeDiff(raw: unknown): string | null {
+  return normalizeFileText(raw, MAX_DIFF);
+}
+
+/**
+ * The mirrord-up-<id>.yaml file a Software Factory run started `mirrord up`
+ * with. The board shows it in the Verify station.
+ */
+export function normalizeMirrordUp(raw: unknown): string | null {
+  return normalizeFileText(raw, MAX_MIRRORD_UP);
+}
+
+/**
+ * Multi-line file text from an agent. Text past `max` characters is cut at a
+ * line end, and secret-shaped strings are masked like log lines.
+ */
+function normalizeFileText(raw: unknown, max: number): string | null {
+  if (typeof raw !== "string") return null;
+  let d = raw
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "")
+    .replace(SECRET_RE, "[redacted]");
+  if (!d.trim()) return null;
+  if (d.length > max) {
+    const cut = d.lastIndexOf("\n", max);
+    d = d.slice(0, cut > 0 ? cut : max) + "\n… cut at " + max + " characters";
+  }
+  return d;
+}
+
+/** Adds an entry to a run log and keeps the newest MAX_LOG entries. */
+export function appendLog(log: LogEntry[] | undefined, entry: LogEntry): LogEntry[] {
+  const next = [...(log ?? []), entry];
+  return next.length > MAX_LOG ? next.slice(next.length - MAX_LOG) : next;
+}
+
 export type TicketRecord = {
   ticket: string;
   status: AgentStatus;
@@ -129,6 +202,9 @@ export type TicketRecord = {
   key?: string;
   checks?: VerifyCheck[];
   evidence?: string[];
+  log?: LogEntry[];
+  diff?: string;
+  mirrord_up?: string;
   run_id?: string;
   title?: string;
   started_by?: string;
@@ -223,7 +299,9 @@ export function claimTicket(
   const claimed: TicketRecord = {
     ticket,
     status: "running",
-    ...(source !== DEFAULT_SOURCE ? { source, stage: "plan" as const } : {}),
+    ...(source !== DEFAULT_SOURCE
+      ? { source, stage: "plan" as const, log: [{ at: now, status: "running" as const, stage: "plan" as const, message: "Starting the agent" }] }
+      : {}),
     run_id: runId,
     title: previous?.title,
     started_by: startedBy,
