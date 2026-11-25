@@ -135,6 +135,17 @@ function ProductTile({
   );
 }
 
+function PromoBanner() {
+  return (
+    <div
+      role="status"
+      className="w-full bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white sm:text-base"
+    >
+      Check out our new t-shirts!
+    </div>
+  );
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +162,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <PromoBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <LoadingSpinner />
@@ -162,6 +174,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col bg-white">
+        <PromoBanner />
         <Header showSubtitle />
         <main className="flex flex-1 items-center justify-center p-8">
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
@@ -178,6 +191,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      <PromoBanner />
       <Header showSubtitle />
       <main className="flex flex-1 flex-col">
         {/* Bento product grid */}
