@@ -1,0 +1,57 @@
+# SOL-230 "MetalMart V2" — run from the playground repo root:
+#   mirrord up -f mirrord-up-sol-230.yaml --key <session key>
+# Every service runs in split mode: only requests (and Kafka messages) whose
+# baggage carries `mirrord-session=<key>` reach the local process; everything
+# else keeps going to the deployed pods in the shared cluster.
+services:
+  order-service:
+    target: { path: deployment/order-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  inventory-service:
+    target: { path: deployment/inventory-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8082"                     # order-service already binds local port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8082, 80]]   # [local, remote]: steal target port 80 into local 8082
+    run:
+      command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"]
+
+  chat-service:
+    target: { path: deployment/chat-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8083"                     # order-service already binds local port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8083, 80]]   # [local, remote]: steal target port 80 into local 8083
+        split_queues:                    # only support-chat messages with this key reach the local consumer
+          "*":
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target: { path: deployment/metal-mart-frontend, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir   # NEXT_PUBLIC_* is build-time; the remote value is not picked up by next dev
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]
