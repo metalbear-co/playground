@@ -1,0 +1,65 @@
+# SOL-231 (MetalMart V2): run the four changed shop services locally against the
+# playground cluster, split mode, stealing only requests that carry this session's key.
+#   mirrord up -f mirrord-up-SOL-231.yaml --key <key>
+services:
+  order-service:
+    target: { path: deployment/order-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8084"                     # attempt 2: the first session still holds local port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8084, 80]]   # [local, remote]: steal target port 80 into local 8084
+    run:
+      # Plain `tsx` instead of `npm run dev` (tsx watch): under mirrord the watch-mode process
+      # answered every JSON POST with 415 (iconv-lite lost its encodings); plain tsx parses fine.
+      command: ["sh", "-c", "cd apps/shop/order-service && npx tsx src/index.ts"]
+
+  inventory-service:
+    target: { path: deployment/inventory-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8082"                     # order-service already binds local port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8082, 80]]   # [local, remote]: steal target port 80 into local 8082
+    run:
+      command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"]
+
+  chat-service:
+    target: { path: deployment/chat-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8083"                     # distinct local port
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8083, 80]]   # [local, remote]: steal target port 80 into local 8083
+        split_queues:                    # only support-chat messages with this key reach the local consumer
+          "*":
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target: { path: deployment/metal-mart-frontend, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir   # NEXT_PUBLIC_* is build-time; remote value is not picked up by next dev
+    run:
+      command: ["npm", "--prefix", "apps/shop/metal-mart-frontend", "run", "dev", "--", "-p", "3000"]

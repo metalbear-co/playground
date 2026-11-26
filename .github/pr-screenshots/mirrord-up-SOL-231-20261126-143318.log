@@ -1,0 +1,84 @@
+
+* Local mirrord daemon already running
+* Daemon PID:
+ -> 794
+
+* Web UI:
+ -> http://127.0.0.1:59281/auth?token=<redacted>&redirect=/
+* API token:
+ -> x-auth-token: <redacted>
+
+* mirrord session monitor ready!
+
+order-service: requesting DB branching
+order-service: no MirrordSplitConfig defines `dbBranches` for `deployment/order-service` in namespace `shop`, running against the source DB
+order-service: mirrord exec (cli version 3.291.0)
+order-service: Detected `mirrord exec` running with a CI token.
+order-service: This run is being handled as a mirrord CI session. For future compatibility, please migrate to: `mirrord ci start` More details can be found here: https://metalbear.com/mirrord/docs/using-mirrord/mirrord-for-ci
+order-service: mirrord ci start (cli version 3.291.0)
+order-service: version check
+order-service: preparing to launch process
+order-service: checking if target binary is dynamically linked
+order-service: target binary is dynamically linked
+order-service: extracting layer
+order-service: layer extracted
+order-service: checking operator
+order-service: checking license
+order-service: Operator license is valid for 39 more days.
+order-service: operator license valid
+order-service: preparing user credentials
+order-service: user credentials prepared
+order-service: starting session
+order-service: connecting to the target
+order-service: connected to the target
+order-service: session started
+order-service: using operator
+order-service: session ID: 7E39C5D81B5B514B
+order-service: ready to launch process
+order-service: config summary
+order-service: Running command: sh -c cd apps/shop/order-service && npx tsx src/index.ts
+order-service: mirrord will target: deployment/order-service, no configuration file was loaded
+order-service: mirrord will run with the mirrord Operator
+order-service: env: all remote environment variables will be fetched
+order-service: fs: file operations will default to read from the remote
+order-service: incoming: incoming traffic will be stolen
+order-service: outgoing: forwarding is enabled on TCP and UDP
+order-service: dns: DNS will be resolved remotely
+order-service: internal proxy: logs will be written to /tmp/mirrord-intproxy-1795703607-8YA5kGC.log
+order-service: Session key: sol-231-20261126-143318
+order-service: If enabled, a `mirrord-key` header with this value will be injected into redirected HTTP requests and their responses, and into the queue-split messages routed to this session.
+order-service: config summary
+order-service: running process
+order-service: Ready!
+order-service: {"level":"WARN","timestamp":"2026-11-26T14:33:32.133Z","logger":"kafkajs","message":"KafkaJS v2.0.0 switched default partitioner. To retain the same partitioning behavior as in previous versions, create the producer with the option \"createPartitioner: Partitioners.LegacyPartitioner\". See the migration guide at https://kafka.js.org/docs/migration-guide-v2.0.0#producer-new-default-partitioner for details. Silence this warning by setting the environment variable \"KAFKAJS_NO_PARTITIONER_WARNING=1\""}
+order-service: [Order] Starting
+order-service: Response file loaded: /app/banner.txt
+order-service: [Order] Listening on port 8084
+order-service: Order request: {
+order-service:   "baggage": "mirrord-session=sol-231-20261126-143318",
+order-service:   "total_cents": 499,
+order-service:   "customer_email": "preview-verification-bot@metalbear.dev",
+order-service:   "items": [
+order-service:     {
+order-service:       "productId": 1,
+order-service:       "quantity": 1
+order-service:     }
+order-service:   ]
+order-service: }
+order-service: [Order] JWT created for order 2708 (baggage=mirrord-session=sol-231-20261126-143318): <redacted-jwt>
+order-service: [Order/Rabbit] published notification for order 2708
+order-service: [Order/PubSub] publish failed (order still ok): Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
+order-service:     at GoogleAuth.getApplicationDefaultAsync (/home/user/playground/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:287:15)
+order-service:     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+order-service:     at async GoogleAuth._GoogleAuth_determineClient (/home/user/playground/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:834:32)
+order-service:     at async GoogleAuth.getClient (/home/user/playground/apps/shop/order-service/node_modules/google-auth-library/build/src/auth/googleauth.js:698:20)
+order-service:     at async GrpcClient._getCredentials (/home/user/playground/apps/shop/order-service/node_modules/google-gax/src/grpc.ts:209:20)
+order-service:     at async GrpcClient.createStub (/home/user/playground/apps/shop/order-service/node_modules/google-gax/src/grpc.ts:426:19)
+order-service: (node:2182) MetadataLookupWarning: received unexpected error = request to http://169.254.169.254/computeMetadata/v1/instance failed, reason: read ECONNRESET code = ECONNRESET
+order-service: (Use `node --trace-warnings ...` to show where the warning was created)
+order-service: [Order/Temporal] started orderFulfillment for order 2708
+order-service: Order response: {
+order-service:   "orderId": 2708,
+order-service:   "status": "confirmed",
+order-service:   "time": "2026-11-26T14:33:52.604Z"
+order-service: }
