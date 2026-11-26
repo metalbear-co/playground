@@ -1,0 +1,71 @@
+# SOL-228 (MetalMart V2) — retry config. The first session (mirrord-up-SOL-228.yaml, key
+# sol-228-<TS>) collided with the preview environment of PR #729, whose steal filter is keyed
+# "SOL-228" and also matched keys starting with "sol-228-". This retry uses a key without that
+# prefix (sol228-<TS>), fresh local ports (the first session still holds 80/8083/8084/3000 and
+# the Next.js dev lock), and a hard-linked copy of the frontend checkout for the second next dev.
+# Run from the repo root:  mirrord up -f mirrord-up-SOL-228-retry.yaml --key <key>
+services:
+  order-service:
+    target: { path: deployment/order-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8085"                     # first session's order-service holds local port 80
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8085, 80]]   # [local, remote]: steal target port 80 into local 8085
+    run:
+      command: ["npm", "--prefix", "apps/shop/order-service", "run", "dev"]
+
+  chat-service:
+    target: { path: deployment/chat-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8086"
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8086, 80]]   # [local, remote]
+        split_queues:                    # only support-chat messages with this key reach the local consumer
+          "*":
+            queue_type: Kafka
+            message_filter:
+              baggage: '.*mirrord-session={{ key }}.*'
+    run:
+      command: ["npm", "--prefix", "apps/shop/chat-service", "run", "dev"]
+
+  inventory-service:
+    target: { path: deployment/inventory-service, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        PORT: "8087"
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[8087, 80]]   # [local, remote]
+    run:
+      command: ["npm", "--prefix", "apps/shop/inventory-service", "run", "dev"]
+
+  metal-mart-frontend:
+    target: { path: deployment/metal-mart-frontend, namespace: shop }
+    http_filter:
+      header_filter: 'baggage:\s*[^\n]*\bmirrord-session={{ key }}\b'
+    env:
+      override:
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: dxas4fpir   # NEXT_PUBLIC_* is build-time; remote value is not picked up by next dev
+    config_patch:
+      feature:
+        network:
+          incoming:
+            port_mapping: [[3001, 3000]] # [local, remote]: first session's next dev holds local 3000
+    run:
+      command: ["npm", "--prefix", "/tmp/claude-0/-home-user-playground/043839f9-8930-5beb-8da9-090b94c8bc76/scratchpad/fe-copy", "run", "dev", "--", "-p", "3001"]
